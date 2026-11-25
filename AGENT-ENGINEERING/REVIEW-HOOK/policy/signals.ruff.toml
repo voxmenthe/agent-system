@@ -1,0 +1,38 @@
+# Review Scan's isolated measurement contract. The exact target version is
+# supplied per committed package group; target-repository Ruff settings are
+# intentionally not loaded.
+preview = true
+
+[lint]
+select = [
+    # Individually observed local correctness candidates.
+    "F601",
+    "F634",
+    "PLE0101",
+    "PLE0704",
+    "PLE1205",
+    "PLE1206",
+    "B006",
+    "B012",
+    "B023",
+    "B029",
+    "B030",
+    "B031",
+
+    # High-precision structural delta inputs.
+    "C901",
+    "PLR0912",
+    "PLR0915",
+    "PLR1702",
+    "PLR0916",
+]
+
+[lint.mccabe]
+max-complexity = 10
+
+[lint.pylint]
+max-branches = 12
+max-statements = 50
+max-nested-blocks = 5
+max-bool-expr = 5
+

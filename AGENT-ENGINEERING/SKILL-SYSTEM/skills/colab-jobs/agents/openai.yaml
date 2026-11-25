@@ -1,0 +1,7 @@
+interface:
+  display_name: "Colab Jobs"
+  short_description: "Run code and small training jobs on a Colab runtime"
+  default_prompt: "Use $colab-jobs to run this script on the cheapest Colab runtime and bring the outputs back."
+
+policy:
+  allow_implicit_invocation: false

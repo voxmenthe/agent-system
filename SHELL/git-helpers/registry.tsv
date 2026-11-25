@@ -1,0 +1,32 @@
+# name|tags|summary|usage|example|risk
+# Source of truth for g help / g ? / g find. Tags space-separated.
+gac|commit push|Stage updated/deleted files, commit, and push|gac <message>|gac "fix typo"|push
+gad|commit push|Stage all changes including untracked, commit, and push|gad <message>|gad "add feature"|push
+gcm|commit push|Commit staged changes with message and push|gcm <message...>|gcm fix empty check|push
+gcf|commit push|Commit with message from a file, then push|gcf [add-arg] <msgfile>|gcf -u /tmp/msg.txt|push
+gbs|branch|List remote branches by most recent commit|gbs [N]|gbs 10|
+gdel|branch delete|Delete a merged local branch and its remote|gdel <branch>|gdel feature-x|delete remote
+gmm|branch merge|Fetch default base branch and merge it|gmm||remote
+grr|branch rebase|Fetch default base branch and rebase onto it|grr||remote force
+glda|log|Last 30 commits with relative dates|glda||
+glo|log|Decorated graph log with dates and authors|glo [N]|glo 12|
+glb|log|Current-branch-only graph log vs default base|glb [N] [base]|glb 5 main|
+glfp|log|First-parent decorated graph log|glfp [N]|glfp 8|
+glf|log file|File history on current branch (graph)|glf [N] <file>|glf 20 src/main.py|
+gflog|log file|Full file history across all branches, chronological|gflog <file>|gflog README.md|
+glof|log files|Like glo, plus top changed files per commit|glof [N] [top_n]|glof 5 3|
+glbf|log files|Like glb, plus top changed files per commit|glbf [N] [top_n] [base]|glbf 5 3|
+gln|log file|Unique files changed in the last N commits|gln [N] [glob]|gln 10 *.md|
+glox|log filter|Log for include paths, skipping exclude-only commits|glox -i <path>... [-x <path>...]|glox -i src -x node_modules|
+ltb|diag files|List large blobs introduced on the current branch|ltb||
+gmap|navigation state diff staged footprint|Working state or exact comparison footprint|gmap [--staged / --worktree / --commit C / --between A B] [-- paths]|gmap --staged|
+gfocus|navigation diff patch hunks syntax review|Focused patch with visible collapsed files and matching hunks|gfocus [--commit C / --staged / --branch BASE] [--all] [-- paths]|gfocus --commit HEAD --hunk return|
+gpeek|navigation discover suggest highlights browser fzf file hunk directory|Suggest recent code and tooling commits then browse their changes|gpeek [--list] [--chronological] [--count N] [--grep TEXT] [-- paths]|gpeek|
+gwhy|navigation history pickaxe literal regex context|Find behavior changes and recover whole-commit context|gwhy --literal <text> / --regex <ERE> / --commit <C> [-- paths]|gwhy --regex load_plugged_fn -- verifiers/|
+goutline|navigation symbols signatures changed outline|Current historical or changed declarations and body ranges|goutline [--at C / --changed --commit C] -- <paths...>|goutline --changed --commit HEAD -- src/|
+gline|navigation history blame function lines|Follow one symbol or line range at an explicit revision|gline --symbol <name> / --lines <start:end> [--at C] [--blame] -- <file>|gline --symbol Task.hooks -- verifiers/v1/task.py|
+gimpact|navigation references callers tests wiring|Static boundary and test leads in current source|gimpact --symbol <name> / --key <text> / --file <path> [-- paths]|gimpact --key marker -- verifiers/ tests/|
+gshape|navigation structural syntax pattern changed|Read-only ast-grep search including old and new changed occurrences|gshape --lang <language> --pattern <pattern> [--changed --commit C] -- <paths...>|gshape --lang python --pattern 'foo($$$ARGS)' -- src/|
+ghot|navigation history activity churn companions coupling|Bounded activity and anchor-file co-change evidence|ghot [--with FILE] [--since DATE] [--count N] [-- paths]|ghot --with src/main.py --count 100|
+grange|navigation review range series rebase|Compare two explicitly identified patch series|grange <old-base..old-tip> <new-base..new-tip>|grange main..reviewed main..HEAD|
+gdoctor|diag navigation tools setup|Show navigation tool availability without changing configuration|gdoctor|gdoctor|

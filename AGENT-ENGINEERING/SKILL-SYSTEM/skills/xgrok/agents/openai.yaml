@@ -1,0 +1,6 @@
+interface:
+  display_name: "XGrok"
+  short_description: "Triage noisy X streams and conversations with Grok"
+  default_prompt: "Use $xgrok to find the few high-signal X posts and conversation nodes for this question, preserve their relationships and receipts, then analyze the connections yourself."
+policy:
+  allow_implicit_invocation: false

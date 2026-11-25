@@ -1,0 +1,125 @@
+#!/usr/bin/env bash
+# Give Devin, Command Code, Kimi Code and OpenCode the colgrep skill in skill/.
+# Claude Code and Codex are deliberately excluded, so nothing is written to
+# ~/.agents/skills: Codex reads it and skill-system projects it into ~/.claude/skills.
+# Usage: agents install|uninstall|status|diff
+set -euo pipefail
+
+skill_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/skill"
+skill_links=(
+  "$HOME/.config/devin/skills/colgrep"
+  "$HOME/.commandcode/skills/colgrep"
+  "$HOME/.kimi-code/skills/colgrep"
+)
+opencode_agents_md="$HOME/.config/opencode/AGENTS.md"
+# colgrep's own header and markers, so `colgrep --uninstall-opencode` removes this block too.
+opencode_header='# OpenCode Agent Tools'
+start_marker='<!-- COLGREP_START -->'
+end_marker='<!-- COLGREP_END -->'
+
+skill_body() {
+  awk 'seen >= 2 && (started || NF) { started = 1; print } /^---$/ { seen++ }' "$skill_dir/SKILL.md"
+}
+
+block_body() {
+  awk -v start="$start_marker" -v end="$end_marker" \
+    '$0 == end { inside = 0 } inside { print } $0 == start { inside = 1 }' "$1"
+}
+
+is_ours() {
+  [[ -L "$1" && "$(readlink "$1")" == "$skill_dir" ]]
+}
+
+install() {
+  local link rest
+  for link in "${skill_links[@]}"; do
+    is_ours "$link" && continue
+    if [[ -e "$link" || -L "$link" ]]; then
+      echo "refusing to replace $link; move it aside, then rerun" >&2
+      return 1
+    fi
+    mkdir -p "$(dirname "$link")"
+    ln -s "$skill_dir" "$link"
+  done
+
+  if [[ -f "$opencode_agents_md" ]]; then
+    rest=$(awk -v start="$start_marker" -v end="$end_marker" \
+      '$0 == start { skip = 1 } !skip { print } $0 == end { skip = 0 }' "$opencode_agents_md")
+  else
+    rest=$opencode_header
+    mkdir -p "$(dirname "$opencode_agents_md")"
+  fi
+  {
+    printf '%s\n\n%s\n' "$rest" "$start_marker"
+    skill_body
+    printf '\n%s\n' "$end_marker"
+  } > "$opencode_agents_md"
+  status
+}
+
+uninstall() {
+  local link
+  for link in "${skill_links[@]}"; do
+    if is_ours "$link"; then
+      rm "$link"
+    elif [[ -e "$link" || -L "$link" ]]; then
+      echo "left $link: not a link to $skill_dir" >&2
+    fi
+  done
+  colgrep --uninstall-opencode > /dev/null
+  status
+}
+
+status() {
+  local link state
+  for link in "${skill_links[@]}"; do
+    if is_ours "$link"; then
+      state=installed
+    elif [[ -e "$link" || -L "$link" ]]; then
+      state=conflict
+    else
+      state=missing
+    fi
+    printf '%-10s %s\n' "$state" "$link"
+  done
+
+  if ! grep -qxF "$start_marker" "$opencode_agents_md" 2> /dev/null; then
+    state=missing
+  elif diff -qB <(skill_body) <(block_body "$opencode_agents_md") > /dev/null; then
+    state=installed
+  else
+    state="stale (rerun install)"
+  fi
+  printf '%-10s %s\n' "$state" "$opencode_agents_md"
+
+  for link in "$HOME/.agents/skills/colgrep" "$HOME/.claude/skills/colgrep"; do
+    if [[ -e "$link" || -L "$link" ]]; then
+      echo "warning: $link exists and reaches Claude Code or Codex" >&2
+    fi
+  done
+  if grep -qxF "$start_marker" "$HOME/.codex/AGENTS.md" 2> /dev/null; then
+    echo "warning: ~/.codex/AGENTS.md has a colgrep block (colgrep --uninstall-codex)" >&2
+  fi
+  if grep -qF '"colgrep@' "$HOME/.claude/plugins/installed_plugins.json" 2> /dev/null; then
+    echo "warning: the colgrep Claude Code plugin is installed (colgrep --uninstall-claude-code)" >&2
+  fi
+}
+
+# Diff the installed colgrep's built-in skill text against ours, to merge upstream changes after an upgrade.
+upstream_diff() {
+  upstream_home=$(mktemp -d)
+  trap 'rm -rf "$upstream_home"' EXIT
+  HOME="$upstream_home" colgrep --install-opencode > /dev/null
+  echo "--- $(colgrep --version) built-in text"
+  echo "+++ $skill_dir/SKILL.md"
+  diff -B <(block_body "$upstream_home/.config/opencode/AGENTS.md") <(skill_body) || true
+}
+
+case "${1:-}" in
+  install | uninstall | status) "$1" ;;
+  diff) upstream_diff ;;
+  *)
+    echo "usage: $(basename "$0") install|uninstall|status|diff" >&2
+    exit 2
+    ;;
+esac

@@ -1,0 +1,7 @@
+symbol	company	timezone	months	ir_url	read_through
+TSM	Taiwan Semiconductor Manufacturing (TSMC)	Asia/Taipei	1 4 7 10	https://investor.tsmc.com/english/financial-calendar	AI accelerator and smartphone chip demand; foundry capex for the Nvidia, AMD and Apple supply chain
+ASML	ASML Holding	Europe/Amsterdam	1 4 7 10	https://www.asml.com/en/investors/financial-calendar	Lithography orders: semiconductor equipment, AI and memory capex
+SAP	SAP SE	Europe/Berlin	1 4 7 10	https://www.sap.com/investors/en/financial-documents-and-events/events.html	Enterprise software demand and cloud backlog
+LVMUY	LVMH Moët Hennessy Louis Vuitton	Europe/Paris	1 4 7 10	https://www.lvmh.com/en/financial-calendar	Luxury and high-end consumer demand in the US and China
+005930.KS	Samsung Electronics	Asia/Seoul	1 4 7 10	https://www.samsung.com/global/ir/ir-events-presentations/events/	Memory pricing (DRAM, NAND, HBM) for Micron and SanDisk
+NSRGY	Nestlé	Europe/Zurich	2 4 7 10	https://www.nestle.com/investors/events	Consumer staples pricing and volumes

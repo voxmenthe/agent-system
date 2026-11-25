@@ -1,0 +1,7 @@
+interface:
+  display_name: "Evidence Loop Instrumented"
+  short_description: "Run a resumable improvement loop with run receipts"
+  default_prompt: "Use $evidence-driven-loop-instrumented to run this improvement campaign with task-local command receipts and checkpoints."
+
+policy:
+  allow_implicit_invocation: false

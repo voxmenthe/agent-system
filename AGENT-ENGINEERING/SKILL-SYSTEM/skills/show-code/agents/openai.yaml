@@ -1,0 +1,7 @@
+interface:
+  display_name: "Show Code"
+  short_description: "Explain code changes in their codebase context"
+  default_prompt: "Use $show-code to explain this code change through its existing callers, a concrete runtime trace, data contracts, and the questions that reveal why it works."
+
+policy:
+  allow_implicit_invocation: false

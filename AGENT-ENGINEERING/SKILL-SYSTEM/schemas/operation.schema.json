@@ -1,0 +1,234 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/personal-skill-system/operation.schema.json",
+  "title": "Personal skill-system operation journal",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "operation_id",
+    "type",
+    "status",
+    "phase",
+    "created_at",
+    "updated_at",
+    "changes",
+    "details"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "operation_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "type": {
+      "enum": [
+        "install",
+        "quarantine",
+        "lock-migration"
+      ]
+    },
+    "status": {
+      "enum": [
+        "in-progress",
+        "rolling-back",
+        "committed",
+        "rolled-back"
+      ]
+    },
+    "phase": {
+      "enum": [
+        "prepared",
+        "preimage-preserved",
+        "target-installed",
+        "target-quarantined",
+        "state-committed",
+        "lock-replaced",
+        "committed",
+        "rolled-back"
+      ]
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "updated_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "changes": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "details": {
+      "type": "object"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "install"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "details": {
+            "$ref": "#/$defs/install_details"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "quarantine"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "details": {
+            "$ref": "#/$defs/quarantine_details"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "lock-migration"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "details": {
+            "$ref": "#/$defs/lock_details"
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "hash": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "install_details": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "skill",
+        "source",
+        "source_hash",
+        "target",
+        "target_hash_before",
+        "new_hash",
+        "preimage_exists",
+        "state_preimage_exists",
+        "registry_revision"
+      ],
+      "properties": {
+        "skill": {
+          "type": "string"
+        },
+        "source": {
+          "type": "string"
+        },
+        "source_hash": {
+          "$ref": "#/$defs/hash"
+        },
+        "target": {
+          "type": "string"
+        },
+        "target_hash_before": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/hash"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "new_hash": {
+          "$ref": "#/$defs/hash"
+        },
+        "preimage_exists": {
+          "type": "boolean"
+        },
+        "state_preimage_exists": {
+          "type": "boolean"
+        },
+        "registry_revision": {
+          "$ref": "#/$defs/hash"
+        }
+      }
+    },
+    "quarantine_details": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "skill",
+        "target",
+        "target_hash",
+        "quarantine_path",
+        "state_preimage_exists"
+      ],
+      "properties": {
+        "skill": {
+          "type": "string"
+        },
+        "target": {
+          "type": "string"
+        },
+        "target_hash": {
+          "$ref": "#/$defs/hash"
+        },
+        "quarantine_path": {
+          "type": "string"
+        },
+        "state_preimage_exists": {
+          "type": "boolean"
+        }
+      }
+    },
+    "lock_details": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "lock_path",
+        "pre_hash",
+        "post_hash",
+        "removed"
+      ],
+      "properties": {
+        "lock_path": {
+          "type": "string"
+        },
+        "pre_hash": {
+          "$ref": "#/$defs/hash"
+        },
+        "post_hash": {
+          "$ref": "#/$defs/hash"
+        },
+        "removed": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,6 @@
+interface:
+  display_name: "Web Research Then Plan"
+  short_description: "Research sources and write a grounded plan"
+  default_prompt: "Use $web-research-then-plan to research this topic and write the requested Markdown plan."
+policy:
+  allow_implicit_invocation: false

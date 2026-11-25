@@ -1,0 +1,6 @@
+interface:
+  display_name: "Grilling"
+  short_description: "Stress-test thinking with three-question rounds"
+  default_prompt: "Use $grilling to stress-test this plan with three questions at a time."
+policy:
+  allow_implicit_invocation: false

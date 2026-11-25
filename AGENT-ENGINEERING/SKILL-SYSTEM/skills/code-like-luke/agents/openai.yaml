@@ -1,0 +1,6 @@
+interface:
+  display_name: "Code Like Luke"
+  short_description: "One Particular Flavor of `Coding Best Practices`"
+  default_prompt: "Use the best practices from $code-like-luke when implementing this codebase or code change."
+policy:
+  allow_implicit_invocation: false

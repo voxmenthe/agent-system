@@ -1,0 +1,6 @@
+interface:
+  display_name: "Options Levels"
+  short_description: "An author's options levels pages to a checked ES/NQ futures map"
+  default_prompt: "Use $options-levels to transcribe this options levels map, check it, build the spec, render the front-month ES/NQ map and write today's read."
+policy:
+  allow_implicit_invocation: false

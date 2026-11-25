@@ -1,0 +1,7 @@
+interface:
+  display_name: "Verify Change"
+  short_description: "Check acceptance criteria with attributable evidence"
+  default_prompt: "Use $verify-change to check this change against its acceptance criteria, reusing sufficient evidence and identifying any gaps."
+
+policy:
+  allow_implicit_invocation: true

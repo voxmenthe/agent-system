@@ -1,0 +1,576 @@
+#!/usr/bin/env python3
+"""Validate and project owner-controlled subagent definitions into ~/.claude/agents."""
+
+from __future__ import annotations
+
+import argparse
+import hashlib
+import json
+import os
+import re
+import shutil
+import subprocess
+import sys
+import tempfile
+from dataclasses import dataclass
+from datetime import UTC, datetime
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent
+CANONICAL_DIR = ROOT / "agents"
+MANAGER_ID = "tracking-context-td/agent-definitions/v1"
+SCHEMA_VERSION = 1
+STATE_RELATIVE = Path(".local/state/agent-definitions")
+TARGET_RELATIVE = Path(".claude/agents")
+
+# Family aliases and `inherit` never name a specific model version, so a model
+# release cannot strand a definition on a dead identifier. A full model ID here
+# is the exact defect this manager exists to prevent.
+ALLOWED_MODELS = frozenset({"inherit", "opus", "sonnet", "haiku", "fable"})
+NAME_PATTERN = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
+FRONTMATTER_PATTERN = re.compile(r"\A---\n(.*?)\n---\n", re.DOTALL)
+
+CREATE, UPDATE, REMOVE, CURRENT, CONFLICT = (
+    "create",
+    "update",
+    "remove",
+    "current",
+    "conflict",
+)
+
+
+class AgentDefsError(RuntimeError):
+    """A definition, state, or filesystem problem that blocks the command."""
+
+
+class SyncConflict(AgentDefsError):
+    def __init__(self, plan: SyncPlan) -> None:
+        super().__init__(
+            f"{len(plan.conflicts)} target file(s) are not owned by this manager; "
+            "review the plan and re-run with --take-ownership"
+        )
+        self.plan = plan
+
+
+@dataclass(frozen=True)
+class Operation:
+    kind: str
+    filename: str
+    target: Path
+    detail: str
+
+
+@dataclass(frozen=True)
+class SyncPlan:
+    operations: tuple[Operation, ...]
+    target_dir: Path
+
+    @property
+    def conflicts(self) -> tuple[Operation, ...]:
+        return tuple(op for op in self.operations if op.kind == CONFLICT)
+
+    @property
+    def changes(self) -> tuple[Operation, ...]:
+        return tuple(
+            op for op in self.operations if op.kind in {CREATE, UPDATE, REMOVE}
+        )
+
+
+def sha256_bytes(data: bytes) -> str:
+    return hashlib.sha256(data).hexdigest()
+
+
+def atomic_write(path: Path, data: bytes) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    descriptor, temporary_name = tempfile.mkstemp(
+        prefix=f".{path.name}.", dir=path.parent
+    )
+    temporary = Path(temporary_name)
+    try:
+        with os.fdopen(descriptor, "wb") as handle:
+            descriptor = -1
+            handle.write(data)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.chmod(temporary, 0o644)
+        os.replace(temporary, path)
+    finally:
+        if descriptor >= 0:
+            os.close(descriptor)
+        temporary.unlink(missing_ok=True)
+
+
+# --- canonical sources -------------------------------------------------------
+
+
+def read_definitions(canonical_dir: Path | None = None) -> dict[str, bytes]:
+    """Every active definition, keyed by filename."""
+    canonical_dir = CANONICAL_DIR if canonical_dir is None else canonical_dir
+    if not canonical_dir.is_dir():
+        raise AgentDefsError(f"canonical directory is missing: {canonical_dir}")
+    definitions = {}
+    for path in sorted(canonical_dir.iterdir()):
+        if path.name.startswith(".") or not path.is_file():
+            continue
+        definitions[path.name] = path.read_bytes()
+    if not definitions:
+        raise AgentDefsError(
+            f"canonical directory holds no definitions: {canonical_dir}"
+        )
+    return definitions
+
+
+def _frontmatter_scalar(block: str, key: str) -> str | None:
+    match = re.search(rf"^{key}:[ \t]*(.*)$", block, re.MULTILINE)
+    return match.group(1).strip() if match else None
+
+
+def policy_errors(definitions: dict[str, bytes]) -> list[str]:
+    """Checks that `claude plugin validate` does not make.
+
+    It verifies that frontmatter parses as YAML; these verify that the values
+    satisfy this manager's contract.
+    """
+    errors: list[str] = []
+    for filename, data in definitions.items():
+        if not filename.endswith(".md"):
+            errors.append(f"{filename}: definitions must use the .md extension")
+            continue
+        try:
+            text = data.decode("utf-8")
+        except UnicodeDecodeError as exc:
+            errors.append(f"{filename}: not valid UTF-8 ({exc})")
+            continue
+        match = FRONTMATTER_PATTERN.match(text)
+        if match is None:
+            errors.append(f"{filename}: missing a leading --- frontmatter block")
+            continue
+        block = match.group(1)
+
+        name = _frontmatter_scalar(block, "name")
+        stem = filename[: -len(".md")]
+        if name is None:
+            errors.append(f"{filename}: frontmatter has no name")
+        elif not NAME_PATTERN.match(name):
+            errors.append(
+                f"{filename}: name {name!r} must be lowercase words joined by hyphens"
+            )
+        elif name != stem:
+            errors.append(
+                f"{filename}: name {name!r} must match the filename stem {stem!r}"
+            )
+
+        if not _frontmatter_scalar(block, "description"):
+            errors.append(f"{filename}: frontmatter has no description")
+
+        model = _frontmatter_scalar(block, "model")
+        if model is not None and model not in ALLOWED_MODELS:
+            errors.append(
+                f"{filename}: model {model!r} is not a stable token; "
+                f"use one of {', '.join(sorted(ALLOWED_MODELS))}"
+            )
+    return errors
+
+
+def claude_validate_errors(canonical_dir: Path | None = None) -> list[str]:
+    """Delegate frontmatter parsing to Claude Code's own validator."""
+    canonical_dir = CANONICAL_DIR if canonical_dir is None else canonical_dir
+    executable = shutil.which("claude")
+    if executable is None:
+        raise AgentDefsError(
+            "the `claude` executable is required for frontmatter validation but is not on PATH"
+        )
+    completed = subprocess.run(
+        [executable, "plugin", "validate", "--strict", "--json", str(canonical_dir)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    try:
+        report = json.loads(completed.stdout)
+    except json.JSONDecodeError as exc:
+        raise AgentDefsError(
+            f"could not read `claude plugin validate` output: {exc}; stderr: {completed.stderr.strip()}"
+        ) from exc
+    if report.get("success"):
+        return []
+    errors = []
+    for entry in report.get("contents", []):
+        filename = Path(entry.get("file", "?")).name
+        for problem in entry.get("errors", []) + entry.get("warnings", []):
+            errors.append(f"{filename}: {problem.get('message', problem)}")
+    return errors or ["`claude plugin validate` reported failure without detail"]
+
+
+# --- install state -----------------------------------------------------------
+
+
+def state_path(home: Path) -> Path:
+    return home / STATE_RELATIVE / "state.json"
+
+
+def load_state(home: Path) -> dict:
+    path = state_path(home)
+    if not path.exists():
+        return {
+            "manager_id": MANAGER_ID,
+            "schema_version": SCHEMA_VERSION,
+            "projected": {},
+        }
+    state = json.loads(path.read_text(encoding="utf-8"))
+    if state.get("manager_id") != MANAGER_ID:
+        raise AgentDefsError(
+            f"{path} belongs to another manager: {state.get('manager_id')!r}"
+        )
+    return state
+
+
+def save_state(home: Path, state: dict) -> None:
+    atomic_write(
+        state_path(home),
+        json.dumps(state, indent=2, sort_keys=True).encode("utf-8") + b"\n",
+    )
+
+
+# --- planning ----------------------------------------------------------------
+
+
+def read_loaded(home: Path) -> dict[str, bytes]:
+    """Every definition currently sitting in the target directory."""
+    target_dir = home / TARGET_RELATIVE
+    if not target_dir.is_dir():
+        return {}
+    return {
+        path.name: path.read_bytes()
+        for path in sorted(target_dir.iterdir())
+        if path.is_file() and not path.name.startswith(".")
+    }
+
+
+def resolve_names(
+    names: tuple[str, ...], available: dict[str, bytes], label: str
+) -> set[str]:
+    """Turn agent names into filenames, rejecting ones that do not exist."""
+    resolved = set()
+    unknown = []
+    for name in names:
+        filename = name if name.endswith(".md") else f"{name}.md"
+        if filename in available:
+            resolved.add(filename)
+        else:
+            unknown.append(name)
+    if unknown:
+        raise AgentDefsError(
+            f"not {label}: {', '.join(sorted(unknown))}; "
+            f"available: {', '.join(sorted(n[: -len('.md')] for n in available))}"
+        )
+    return resolved
+
+
+def plan_sync(
+    home: Path,
+    *,
+    load: tuple[str, ...] = (),
+    unload: tuple[str, ...] = (),
+    unload_all: bool = False,
+    take_ownership: bool = False,
+) -> SyncPlan:
+    """Plan the target contents.
+
+    The library is not projected wholesale. The target holds only what has been
+    loaded, so a plain sync refreshes those against canonical and adds nothing.
+    """
+    definitions = read_definitions()
+    target_dir = home / TARGET_RELATIVE
+    projected = load_state(home).get("projected", {})
+    existing = read_loaded(home)
+
+    to_load = resolve_names(load, definitions, "an agent in the library")
+    to_unload = (
+        set(existing) if unload_all else resolve_names(unload, existing, "loaded")
+    )
+
+    # Everything that should be in the target once this command finishes. A
+    # loaded definition whose canonical source is gone drops out here, so
+    # retiring an agent still withdraws it.
+    desired = ((set(existing) | to_load) - to_unload) & set(definitions)
+
+    operations: list[Operation] = []
+    for filename in sorted(desired | set(existing)):
+        target = target_dir / filename
+        live = existing.get(filename)
+
+        if filename not in desired:
+            reason = "unloaded" if filename in to_unload else "no longer in the library"
+            if projected.get(filename) == sha256_bytes(live) or take_ownership:
+                operations.append(Operation(REMOVE, filename, target, reason))
+            else:
+                operations.append(
+                    Operation(
+                        CONFLICT,
+                        filename,
+                        target,
+                        _ownership_detail(filename, projected),
+                    )
+                )
+            continue
+
+        data = definitions[filename]
+        if live is None:
+            operations.append(Operation(CREATE, filename, target, "loaded"))
+        elif sha256_bytes(live) == sha256_bytes(data):
+            operations.append(Operation(CURRENT, filename, target, "matches canonical"))
+        elif projected.get(filename) == sha256_bytes(live) or take_ownership:
+            operations.append(
+                Operation(UPDATE, filename, target, "canonical source changed")
+            )
+        else:
+            operations.append(
+                Operation(
+                    CONFLICT, filename, target, _ownership_detail(filename, projected)
+                )
+            )
+
+    operations.sort(key=lambda op: (op.kind, op.filename))
+    return SyncPlan(tuple(operations), target_dir)
+
+
+def _ownership_detail(filename: str, projected: dict) -> str:
+    if filename in projected:
+        return "edited in place since the last sync"
+    return "present in target but never projected by this manager"
+
+
+def format_plan(plan: SyncPlan) -> str:
+    lines = [f"target: {plan.target_dir}"]
+    for op in plan.operations:
+        lines.append(f"  {op.kind:8} {op.filename:36} {op.detail}")
+    current = sum(1 for op in plan.operations if op.kind == CURRENT)
+    lines.append(
+        f"summary: {len(plan.changes)} change(s), {len(plan.conflicts)} conflict(s), {current} already current"
+    )
+    return "\n".join(lines)
+
+
+def format_library(home: Path) -> str:
+    """What is loaded now, and what is available to load."""
+    definitions = read_definitions()
+    loaded = set(read_loaded(home))
+    lines = [f"target: {home / TARGET_RELATIVE}"]
+    for filename in sorted(definitions):
+        name = filename[: -len(".md")]
+        lines.append(f"  {'loaded' if filename in loaded else '-':8} {name}")
+    stray = sorted(loaded - set(definitions))
+    for filename in stray:
+        lines.append(f"  {'stray':8} {filename} (not in the library)")
+    lines.append(
+        f"summary: {len(loaded)} loaded of {len(definitions)} in the library"
+        + (f", {len(stray)} stray" if stray else "")
+    )
+    return "\n".join(lines)
+
+
+# --- applying ----------------------------------------------------------------
+
+
+def apply_plan(home: Path, plan: SyncPlan) -> str | None:
+    """Write the planned changes, retaining a preimage of everything touched."""
+    if plan.conflicts:
+        raise SyncConflict(plan)
+
+    definitions = read_definitions()
+    state = load_state(home)
+    projected = dict(state.get("projected", {}))
+    transaction_id = None
+
+    if plan.changes:
+        transaction_id = datetime.now(UTC).strftime("%Y%m%dT%H%M%S%fZ")
+        backup_dir = home / STATE_RELATIVE / "backups" / transaction_id
+        entries = []
+        for op in plan.changes:
+            preimage = None
+            if op.target.exists():
+                backup_dir.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(op.target, backup_dir / op.filename)
+                preimage = op.filename
+            if op.kind == REMOVE:
+                op.target.unlink()
+                projected.pop(op.filename, None)
+            else:
+                data = definitions[op.filename]
+                atomic_write(op.target, data)
+                projected[op.filename] = sha256_bytes(data)
+            entries.append(
+                {"filename": op.filename, "action": op.kind, "preimage": preimage}
+            )
+        state["last_transaction"] = {
+            "id": transaction_id,
+            "backup_dir": str(backup_dir),
+            "target_dir": str(plan.target_dir),
+            "entries": entries,
+        }
+
+    # A definition already matching canonical is owned too: the sync simply had
+    # no work to do on it. Omitting it made the next canonical edit look like a
+    # conflict against an unmanaged file.
+    for op in plan.operations:
+        if op.kind == CURRENT:
+            projected[op.filename] = sha256_bytes(definitions[op.filename])
+
+    state["manager_id"] = MANAGER_ID
+    state["schema_version"] = SCHEMA_VERSION
+    state["projected"] = projected
+    save_state(home, state)
+    return transaction_id
+
+
+def rollback(home: Path) -> str:
+    state = load_state(home)
+    transaction = state.get("last_transaction")
+    if not transaction:
+        raise AgentDefsError("no sync transaction is available to roll back")
+
+    backup_dir = Path(transaction["backup_dir"])
+    target_dir = Path(transaction["target_dir"])
+    projected = dict(state.get("projected", {}))
+
+    for entry in transaction["entries"]:
+        target = target_dir / entry["filename"]
+        if entry["preimage"] is None:
+            target.unlink(missing_ok=True)
+            projected.pop(entry["filename"], None)
+            continue
+        data = (backup_dir / entry["preimage"]).read_bytes()
+        atomic_write(target, data)
+        projected[entry["filename"]] = sha256_bytes(data)
+
+    state["projected"] = projected
+    state.pop("last_transaction")
+    save_state(home, state)
+    return transaction["id"]
+
+
+# --- command line ------------------------------------------------------------
+
+
+def _validation_errors() -> list[str]:
+    return policy_errors(read_definitions()) + claude_validate_errors()
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(
+        description="Validate and project owner-controlled subagent definitions."
+    )
+    parser.add_argument(
+        "--home",
+        type=Path,
+        default=Path.home(),
+        help="target home directory (default: current user home)",
+    )
+    subparsers = parser.add_subparsers(dest="command", required=True)
+    subparsers.add_parser("validate", help="check the library only")
+    subparsers.add_parser("status", help="show what is loaded and what is available")
+
+    load_parser = subparsers.add_parser("load", help="load agents into the target")
+    load_parser.add_argument("names", nargs="+", metavar="NAME")
+
+    unload_parser = subparsers.add_parser(
+        "unload", help="remove agents from the target"
+    )
+    unload_parser.add_argument("names", nargs="*", metavar="NAME")
+    unload_parser.add_argument(
+        "--all", action="store_true", dest="all", help="remove every loaded agent"
+    )
+
+    sync_parser = subparsers.add_parser(
+        "sync", help="refresh already-loaded agents against the library"
+    )
+    sync_parser.add_argument(
+        "--apply", action="store_true", help="write the changes (default: dry run)"
+    )
+    sync_parser.add_argument(
+        "--take-ownership",
+        action="store_true",
+        help="overwrite or remove target files this manager did not write",
+    )
+    subparsers.add_parser("rollback", help="restore the most recent change")
+    args = parser.parse_args()
+
+    try:
+        if args.command == "validate":
+            errors = _validation_errors()
+            if errors:
+                print("validation failed:", file=sys.stderr)
+                for error in errors:
+                    print(f"- {error}", file=sys.stderr)
+                return 1
+            print(f"{len(read_definitions())} definition(s) valid")
+            return 0
+
+        if args.command == "status":
+            print(format_library(args.home))
+            plan = plan_sync(args.home)
+            if plan.conflicts or plan.changes:
+                print()
+                print(format_plan(plan))
+            if plan.conflicts:
+                return 2
+            return 1 if plan.changes else 0
+
+        if args.command in {"load", "unload"}:
+            errors = _validation_errors()
+            if errors:
+                print("validation failed; no host files were changed:", file=sys.stderr)
+                for error in errors:
+                    print(f"- {error}", file=sys.stderr)
+                return 2
+            if args.command == "unload" and not args.names and not args.all:
+                print("error: name an agent to unload, or pass --all", file=sys.stderr)
+                return 2
+            plan = plan_sync(
+                args.home,
+                load=tuple(args.names) if args.command == "load" else (),
+                unload=tuple(args.names) if args.command == "unload" else (),
+                unload_all=getattr(args, "all", False),
+            )
+            transaction_id = apply_plan(args.home, plan)
+            loaded = sorted(n[: -len(".md")] for n in read_loaded(args.home))
+            print(f"loaded: {', '.join(loaded) if loaded else '(none)'}")
+            if transaction_id:
+                print(f"rollback transaction: {transaction_id}")
+            return 0
+
+        if args.command == "sync":
+            errors = _validation_errors()
+            if errors:
+                print("validation failed; no host files were changed:", file=sys.stderr)
+                for error in errors:
+                    print(f"- {error}", file=sys.stderr)
+                return 2
+            plan = plan_sync(args.home, take_ownership=args.take_ownership)
+            print(format_plan(plan))
+            if not args.apply:
+                print(f"dry run: {len(plan.changes)} change(s) would be applied")
+                return 2 if plan.conflicts else 0
+            transaction_id = apply_plan(args.home, plan)
+            if transaction_id is None:
+                print("sync complete; target already current")
+            else:
+                print(f"sync complete; rollback transaction: {transaction_id}")
+            return 0
+
+        transaction_id = rollback(args.home)
+        print(f"rolled back transaction: {transaction_id}")
+        print(format_plan(plan_sync(args.home)))
+        return 0
+    except SyncConflict as exc:
+        print(format_plan(exc.plan), file=sys.stderr)
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    except (AgentDefsError, OSError, json.JSONDecodeError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

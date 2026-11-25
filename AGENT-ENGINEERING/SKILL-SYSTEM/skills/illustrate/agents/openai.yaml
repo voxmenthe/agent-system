@@ -1,0 +1,6 @@
+interface:
+  display_name: "Illustrate"
+  short_description: "Ian Xiaohei illustrations (English)"
+  default_prompt: "Use $illustrate to design and generate a few Xiaohei-style absurd article illustrations."
+policy:
+  allow_implicit_invocation: false

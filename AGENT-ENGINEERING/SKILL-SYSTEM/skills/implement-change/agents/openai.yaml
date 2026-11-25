@@ -1,0 +1,7 @@
+interface:
+  display_name: "Implement Change"
+  short_description: "Implement one approved vertical slice safely"
+  default_prompt: "Use $implement-change to implement only the approved bounded vertical slice."
+
+policy:
+  allow_implicit_invocation: false

@@ -1,0 +1,6 @@
+{
+  "agentMode": "accept-edits",
+  "allowNonWorkspaceAccess": true,
+  "colorScheme": "colorblind-friendly dark",
+  "toolPermission": "always-proceed"
+}

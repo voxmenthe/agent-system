@@ -1,0 +1,40 @@
+[cli]
+installer = "internal"
+auto_update = true
+
+[models]
+default = "grok-4.6"
+default_reasoning_effort = "medium"
+
+[ui]
+max_thoughts_width = 120
+fork_secondary_model = "grok-4.6"
+yolo = false
+compact_mode = false
+permission_mode = "always-approve"
+show_timeline = true
+
+[telemetry]
+trace_upload = false
+
+[harness]
+disable_workspace_teleport = true
+
+[marketplace]
+official_marketplace_auto_installed = true
+default_skills_installs_purged = true
+
+[[marketplace.sources]]
+name = "xAI Official"
+git = "https://github.com/xai-org/plugin-marketplace.git"
+
+[mcp_servers.arxiv]
+command = "@HOME@/.local/bin/uvx"
+args = ["arxiv-mcp-server"]
+enabled = true
+
+[mcp_servers.alphaxiv]
+command = "@HOME@/.local/bin/alphaxiv-mcp"
+args = []
+enabled = true
+

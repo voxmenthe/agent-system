@@ -1,0 +1,15 @@
+{
+  "session_id": "fixture-session",
+  "turn_id": "fixture-turn",
+  "transcript_path": "/fixture/codex-home/sessions/fixture.jsonl",
+  "cwd": "/fixture/repository",
+  "hook_event_name": "PostToolUse",
+  "model": "gpt-6.1-sol",
+  "permission_mode": "bypassPermissions",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "git commit --allow-empty -m fixture"
+  },
+  "tool_response": "[main 7332ea8] fixture\n",
+  "tool_use_id": "fixture-tool"
+}

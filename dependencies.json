@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "brew_required": ["bash", "git", "jq", "ripgrep", "uv"],
+  "optional_tools": {
+    "sgrep": "cargo install --git https://github.com/context-dot-dev/sgrep --rev 745278422a650f02e97101c1395e52e159b7afb7 sgrep",
+    "colgrep": "brew install lightonai/tap/colgrep"
+  },
+  "omem": {
+    "requirement": "scoped-omem",
+    "source": "git+https://github.com/voxmenthe/omem.git",
+    "ref": "e999c3509dc49ae0d23f1448c49e909acc5ed44b"
+  },
+  "hosts": {
+    "claude": {"executable": "claude", "login_keychain": "Claude Code-credentials"},
+    "codex": {"executable": "codex", "login_file": ".codex/auth.json"},
+    "codex2": {"executable": "codex", "account_of": "codex", "home": ".codex2", "login_file": ".codex2/auth.json"},
+    "devin": {"executable": "devin", "login_file": ".local/share/devin/credentials.toml"},
+    "cursor": {"executable": "cursor-agent"},
+    "antigravity": {"executable": "agy", "login_file": ".gemini/oauth_creds.json"},
+    "antigravity2": {"executable": "agy", "account_of": "antigravity", "home": ".agy2", "login_file": ".agy2/.gemini/oauth_creds.json"},
+    "grok": {"executable": "grok", "login_file": ".grok/auth.json"},
+    "grok2": {"executable": "grok", "account_of": "grok", "home": ".grok2", "login_file": ".grok2/auth.json"},
+    "grok3": {"executable": "grok", "account_of": "grok", "home": ".grok3", "login_file": ".grok3/auth.json"},
+    "command-code": {"executable": "cmd", "login_file": ".commandcode/auth.json"},
+    "pi": {"executable": "pi", "login_file": ".pi/agent/auth.json"},
+    "amp": {"executable": "amp", "login_file": ".local/share/amp/secrets.json"},
+    "kimi": {"executable": "kimi", "login_file": ".kimi-code/credentials"},
+    "mimo": {"directory": ".config/mimocode"},
+    "hist": {"component": true},
+    "memory": {"component": true},
+    "shell": {"component": true}
+  }
+}

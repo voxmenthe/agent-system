@@ -1,0 +1,7 @@
+interface:
+  display_name: "Be Ambitious"
+  short_description: "Do a task above and beyond, with outside judges"
+  default_prompt: "Use $be-ambitious to do this task above and beyond: infer its intent, deliver it the way the field's best would with an outside judge, and bring back any better version you can verify."
+
+policy:
+  allow_implicit_invocation: false

@@ -1,0 +1,6 @@
+interface:
+  display_name: "Explain Code"
+  short_description: "Explain codebases and code changes in HTML."
+  default_prompt: "Use $explain-code to create a self-contained HTML guide to this codebase or code change."
+policy:
+  allow_implicit_invocation: false

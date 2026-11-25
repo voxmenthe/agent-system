@@ -1,0 +1,7 @@
+interface:
+  display_name: "sgrep"
+  short_description: "Find code by describing what it does"
+  default_prompt: "Use $sgrep to find where this behaviour is implemented."
+
+policy:
+  allow_implicit_invocation: true

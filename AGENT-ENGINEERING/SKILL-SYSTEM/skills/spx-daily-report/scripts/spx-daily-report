@@ -1,0 +1,9 @@
+#!/bin/sh
+set -eu
+script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+options_repo=${OPTIONS_REPO:-"$HOME/repos/options"}
+if [ ! -f "$options_repo/src/options_app/spx_report_store.py" ]; then
+    echo "Missing SPX store module in $options_repo. Set OPTIONS_REPO to the Options checkout containing src/options_app/spx_report_store.py; see the skill's references/operations.md." >&2
+    exit 2
+fi
+exec env PYTHONDONTWRITEBYTECODE=1 uv run --project "$options_repo" --extra plots python "$script_dir/spx_report.py" "$@"

@@ -1,0 +1,5 @@
+{
+  "$schema": "https://antigravity.google/schemas/v1/plugin.json",
+  "description": "Deferred read-only review-after-commit delivery from the repository-owned runtime.",
+  "name": "review-after-commit"
+}

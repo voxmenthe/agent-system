@@ -1,0 +1,19 @@
+service_tier = "default"
+
+[[hooks.PreToolUse]]
+matcher = "^Bash$"
+
+[[hooks.PreToolUse.hooks]]
+type = "command"
+command = 'exec /usr/bin/python3 -B "$CODEX_HOME/hooks/review-after-commit/hosts/codex/adapter.py"'
+timeout = 30
+statusMessage = "Recording the pre-command Git state"
+
+[[hooks.PostToolUse]]
+matcher = "^Bash$"
+
+[[hooks.PostToolUse.hooks]]
+type = "command"
+command = 'exec /usr/bin/python3 -B "$CODEX_HOME/hooks/review-after-commit/hosts/codex/adapter.py"'
+timeout = 30
+statusMessage = "Checking for an exact commit event"

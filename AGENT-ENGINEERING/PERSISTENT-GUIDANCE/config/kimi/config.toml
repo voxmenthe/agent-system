@@ -1,0 +1,60 @@
+default_permission_mode = "yolo"
+default_plan_mode = false
+merge_all_available_skills = true
+telemetry = false
+
+[thinking]
+enabled = true
+effort = "max"
+keep = "all"
+
+[loop_control]
+reserved_context_size = 115000
+
+[background]
+max_running_tasks = 4
+keep_alive_on_exit = false
+
+[[hooks]]
+event = "UserPromptSubmit"
+command = "memory hook kimi"
+timeout = 3
+
+[[hooks]]                          # hist view on a session's first prompt
+event = "UserPromptSubmit"
+command = "hist hook kimi UserPromptSubmit"
+timeout = 3
+
+[providers."managed:kimi-code"]
+type = "kimi"
+api_key = ""
+base_url = "https://api.kimi.ai/coding/v1"
+
+[providers."managed:kimi-code".oauth]
+storage = "file"
+key = "oauth/kimi-code-env-0e4f99c69cc27850"
+oauth_host = "https://auth.kimi.ai"
+
+[services.moonshot_search]
+base_url = "https://api.kimi.ai/coding/v1/search"
+api_key = ""
+
+[services.moonshot_search.oauth]
+storage = "file"
+key = "oauth/kimi-code-env-0e4f99c69cc27850"
+oauth_host = "https://auth.kimi.ai"
+
+[services.moonshot_fetch]
+base_url = "https://api.kimi.ai/coding/v1/fetch"
+api_key = ""
+
+[services.moonshot_fetch.oauth]
+storage = "file"
+key = "oauth/kimi-code-env-0e4f99c69cc27850"
+oauth_host = "https://auth.kimi.ai"
+
+[experimental]
+notify_user = true
+tower = true
+tool-select = true
+

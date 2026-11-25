@@ -1,0 +1,75 @@
+{
+  "schema_version": 1,
+  "offers": [
+    {
+      "id": "devin-gemini-4-argon-launch",
+      "models": [
+        "devin:gemini-4-argon-low",
+        "devin:gemini-4-argon-medium",
+        "devin:gemini-4-argon-high"
+      ],
+      "discounts": {
+        "Self-serve": 75,
+        "Enterprise (ACUs)": 75,
+        "Legacy enterprise (credits)": 50
+      },
+      "starts": "2026-10-13",
+      "through": "2026-10-27",
+      "checked_at": "2026-10-23",
+      "source": "https://docs.devin.ai/desktop/models",
+      "condition": "Advertised discount depends on billing plan; account eligibility is not verified. Live native prices remain authoritative. Voice-mode calls are excluded. Exact provider cutoff time is not published."
+    },
+    {
+      "id": "devin-gemini-4-argon-intro",
+      "models": [
+        "devin:gemini-4-argon-low",
+        "devin:gemini-4-argon-medium",
+        "devin:gemini-4-argon-high"
+      ],
+      "discounts": {
+        "Self-serve": 50,
+        "Enterprise (ACUs)": 50
+      },
+      "starts": "2026-10-28",
+      "through": "2026-12-01",
+      "checked_at": "2026-10-23",
+      "source": "https://docs.devin.ai/desktop/models",
+      "condition": "Introductory period after the extra Devin discount ends; not stacked with the launch offer. Account eligibility is not verified. Live native prices remain authoritative. Voice-mode calls are excluded. Exact provider cutoff time is not published."
+    },
+    {
+      "id": "devin-swe-2-acu-discount",
+      "models": [
+        "devin:swe-2-medium",
+        "devin:swe-2-high",
+        "devin:swe-2-max"
+      ],
+      "discounts": {
+        "Enterprise (ACUs)": 75
+      },
+      "starts": "2026-10-23",
+      "through": "2026-12-31",
+      "checked_at": "2026-10-23",
+      "source": "https://docs.devin.ai/desktop/models",
+      "condition": "75% off the published list price ($3.00/1M input, $15.00/1M output, $0.30/1M cache input) for ACU-billed enterprise plans; account eligibility is not verified and the start date is not published. SWE-2 Lightning variants and Fusion sidekick usage are outside the published note. Live native prices remain authoritative. Voice-mode calls are excluded. Exact provider cutoff time is not published."
+    },
+    {
+      "id": "devin-gemini-3-7-3-8-flash-intro",
+      "models": [
+        "devin:gemini-3-7-flash-low",
+        "devin:gemini-3-7-flash-medium",
+        "devin:gemini-3-7-flash-high",
+        "devin:gemini-3-8-flash-low",
+        "devin:gemini-3-8-flash-medium",
+        "devin:gemini-3-8-flash-high"
+      ],
+      "discounts": {
+        "Self-serve": 50
+      },
+      "starts": "2026-10-23",
+      "through": "2026-12-31",
+      "checked_at": "2026-10-23",
+      "source": "https://docs.devin.ai/desktop/models",
+      "condition": "Introductory pricing ($0.75/1M input, $3.75/1M output) is 50% off the published regular rates ($1.50/1M input, $7.50/1M output) for self-serve plans; account eligibility is not verified and the start date is not published. Live native prices remain authoritative. Voice-mode calls are excluded. Exact provider cutoff time is not published."
+    }
+  ]
+}

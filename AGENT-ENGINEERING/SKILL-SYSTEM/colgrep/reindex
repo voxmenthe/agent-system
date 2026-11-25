@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+# Build or update the colgrep index of each repo under ~/repos.
+# Usage: reindex [--force] [repo...]
+#   --force  clear each index first, then rebuild it from scratch
+#   repo     names under ~/repos; defaults to $COLGREP_REPOS, a space-separated
+#            list that ~/.config/agent-system/shell.local.sh can set
+set -euo pipefail
+
+repos_root="$HOME/repos"
+
+force=0
+if [[ "${1:-}" == "--force" ]]; then
+  force=1
+  shift
+fi
+repos=("$@")
+if (( ${#repos[@]} == 0 )); then
+  read -r -a repos <<<"${COLGREP_REPOS:-}"
+fi
+if (( ${#repos[@]} == 0 )); then
+  echo "reindex: name repos under ~/repos, or set COLGREP_REPOS" >&2
+  exit 64
+fi
+
+failed=()
+for repo in "${repos[@]}"; do
+  path="$repos_root/$repo"
+  echo "== $repo"
+  if [[ ! -d "$path" ]]; then
+    echo "missing: $path" >&2
+    failed+=("$repo")
+    continue
+  fi
+  started=$SECONDS
+  if (( force )) && ! colgrep clear --color never "$path"; then
+    failed+=("$repo")
+    continue
+  fi
+  if colgrep init --yes --color never "$path"; then
+    echo "-- $repo indexed in $((SECONDS - started))s"
+  else
+    failed+=("$repo")
+  fi
+done
+
+if (( ${#failed[@]} )); then
+  echo "failed: ${failed[*]}" >&2
+  exit 1
+fi

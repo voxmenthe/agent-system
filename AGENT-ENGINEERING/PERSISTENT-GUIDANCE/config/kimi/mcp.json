@@ -1,0 +1,27 @@
+{
+  "mcpServers": {
+    "arxiv": {
+      "command": "@HOME@/.local/bin/uvx",
+      "args": [
+        "arxiv-mcp-server"
+      ],
+      "startupTimeoutMs": 105000
+    },
+    "alphaxiv": {
+      "command": "@HOME@/.local/bin/alphaxiv-mcp",
+      "args": [],
+      "startupTimeoutMs": 105000
+    },
+    "claude_in_chrome": {
+      "command": "@HOME@/.local/bin/claude",
+      "args": [
+        "--claude-in-chrome-mcp"
+      ],
+      "toolTimeoutMs": 120000,
+      "deferred": false
+    },
+    "lovable": {
+      "url": "https://mcp.lovable.dev"
+    }
+  }
+}

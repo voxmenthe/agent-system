@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "catalogVersion": "redacted-client-snapshot",
+  "data": [
+    {
+      "id": "stealth/cat-jam:free", "name": "Cat Jam", "aliases": ["catjam"],
+      "context_length": 1048576, "maxOutputTokens": 131072,
+      "reasoningEfforts": ["low", "high", "max"], "inputModalities": ["text"],
+      "minimumPlan": "individual-go", "zdr": false,
+      "display": {"description": "stealth reasoning model for coding and agentic work", "badge": "free", "group": "Stealth", "notice": "Shared capacity; 100 requests/day"},
+      "pricing": {"inputCost": 0, "outputCost": 0, "cacheReadCost": 0}
+    },
+    {
+      "id": "xiaomi/mimo-v2.5-pro", "name": "MiMo V2.5 Pro", "aliases": [],
+      "context_length": 1048576, "reasoningEfforts": null,
+      "display": {"description": "high-capability long-context agentic coding"},
+      "pricing": {"inputCost": 0.435, "outputCost": 0.87}
+    },
+    {"id": "vendor/paid", "name": "Paid Model", "display": {"badge": "free"}, "pricing": {"inputCost": 1, "outputCost": 2}},
+    {"id": "vendor/unknown", "name": "Unknown Price", "display": {"description": "new name does not imply newness"}},
+    {"id": "vendor/cache-cost", "name": "Cache Cost", "pricing": {"inputCost": 0, "outputCost": 0, "cacheWriteCost": 1}},
+    {"id": "legacy/free", "name": "Hidden Legacy", "hidden": true, "pricing": {"inputCost": 0, "outputCost": 0}}
+  ]
+}

@@ -1,0 +1,6 @@
+interface:
+  display_name: "Codemap"
+  short_description: "Map a codebase with concise source-linked explanations"
+  default_prompt: "Use $codemap to create CODE-MAP.md for this codebase, with exactly two short paragraphs per area explaining how it works and its evidence-backed design choices."
+policy:
+  allow_implicit_invocation: false

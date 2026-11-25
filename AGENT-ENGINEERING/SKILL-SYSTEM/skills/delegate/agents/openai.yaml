@@ -1,0 +1,7 @@
+interface:
+  display_name: "Delegate"
+  short_description: "Coordinate bounded work across external models"
+  default_prompt: "Use $delegate to route these bounded tasks across the requested external models and integrate the result."
+
+policy:
+  allow_implicit_invocation: false

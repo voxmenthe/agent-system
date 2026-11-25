@@ -1,0 +1,6 @@
+interface:
+  display_name: "Chats"
+  short_description: "List or export private ChatGPT conversations"
+  default_prompt: "Use $chats to list, find, or export my private ChatGPT conversations."
+policy:
+  allow_implicit_invocation: false

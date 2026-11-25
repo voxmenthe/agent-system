@@ -1,0 +1,10 @@
+{
+  "hook_event_name": "PreToolUse",
+  "session_id": "fixture-session",
+  "tool_name": "Bash",
+  "tool_call_id": "fixture-tool",
+  "cwd": "/fixture/repository",
+  "tool_input": {
+    "command": "git commit --allow-empty -m fixture"
+  }
+}

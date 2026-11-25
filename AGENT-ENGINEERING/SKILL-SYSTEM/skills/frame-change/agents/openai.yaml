@@ -1,0 +1,4 @@
+interface:
+  display_name: "Frame Change"
+  short_description: "Frame a bounded change before implementation"
+  default_prompt: "Use $frame-change to create a bounded change brief before implementation."

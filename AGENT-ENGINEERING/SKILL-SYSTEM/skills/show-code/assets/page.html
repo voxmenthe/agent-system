@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>$page-title$</title>
+  <style>
+$styles$
+  </style>
+</head>
+<body>
+  <a class="skip" href="#main">Skip to explanation</a>
+  <header class="page-header">
+    <span>SHOW CODE / CODE IN CONTEXT</span>
+    <a href="$source-file$">Markdown source</a>
+  </header>
+  <main id="main">
+$if(toc)$
+    <details class="contents">
+      <summary>In this explanation</summary>
+      <nav aria-label="Contents">$toc$</nav>
+    </details>
+$endif$
+    <article>
+$body$
+    </article>
+  </main>
+</body>
+</html>

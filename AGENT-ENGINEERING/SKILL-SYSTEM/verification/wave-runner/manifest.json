@@ -1,0 +1,225 @@
+{
+  "spec": "WaveRunner.tla",
+  "skill": ".agents/skills/verify-wave-runner/SKILL.md",
+  "tlaTools": {
+    "version": "1.7.4",
+    "url": "https://github.com/tlaplus/tlaplus/releases/download/v1.7.4/tla2tools.jar",
+    "sha256": "936a262061c914694dfd669a543be24573c45d5aa0ff20a8b96b23d01e050e88"
+  },
+  "checks": [
+    {
+      "config": "two-workers.cfg",
+      "expect": "pass",
+      "quick": true,
+      "what": "every safety property, two workers on one account, every option",
+      "timeoutSeconds": 60
+    },
+    {
+      "config": "three-workers-serial.cfg",
+      "expect": "pass",
+      "quick": true,
+      "what": "every safety property, three workers, --jobs 1, no --timeout",
+      "timeoutSeconds": 60
+    },
+    {
+      "config": "two-workers-split-accounts.cfg",
+      "expect": "pass",
+      "quick": true,
+      "what": "every safety property, two workers on separate accounts, every option",
+      "timeoutSeconds": 60
+    },
+    {
+      "config": "three-workers-jobs-1.cfg",
+      "expect": "pass",
+      "quick": false,
+      "what": "every safety property, three workers, --jobs 1",
+      "timeoutSeconds": 300
+    },
+    {
+      "config": "three-workers-jobs-2.cfg",
+      "expect": "pass",
+      "quick": false,
+      "what": "every safety property, three workers, --jobs 2",
+      "timeoutSeconds": 1860
+    },
+    {
+      "config": "three-workers-jobs-3.cfg",
+      "expect": "pass",
+      "quick": false,
+      "what": "every safety property, three workers, --jobs 3",
+      "timeoutSeconds": 4920
+    },
+    {
+      "config": "termination.cfg",
+      "expect": "pass",
+      "quick": true,
+      "what": "the runner always exits (one worker)",
+      "timeoutSeconds": 60
+    },
+    {
+      "config": "sufficiency/lingering-alone.cfg",
+      "expect": "pass",
+      "quick": false,
+      "what": "stop_groups's lingering alone keeps leftovers reported",
+      "timeoutSeconds": 60
+    },
+    {
+      "config": "sufficiency/final-check-alone.cfg",
+      "expect": "pass",
+      "quick": false,
+      "what": "the final group check alone keeps leftovers reported",
+      "timeoutSeconds": 60
+    },
+    {
+      "config": "mutations/a-dispatch-after-runner-failure.cfg",
+      "expect": "NoLaunchAfterRunnerFailure",
+      "quick": true,
+      "what": "the check no longer catches: Line 284 without runner_failed == 0, as it stood before 1ad297d4a: a barred worker's failed status write sets runner_failed inside the dispatch loop, and the next worker still starts.",
+      "timeoutSeconds": 60
+    },
+    {
+      "config": "mutations/b-dispatch-ignores-bar.cfg",
+      "expect": "NoBarredLaunch",
+      "quick": true,
+      "what": "the check no longer catches: Line 289 removed: a barred launcher's queued worker starts.",
+      "timeoutSeconds": 60
+    },
+    {
+      "config": "mutations/c-cap-off-by-one.cfg",
+      "expect": "CapRespected",
+      "quick": true,
+      "what": "the check no longer catches: Line 284 with active <= jobs: one adapter more than --jobs runs.",
+      "timeoutSeconds": 60
+    },
+    {
+      "config": "mutations/d-unconfirmed-ignores-group.cfg",
+      "expect": "NoUnreportedLiveGroup",
+      "quick": true,
+      "what": "the check no longer catches: Line 340 without the group check: a reaped worker whose leftovers outlive cleanup keeps its exit status.",
+      "timeoutSeconds": 60
+    },
+    {
+      "config": "mutations/e-exit-ignores-runner-failure.cfg",
+      "expect": "ExitZeroIsClean",
+      "quick": true,
+      "what": "the check no longer catches: Line 366 removed: a failed summary write exits with the workers' result.",
+      "timeoutSeconds": 60
+    },
+    {
+      "config": "mutations/f-timeout-reads-as-exit.cfg",
+      "expect": "TimeoutIsReported",
+      "quick": true,
+      "what": "the check no longer catches: Line 220 removed: a worker stopped for --timeout that exits 0 on SIGTERM reads as 0.",
+      "timeoutSeconds": 60
+    },
+    {
+      "config": "mutations/g-dispatch-ignores-interrupt.cfg",
+      "expect": "InterruptStopsDispatch",
+      "quick": true,
+      "what": "the check no longer catches: Line 284 without interrupted == 0: workers keep starting after SIGINT.",
+      "timeoutSeconds": 60
+    },
+    {
+      "config": "mutations/hi-no-leftover-backstop.cfg",
+      "expect": "NoUnreportedLiveGroup",
+      "quick": true,
+      "what": "the check no longer catches: Line 275 (lingering) and lines 308-310 (the final group check) both removed: the wave exits while a returned worker's leftovers live.",
+      "timeoutSeconds": 60
+    },
+    {
+      "config": "mutations/j-not-started-overwrites.cfg",
+      "expect": "SettledStatusesSurvive",
+      "quick": true,
+      "what": "the check no longer catches: Line 348 starting at the first worker: finished statuses become not-started.",
+      "timeoutSeconds": 60
+    },
+    {
+      "config": "mutations/k-queued-without-status.cfg",
+      "expect": "EveryWorkerHasAStatus",
+      "quick": true,
+      "what": "the check no longer catches: Line 348 removed: workers queued at an interrupt end with no status.",
+      "timeoutSeconds": 60
+    },
+    {
+      "config": "mutations/m-unconfirmed-not-written.cfg",
+      "expect": "StatusFilesMatch",
+      "quick": true,
+      "what": "the check no longer catches: Line 344 removed: cleanup marks a worker unconfirmed but its status file keeps the old value.",
+      "timeoutSeconds": 60
+    },
+    {
+      "config": "mutations/n-sigkill-survivor-lingers.cfg",
+      "expect": "Termination",
+      "quick": true,
+      "what": "the check no longer catches: Lines 269-273 removed: a group that survives SIGKILL keeps the runner waiting for ever.",
+      "timeoutSeconds": 60
+    },
+    {
+      "config": "mutations/o-refusal-bars-account.cfg",
+      "expect": "AccountBarsNeedExhaustion",
+      "quick": true,
+      "what": "the check no longer catches: Lines 202-203 matching every refusal class: a launcher's own rate limit or quarantine bars every launcher on its account.",
+      "timeoutSeconds": 60
+    },
+    {
+      "config": "mutations/x-dispatch-ignores-account-bar.cfg",
+      "expect": "NoBarredLaunch",
+      "quick": true,
+      "what": "the check no longer catches: Lines 286-288 removed: a worker on an exhausted account starts when its own launcher is not barred.",
+      "timeoutSeconds": 60
+    }
+  ],
+  "coverage": {
+    "syncCommit": "d4f2054ae7f9e49c565a3aabd9b17ec670337b0c",
+    "code": [
+      {
+        "file": "AGENT-ENGINEERING/SKILL-SYSTEM/skills/delegate/scripts/run-wave.sh",
+        "kind": "sh-region",
+        "unit": "runner state and traps",
+        "from": "pids=() statuses=() groups=() started=() stopping=() killed=()",
+        "to": "set -m",
+        "sha256": "b03e8cd71385edd2fa621e36e47a8f7a428ceae2539f5e46a1d49858b911357d"
+      },
+      {
+        "file": "AGENT-ENGINEERING/SKILL-SYSTEM/skills/delegate/scripts/run-wave.sh",
+        "kind": "sh-function",
+        "unit": "write_status",
+        "sha256": "76ed617fc2aaf26b79b6b61dc6cdc15499c904d53d0e6aaab212cf9965e25dfb"
+      },
+      {
+        "file": "AGENT-ENGINEERING/SKILL-SYSTEM/skills/delegate/scripts/run-wave.sh",
+        "kind": "sh-function",
+        "unit": "bar_refused",
+        "sha256": "4b380a826f7ee82a3a6163e2968f70b690c41a417ff8459a06cd961ebfd3eee1"
+      },
+      {
+        "file": "AGENT-ENGINEERING/SKILL-SYSTEM/skills/delegate/scripts/run-wave.sh",
+        "kind": "sh-function",
+        "unit": "reap_finished",
+        "sha256": "b0cbf200db40fdbd17d7d24c9f7f3df00246e64513ba16f1f539b63e2af14e5c"
+      },
+      {
+        "file": "AGENT-ENGINEERING/SKILL-SYSTEM/skills/delegate/scripts/run-wave.sh",
+        "kind": "sh-function",
+        "unit": "stop_groups",
+        "sha256": "02e655c33e170479cd5c6c590f1bb7171c95703e5833d5a1593e4ef0ea385bcb"
+      },
+      {
+        "file": "AGENT-ENGINEERING/SKILL-SYSTEM/skills/delegate/scripts/run-wave.sh",
+        "kind": "sh-region",
+        "unit": "main loop",
+        "from": "lingering=0",
+        "to": "  if (( active > 0 || lingering )) && ! sleep 0.05; then runner_failed=1; break; fi",
+        "sha256": "1faafe75bcf69572bf842959fd6e4239d174dde342392a49457c7ae049553e15"
+      },
+      {
+        "file": "AGENT-ENGINEERING/SKILL-SYSTEM/skills/delegate/scripts/run-wave.sh",
+        "kind": "sh-region",
+        "unit": "cleanup, statuses and exit",
+        "from": "# A returned adapter with a live local descendant has not released its scope.",
+        "to": "exit \"$result\"",
+        "sha256": "02bf932bb56e9ebe625c9d776a9e66ae974973c0935c04fa15bfa8b977eda248"
+      }
+    ]
+  }
+}

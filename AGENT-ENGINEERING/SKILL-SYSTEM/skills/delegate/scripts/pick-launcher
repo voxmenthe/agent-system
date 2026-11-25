@@ -1,0 +1,359 @@
+#!/usr/bin/env python3
+"""Choose which of several acceptable launchers to run, by their accounts' quota.
+
+    pick-launcher [--floor PERCENT] RANK [RANK ...]
+
+Each RANK is one launcher or several comma-joined equals, best rank first:
+
+    pick-launcher ocnx,cmnh,dopm           equals: quota alone decides
+    pick-launcher cdm cdm2 argh ocnx       ranked: the first rank with room wins
+    pick-launcher cdm,cdm2 argh,argh2 ocnx ranked groups of equals
+
+A launcher qualifies when every quota window that applies to it has at least PERCENT (default 10) left. The
+first rank with a qualifying launcher wins. Within it, subscription credit that expires soonest goes first,
+then free models, then pay-per-use (API-key) launchers. A subscription launcher whose quota cannot be read is
+skipped, and the pick never falls through to pay-per-use past one.
+
+Prints the chosen launcher on stdout and each candidate's reading and verdict on stderr. Exits 0 with a
+choice, 1 when none qualifies, 2 on a usage error or a name that is not a known launcher. Covers the
+Antigravity, Claude Code, Codex, Command Code, Devin, Grok, OpenCode and Pi launchers in ~/.bash_agents
+(BASH_AGENTS_FILE overrides); quota comes from its `usage --records`. Pi's Go launchers spend the OpenCode Go quota.
+"""
+
+from __future__ import annotations
+
+import argparse
+from dataclasses import dataclass
+import functools
+import importlib.util
+import math
+import os
+from pathlib import Path
+import re
+import subprocess
+import sys
+import time
+
+DEFAULT_FLOOR_PERCENT = 10.0
+SUBSCRIPTION, FREE, METERED = "subscription", "free", "metered"
+# Within one rank: credit that expires is spent before free models, and money last.
+KIND_ORDER = {SUBSCRIPTION: 0, FREE: 1, METERED: 2}
+# Five-hour windows cycle several times a day: they limit room but are not credit that expires
+# (`usage` ranks them apart for the same reason).
+CREDIT_PERIODS = frozenset({"daily", "weekly", "monthly"})
+CLAUDE_FAMILIES = ("opus", "sonnet", "haiku", "fable")
+# OpenCode Zen's own models cost nothing only when free; other Zen models bill the Zen balance.
+FREE_ZEN_MODELS = re.compile(r"-free$|^big-pickle$")
+# Plain `grok` is the raw binary on the primary home, not a shell function.
+BINARIES = {"grok": ("grok", 1)}
+DEFINITION = re.compile(r"^(\S+) \(\) $", re.MULTILINE)
+ACCOUNT_PREFIX = re.compile(r"^(.*?)(?: (\d+))?$")
+
+
+class PickError(Exception):
+    """A usage error or a name the picker cannot resolve (exit 2)."""
+
+
+@dataclass(frozen=True)
+class Pool:
+    """The quota a launcher spends: a harness account (and, for Antigravity and Claude, a model scope)."""
+    kind: str
+    harness: str = ""
+    account: int = 1
+    scope: str = ""
+
+    def describe(self) -> str:
+        if self.kind != SUBSCRIPTION:
+            return self.kind
+        account = "" if self.account == 1 else f" {self.account}"
+        return f"{self.harness}{account}" + (f" · {self.scope}" if self.scope else "")
+
+
+@dataclass(frozen=True)
+class Window:
+    harness: str
+    account: int
+    name: str
+    label: str
+    period: str
+    remaining: float
+    reset_epoch: int
+
+
+@dataclass(frozen=True)
+class Candidate:
+    launcher: str
+    rank: int
+    position: int
+    pool: Pool
+
+
+def parse_ranks(arguments: list[str]) -> list[list[str]]:
+    ranks = [argument.split(",") for argument in arguments]
+    names = [name for rank in ranks for name in rank]
+    if any(not name for name in names):
+        raise PickError("empty launcher name (stray comma?)")
+    duplicates = sorted({name for name in names if names.count(name) > 1})
+    if duplicates:
+        raise PickError(f"listed more than once: {', '.join(duplicates)}")
+    return ranks
+
+
+def parse_definitions(declared: str) -> dict[str, str]:
+    """`declare -f` output -> function name -> body."""
+    parts = DEFINITION.split(declared)
+    return dict(zip(parts[1::2], parts[2::2]))
+
+
+@functools.cache
+def _agy_groups() -> dict[str, str]:
+    """agy-account.py's launcher -> AGY /usage model group, its one source."""
+    spec = importlib.util.spec_from_file_location("agy_account", Path(__file__).with_name("agy-account.py"))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.GROUPS
+
+
+def _claude(match: re.Match[str], name: str) -> Pool:
+    if match[1] == "key":
+        return Pool(METERED)
+    family = next((family for family in CLAUDE_FAMILIES if family in match[2].lower()), "")
+    if not family:
+        raise PickError(f"{name}: no Claude model family in {match[2]!r}")
+    return Pool(SUBSCRIPTION, "claude", 1, family)
+
+
+def _agy(name: str, account: int) -> Pool:
+    group = _agy_groups().get(name)
+    if group is None:
+        raise PickError(f"{name}: no Antigravity model group for it in agy-account.py")
+    return Pool(SUBSCRIPTION, "antigravity", account, group)
+
+
+def _grok(match: re.Match[str], name: str) -> Pool:
+    home = re.search(r"GROK(\d)_HOME", match.string)
+    return Pool(SUBSCRIPTION, "grok", int(home[1]) if home else 1)
+
+
+def _opencode(match: re.Match[str], name: str) -> Pool:
+    provider, model = match[1], match[2]
+    if provider == "opencode-go":
+        return Pool(SUBSCRIPTION, "opencode")
+    if provider == "opencode" and FREE_ZEN_MODELS.search(model):
+        return Pool(FREE)
+    return Pool(METERED)
+
+
+# Each launcher base in ~/.bash_agents names the quota its launchers spend.
+RULES = (
+    (re.compile(r'\b_cc_launch "(sub|key)" "[^"]*" "([^"]*)"'), _claude),
+    (re.compile(r"\b_codex_secondary \S+"), lambda match, name: Pool(SUBSCRIPTION, "codex", 2)),
+    (re.compile(r"\b_codex_launch\b"), lambda match, name: Pool(SUBSCRIPTION, "codex", 1)),
+    (re.compile(r"\b_agy_secondary (\S+)"), lambda match, name: _agy(match[1], 2)),
+    (re.compile(r"\b_agy_launch\b"), lambda match, name: _agy(name, 1)),
+    (re.compile(r"\b_(?:codex|agy)_api\b"), lambda match, name: Pool(METERED)),
+    (re.compile(r'\b_oc_launch "([^"/]+)/([^"]+)"'), _opencode),
+    # Pi's Go wrappers spend the same OpenCode Go allowance as the oc launchers.
+    (re.compile(r'\b_pi_launch "opencode-go/'), lambda match, name: Pool(SUBSCRIPTION, "opencode")),
+    (re.compile(r"\b_cmd_launch\b"), lambda match, name: Pool(SUBSCRIPTION, "cmd")),
+    (re.compile(r"\b_devin\b"), lambda match, name: Pool(SUBSCRIPTION, "devin")),
+    (re.compile(r"\b_grok_launch\b"), _grok),
+)
+
+
+def resolve(name: str, definitions: dict[str, str]) -> Pool:
+    """The quota NAME spends, read from its definition; a wrapper that only calls another resolves to that one."""
+    if name in BINARIES:
+        harness, account = BINARIES[name]
+        return Pool(SUBSCRIPTION, harness, account)
+    if ":" in name:
+        # Delegate manifests' API-key compounds (cdxk:cdx, agk:argh) run the wrapped launcher on a key.
+        prefix, _, wrapped = name.partition(":")
+        if prefix in ("cdxk", "agk") and wrapped in definitions and prefix in definitions:
+            return Pool(METERED)
+        raise PickError(f"{name}: not a cdxk: or agk: compound of a defined launcher")
+    body = definitions.get(name)
+    if body is None:
+        raise PickError(f"{name}: no such launcher in the shell definitions")
+    pools = {resolver(match, name) for pattern, resolver in RULES if (match := pattern.search(body))}
+    if len(pools) == 1:
+        return pools.pop()
+    if pools:
+        raise PickError(f"{name}: not one launcher (it reaches several quotas)")
+    first = re.match(r"\s*\{?\s*\(?\s*(\S+)", body)
+    if first and first[1] in definitions and first[1] != name:
+        return resolve(first[1], definitions)
+    raise PickError(f"{name}: not an Antigravity, Claude Code, Codex, Command Code, Devin, Grok, OpenCode or Pi launcher")
+
+
+def parse_records(output: str) -> tuple[list[Window], dict[str, list[str]]]:
+    """`usage --records` lines -> quota windows, and each harness's reasons for windows it could not rank."""
+    windows: list[Window] = []
+    unranked: dict[str, list[str]] = {}
+    for line in output.splitlines():
+        fields = line.split("\t")
+        if fields[0] == "window" and len(fields) == 8:
+            _, harness, reset, label, period, _used, remaining, _seconds = fields
+            prefix, _, name = label.partition(" · ")
+            account = ACCOUNT_PREFIX.match(prefix)[2]
+            try:
+                windows.append(Window(harness, int(account or 1), name, f"{label} [{period}]", period,
+                                      float(remaining), int(reset)))
+            except ValueError:
+                raise PickError(f"unreadable usage --records line: {line!r}") from None
+        elif fields[0] == "unranked" and len(fields) >= 4:
+            unranked.setdefault(fields[1], []).append(f"{fields[2]}: {' '.join(fields[3:])}")
+        else:
+            raise PickError(f"unreadable usage --records line: {line!r}")
+    return windows, unranked
+
+
+def applies(window: Window, pool: Pool) -> bool:
+    if (window.harness, window.account) != (pool.harness, pool.account):
+        return False
+    if pool.harness == "antigravity":
+        return window.name == pool.scope
+    if pool.harness == "claude":
+        # "Weekly (Fable)" binds only Fable; "Weekly", "5h" and other scopes bind every Claude model.
+        named = [family for family in CLAUDE_FAMILIES if family in window.name.lower()]
+        return not named or pool.scope in named
+    return True
+
+
+@dataclass(frozen=True)
+class Reading:
+    room: float              # percent left in the tightest window; inf without quota windows
+    tightest: str
+    expiry: float            # epoch the soonest credit window resets; inf when none
+    credit_left: float       # percent of that credit still spendable
+    credit_label: str
+
+
+def read_pool(pool: Pool, windows: list[Window], now: float) -> Reading | None:
+    """POOL's room and credit expiry, or None for a subscription with no quota reading."""
+    if pool.kind != SUBSCRIPTION:
+        return Reading(math.inf, "", math.inf, 0.0, "")
+    own = [window for window in windows if applies(window, pool)]
+    if not own:
+        return None
+    # A window whose reset has passed has reset: it is full again.
+    room, tightest = min((window.remaining if window.reset_epoch > now else 100.0, window.label) for window in own)
+    credit = [window for window in own if window.period in CREDIT_PERIODS and window.reset_epoch > now]
+    if not credit:
+        return Reading(room, tightest, math.inf, 0.0, "")
+    soonest = min(credit, key=lambda window: (window.reset_epoch, -window.remaining))
+    # No more of the expiring credit can be spent than the tightest window allows.
+    return Reading(room, tightest, soonest.reset_epoch, min(soonest.remaining, room), soonest.label)
+
+
+def _duration(seconds: float) -> str:
+    minutes = max(0, math.ceil(seconds / 60))
+    days, hours = divmod(minutes // 60, 24)
+    return f"{days}d {hours}h" if days else f"{hours}h {minutes % 60}m" if hours else f"{minutes}m"
+
+
+def pick(candidates: list[Candidate], readings: dict[Pool, Reading | None],
+         floor: float) -> tuple[Candidate | None, dict[str, str]]:
+    """The chosen candidate (None when none qualifies) and a verdict for every candidate."""
+    verdicts = {candidate.launcher: "not reached: a higher rank decided" for candidate in candidates}
+    unknown: list[str] = []
+    for rank in sorted({candidate.rank for candidate in candidates}):
+        members = [candidate for candidate in candidates if candidate.rank == rank]
+        eligible = []
+        for candidate in members:
+            reading = readings[candidate.pool]
+            if reading is None:
+                unknown.append(candidate.launcher)
+                verdicts[candidate.launcher] = "skipped: no quota reading"
+            elif reading.room < floor:
+                verdicts[candidate.launcher] = f"skipped: {reading.tightest} has {reading.room:g}% left, under the {floor:g}% floor"
+            else:
+                eligible.append(candidate)
+        if not eligible:
+            continue
+        best = min(eligible, key=lambda candidate: (
+            KIND_ORDER[candidate.pool.kind], readings[candidate.pool].expiry,
+            -readings[candidate.pool].credit_left, candidate.position))
+        for candidate in eligible:
+            verdicts[candidate.launcher] = "chosen" if candidate is best else "eligible; another in its rank went first"
+        if best.pool.kind == METERED and unknown:
+            verdicts[best.launcher] = (f"refused: pay-per-use while the quota of {', '.join(unknown)} "
+                                       "is unknown, so it may not be out")
+            return None, verdicts
+        return best, verdicts
+    return None, verdicts
+
+
+def describe(candidate: Candidate, reading: Reading | None, now: float) -> str:
+    pool = candidate.pool.describe()
+    if reading is None or candidate.pool.kind != SUBSCRIPTION:
+        return pool
+    detail = f"{reading.room:g}% room ({reading.tightest})"
+    if reading.expiry != math.inf:
+        detail += f", {reading.credit_left:g}% credit expires in {_duration(reading.expiry - now)} ({reading.credit_label})"
+    return f"{pool}: {detail}"
+
+
+def _bash(script: str, *arguments: str) -> subprocess.CompletedProcess[str]:
+    agents_file = Path(os.environ.get("BASH_AGENTS_FILE", Path.home() / ".bash_agents"))
+    if not agents_file.is_file():
+        raise PickError(f"no shell definitions at {agents_file} (set BASH_AGENTS_FILE)")
+    return subprocess.run(
+        ["bash", "--noprofile", "--norc", "-c", f'source "$1" >/dev/null 2>&1; shift; {script}',
+         "pick-launcher", str(agents_file), *arguments],
+        stdin=subprocess.DEVNULL, capture_output=True, text=True, encoding="utf-8", errors="replace", check=False,
+    )
+
+
+def fetch_definitions() -> dict[str, str]:
+    return parse_definitions(_bash("declare -f").stdout)
+
+
+def fetch_windows(harnesses: list[str]) -> tuple[list[Window], dict[str, list[str]]]:
+    """Read quota once for HARNESSES; a harness that fails leaves its launchers without a reading."""
+    if not harnesses:
+        return [], {}
+    result = _bash('usage --records -a "$1"', ",".join(harnesses))
+    sys.stderr.write(result.stderr)
+    return parse_records(result.stdout)
+
+
+def main(argv: list[str]) -> int:
+    parser = argparse.ArgumentParser(prog="pick-launcher", description=__doc__.split("\n\n")[0],
+                                     formatter_class=argparse.RawDescriptionHelpFormatter, allow_abbrev=False)
+    parser.add_argument("--floor", type=float, default=DEFAULT_FLOOR_PERCENT, metavar="PERCENT",
+                        help=f"least percent left in every applicable window (default {DEFAULT_FLOOR_PERCENT:g})")
+    parser.add_argument("ranks", nargs="+", metavar="RANK", help="a launcher, or comma-joined equals; best first")
+    args = parser.parse_args(argv)
+    if not 0 <= args.floor <= 100:
+        raise PickError("--floor must be between 0 and 100")
+    ranks = parse_ranks(args.ranks)
+    definitions = fetch_definitions()
+    candidates: list[Candidate] = []
+    for rank, names in enumerate(ranks):
+        for name in names:
+            candidates.append(Candidate(name, rank, len(candidates), resolve(name, definitions)))
+    harnesses = list(dict.fromkeys(c.pool.harness for c in candidates if c.pool.kind == SUBSCRIPTION))
+    windows, unranked = fetch_windows(harnesses)
+    now = time.time()
+    readings = {candidate.pool: read_pool(candidate.pool, windows, now) for candidate in candidates}
+    chosen, verdicts = pick(candidates, readings, args.floor)
+    for candidate in candidates:
+        reading = readings[candidate.pool]
+        line = f"pick-launcher: {candidate.launcher} ({describe(candidate, reading, now)}) — {verdicts[candidate.launcher]}"
+        if reading is None and unranked.get(candidate.pool.harness):
+            line += f" ({'; '.join(unranked[candidate.pool.harness])})"
+        print(line, file=sys.stderr)
+    if chosen is None:
+        print(f"pick-launcher: no launcher qualifies (floor {args.floor:g}%)", file=sys.stderr)
+        return 1
+    print(chosen.launcher)
+    return 0
+
+
+if __name__ == "__main__":
+    try:
+        sys.exit(main(sys.argv[1:]))
+    except PickError as error:
+        print(f"pick-launcher: {error}", file=sys.stderr)
+        sys.exit(2)

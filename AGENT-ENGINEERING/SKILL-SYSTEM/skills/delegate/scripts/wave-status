@@ -1,0 +1,132 @@
+#!/usr/bin/env python3
+"""Read a delegate wave without accepting work or changing its artifacts."""
+from __future__ import annotations
+
+import argparse
+from collections import Counter
+import csv
+from pathlib import Path
+import re
+import sys
+
+STATES = ("failed", "blocked", "unsettled", "not-started", "returned")
+CLASSES = ("rate-limited", "quarantined", "unclassified", "timeout")
+LABEL = r"^[ \t]*(?:[-+*][ \t]+)?[*_]*{}[*_]*[ \t]*:[*_]*[ \t]*"
+BLOCKED = re.compile(LABEL.format("STATUS") + r"[*_]*blocked\b", re.I | re.M)
+BLOCKERS = re.compile(LABEL.format("BLOCKERS") + r"\s*(.*)", re.I | re.M)
+FAILURE = re.compile(
+    r"delegate worker: failure class: (rate-limited: .+|quarantined: .+|unclassified)"
+)
+
+
+def _read_text(path: Path) -> str:
+    try:
+        return path.read_text(encoding="utf-8", errors="replace")
+    except FileNotFoundError:
+        return ""
+
+
+def _workers(directory: Path) -> dict[str, str]:
+    names = {path.stem for path in directory.glob("*.task") if path.is_file()}
+    if not names:
+        raise ValueError(f"no *.task files: {directory}")
+    workers = {}
+    for filename in ("WAVE.tsv", "SUMMARY.tsv"):
+        try:
+            stream = (directory / filename).open(encoding="utf-8", errors="replace")
+        except FileNotFoundError:
+            continue
+        with stream:
+            rows = csv.reader(stream, delimiter="\t")
+            next(rows, None)
+            for row in rows:
+                if len(row) >= 2 and row[0] in names:
+                    workers.setdefault(row[0], row[1] or "-")
+    for name in sorted(names):
+        workers.setdefault(name, "-")
+    return workers
+
+
+def _read_failure(path: Path) -> tuple[str, str]:
+    try:
+        with path.open("rb") as stream:
+            size = stream.seek(0, 2)
+            stream.seek(max(0, size - 65536))
+            lines = stream.read(65536).decode("utf-8", errors="replace").splitlines()
+    except FileNotFoundError:
+        lines = []
+    last = next((line for line in reversed(lines) if line.strip()), "")
+    match = FAILURE.fullmatch(last)
+    detail = match[1] if match else "unclassified"
+    return detail.split(":", 1)[0], detail
+
+
+def _classify(directory: Path, name: str) -> tuple[str, str, str, Path]:
+    task = directory / f"{name}.task"
+    output = directory / f"{name}.out"
+    stderr = directory / f"{name}.stderr"
+    status = _read_text(directory / f"{name}.status").strip()
+    if status == "timeout":
+        return "failed", "timeout", "timeout", stderr
+    if re.fullmatch(r"[+-]?[0-9]+", status):
+        if int(status) != 0:
+            kind, detail = _read_failure(stderr)
+            return "failed", kind, f"exit {status}; {detail}", stderr
+        text = _read_text(output)
+        if BLOCKED.search(text):
+            blockers = BLOCKERS.search(text)
+            detail = blockers[1].strip(" *_") if blockers else ""
+            return "blocked", "", detail or "STATUS: blocked", output
+        return "returned", "", "exit 0", output
+    not_started = re.fullmatch(r"not-started(?: (\(.*\)))?", status)
+    if not_started:
+        return "not-started", "", not_started[1] or "not-started", task
+    if not status and output.is_file():
+        # run-wave.sh opens .out just before it spawns the adapter: dispatched, not yet reaped.
+        status = "output opened, no status"
+    return "unsettled", "", status or "no status", stderr if stderr.is_file() else task
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(
+        prog="wave-status", add_help=False, allow_abbrev=False,
+        description="Read-only fleet view; returned work is not accepted work.",
+    )
+    parser.add_argument("--help", action="help", help="show usage and exit")
+    parser.add_argument("--all", action="store_true", help="show every other row")
+    parser.add_argument("jobs_dir", metavar="jobs-dir")
+    args = parser.parse_args()
+    directory = Path(args.jobs_dir)
+    if not directory.is_dir():
+        raise ValueError(f"not a directory: {directory}")
+    workers = _workers(directory)
+    rows: dict[str, list[str]] = {state: [] for state in STATES}
+    classes: Counter[str] = Counter()
+    for name, launcher in workers.items():
+        state, kind, detail, path = _classify(directory, name)
+        if state in ("failed", "blocked"):
+            detail = " ".join(detail.split())
+            if len(detail) > 100:
+                detail = detail[:99] + "…"
+        rows[state].append("  ".join((state, name, launcher, detail, str(path))))
+        if kind:
+            classes[kind] += 1
+    counts = ", ".join(f"{classes[kind]} {kind}" for kind in CLASSES if classes[kind])
+    failed = f"{len(rows['failed'])} failed" + (f" ({counts})" if counts else "")
+    print(f"{directory}: {len(workers)} workers · {len(rows['returned'])} returned · "
+          f"{len(rows['blocked'])} blocked · {failed} · "
+          f"{len(rows['unsettled'])} unsettled · {len(rows['not-started'])} not started")
+    other = rows["unsettled"] + rows["not-started"] + rows["returned"]
+    for row in rows["failed"] + rows["blocked"] + (other if args.all else other[:20]):
+        print(row)
+    if not args.all and len(other) > 20:
+        print(f"… {len(other) - 20} more rows omitted (--all shows them)")
+    return 0
+
+
+if __name__ == "__main__":
+    try:
+        sys.exit(main())
+    except (OSError, ValueError) as error:
+        print(f"wave-status: {' '.join(str(error).split())}", file=sys.stderr)
+        sys.exit(2)

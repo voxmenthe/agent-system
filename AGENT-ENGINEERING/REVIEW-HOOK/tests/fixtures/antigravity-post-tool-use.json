@@ -1,0 +1,19 @@
+{
+  "artifactDirectoryPath": "/fixture/artifacts",
+  "conversationId": "ec33ebf9-0cba-4100-8142-c61503f6c587",
+  "error": "",
+  "modelName": "fixture-model",
+  "stepIdx": 1,
+  "toolCall": {
+    "args": {
+      "CommandLine": "git status",
+      "Cwd": "/fixture/workspace",
+      "WaitMsBeforeAsync": 5000
+    },
+    "name": "run_command"
+  },
+  "transcriptPath": "/fixture/transcript.jsonl",
+  "workspacePaths": [
+    "/fixture/workspace"
+  ]
+}

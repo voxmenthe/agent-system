@@ -1,0 +1,7 @@
+interface:
+  display_name: "Unlazy"
+  short_description: "Enforce completion through gate files and checks"
+  default_prompt: "Use $unlazy to enforce gated completion on this substantial task until every gate is checked."
+
+policy:
+  allow_implicit_invocation: false

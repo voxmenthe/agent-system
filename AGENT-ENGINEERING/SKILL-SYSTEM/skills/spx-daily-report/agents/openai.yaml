@@ -1,0 +1,6 @@
+interface:
+  display_name: "SPX Daily Decision Report"
+  short_description: "Free-data SPX ranges, gamma scenarios, and history"
+  default_prompt: "Use $spx-daily-report to collect the free closing data, create an SPX trading decision report with overnight stress ranges and multiple gamma views, and preserve the snapshot history."
+policy:
+  allow_implicit_invocation: false

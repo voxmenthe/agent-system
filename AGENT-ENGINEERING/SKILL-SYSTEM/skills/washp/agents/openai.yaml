@@ -1,0 +1,6 @@
+interface:
+  display_name: "The Washington Post Research"
+  short_description: "Research current and historical WASHP coverage"
+  default_prompt: "Use $washp to survey news or trace a topic across time in my authenticated Chrome session."
+policy:
+  allow_implicit_invocation: false

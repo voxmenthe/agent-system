@@ -1,0 +1,226 @@
+#!/usr/bin/env python3
+"""Run one read-only task on a launcher and report what a wave would get from it.
+
+    probe-launcher NAME [--timeout SECONDS]
+
+For use after a launcher or configuration change, run by hand; it gates no wave. The task goes
+through run-worker.sh, as a wave's would, and asks the worker to read a file holding a random
+line, which it cannot guess without a real tool call. One line per check:
+
+  launch          the CLI started, authenticated and exited 0
+  failure class   on a failed launch, refusals.py's verdict (a retired model reads "no route")
+  final message   the answer run-worker.sh extracted holds the file's line
+  routed model    model names in the CLI's own JSON output, where it passes them on; a model's
+                  description of itself is no proof, so none is asked for
+  hist parent     the worker's task is found under the launching session in hist
+
+Exits 0 when every check that could run passed, 1 when one failed, 2 on a usage error.
+"""
+
+from __future__ import annotations
+
+import argparse
+import contextlib
+import json
+import os
+import re
+import secrets
+import shutil
+import signal
+import subprocess
+import sys
+import tempfile
+import time
+from pathlib import Path
+
+RUNNER = Path(__file__).resolve().parent / "run-worker.sh"
+ROUTES = Path(__file__).resolve().parent / "launcher-routes.tsv"
+# Harnesses whose sessions hist records, as (harness, account) in launcher-routes.tsv ("-" the primary account).
+# 11-01 `hist status`: Kimi, Grok and the second Antigravity account (~/.agy2) are not among its sources.
+HIST_UNRECORDED = {("kimi", "-"), ("grok", "-"), ("grok", "grok2"), ("grok", "grok3"), ("antigravity", "agy2")}
+TASK = """Probe {probe}: a read-only check that this launcher works end to end. Change nothing.
+Use a tool to read the file {path}. Its one line is random, so it cannot be guessed.
+Then reply with exactly one line: PROBE-OK, a space, and that line."""
+MODEL_KEYS = frozenset({"model", "modelID", "modelId", "model_id"})
+HIT = re.compile(r"^\S+:\d+\+\d+\|\[s:(\S+) (\S+)\]", re.MULTILINE)
+# run-worker.sh runs a plain Antigravity name on whichever account has more quota (agy-account.py says which), and
+# moves a run its account's quota stopped to the other account once.
+RAN_AS = re.compile(r"^(?:agy-account: (\S+) \(|delegate worker: \S+ ran out of quota; moving the task to (\S+)$)",
+                    re.MULTILINE)
+# hist indexes a worker's transcript when it reads; a CLI may write its last records just after it exits.
+HIST_ATTEMPTS, HIST_WAIT_SECONDS = 3, 5
+
+
+def models(raw: str) -> list[str] | None:
+    """Model names in the CLI's JSON output, in order of appearance; None when the output is not JSON."""
+    found: list[str] = []
+
+    def walk(value: object) -> None:
+        if isinstance(value, dict):
+            for key, item in value.items():
+                if key in MODEL_KEYS and isinstance(item, str) and item:
+                    found.append(item)
+                elif key == "modelUsage" and isinstance(item, dict):
+                    found.extend(item)
+                walk(item)
+        elif isinstance(value, list):
+            for item in value:
+                walk(item)
+
+    def records(text: str) -> list[object]:
+        try:
+            value = json.loads(text)
+        except ValueError:
+            return []
+        return [value] if isinstance(value, (dict, list)) else []
+
+    # One JSON document (Claude's result), or one JSON record per line (Command Code, OpenCode, Kimi).
+    parsed = records(raw) or [value for line in raw.splitlines() for value in records(line)]
+    for value in parsed:
+        walk(value)
+    return list(dict.fromkeys(found)) if parsed else None
+
+
+def parent_session() -> tuple[str, str] | None:
+    """The launching session, chosen exactly as run-worker.sh writes its hist-parent line."""
+    claude, codex = os.environ.get("CLAUDE_CODE_SESSION_ID"), os.environ.get("CODEX_THREAD_ID")
+    if claude and not codex:
+        return "claude", claude
+    if codex and not claude:
+        return "codex", codex
+    return None
+
+
+def run(launcher: str, task: str, raw: Path, timeout: float) -> tuple[int | None, str, str, float]:
+    started = time.monotonic()
+    with subprocess.Popen(["bash", str(RUNNER), launcher], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                          stderr=subprocess.PIPE, text=True, start_new_session=True,
+                          env=dict(os.environ, DELEGATE_WORKER_RAW=str(raw))) as process:
+        try:
+            out, err = process.communicate(task, timeout=timeout)
+            status = process.returncode
+        except subprocess.TimeoutExpired:
+            os.killpg(process.pid, signal.SIGTERM)
+            try:
+                out, err = process.communicate(timeout=10)
+            except subprocess.TimeoutExpired:
+                os.killpg(process.pid, signal.SIGKILL)
+                out, err = process.communicate()
+            status = None
+        finally:
+            # The worker runs in its own session, so a signal to the probe never reaches it, and its pipes close
+            # once the adapter exits even if a child it started lives on. Whatever the outcome, stop what is left
+            # of its group, as a wave stops a returned worker's leftovers (run-wave.sh stop_groups).
+            with contextlib.suppress(ProcessLookupError):
+                os.killpg(process.pid, signal.SIGKILL)
+    return status, out, err, time.monotonic() - started
+
+
+def route(launcher: str) -> tuple[str, str] | None:
+    """The launcher's (harness, account) in launcher-routes.tsv."""
+    if launcher.startswith("cmd:"):
+        return "cmd", "-"
+    for line in ROUTES.read_text().splitlines()[1:]:
+        harness, account, names = line.split("\t")
+        if launcher in names.split():
+            return harness, account
+    return None
+
+
+def hist_parent(probe: str, launcher: str) -> tuple[bool | None, str]:
+    found_route = route(launcher)
+    if found_route in HIST_UNRECORDED:
+        return None, f"not checked: hist records no {'/'.join(found_route)} sessions"
+    parent = parent_session()
+    if parent is None:
+        return None, "not checked: no single launching session (CLAUDE_CODE_SESSION_ID or CODEX_THREAD_ID)"
+    if shutil.which("hist") is None:
+        return None, "not checked: hist is not installed"
+    host, native = parent
+    for attempt in range(HIST_ATTEMPTS):
+        if attempt:
+            time.sleep(HIST_WAIT_SECONDS)
+        found = subprocess.run(["hist", "find", probe, "--session", native, "--kind", "user"],
+                               capture_output=True, text=True)
+        hit = HIT.search(found.stdout)
+        if hit:
+            return True, f"the worker s:{hit.group(1)} ({hit.group(2)}) is linked to {host}:{native}"
+    detail = (found.stderr or found.stdout).strip().splitlines()
+    return False, (f"no worker message carrying {probe} under {host}:{native}"
+                   + (f" ({detail[0]})" if detail and found.returncode else ""))
+
+
+def report(launcher: str, timeout: float) -> int:
+    probe, secret = f"probe-{secrets.token_hex(6)}", secrets.token_hex(12)
+    expected = f"PROBE-OK {secret}"
+    lines: list[tuple[bool | None, str, str]] = []
+    with tempfile.TemporaryDirectory(prefix="probe-launcher.") as directory:
+        target, raw = Path(directory) / f"{probe}.txt", Path(directory) / "raw"
+        target.write_text(secret + "\n")
+        status, out, err, seconds = run(launcher, TASK.format(probe=probe, path=target), raw, timeout)
+        output = raw.read_text(errors="replace") if raw.is_file() else ""
+
+    if status is None:
+        lines.append((False, "launch", f"timed out after {seconds:.0f}s"))
+    else:
+        lines.append((status == 0, "launch", f"{'ok' if status == 0 else f'failed with status {status}'} "
+                                             f"in {seconds:.0f}s"))
+    if status != 0:
+        classes = [line.split("failure class: ", 1)[1] for line in err.splitlines()
+                   if line.startswith("delegate worker: failure class: ")]
+        tail = [line for line in err.splitlines() if line.strip() and "failure class: " not in line][-3:]
+        lines.append((None, "failure class", classes[-1] if classes else "none printed"))
+        lines.extend((None, "stderr", line[:300]) for line in tail)
+        lines.append((None, "final message", "none: the launch failed"))
+    elif out.strip() == expected:
+        lines.append((True, "final message", "the expected line, alone"))
+    elif secret in out:
+        lines.append((True, "final message", f"the expected line among {len(out.strip())} characters"))
+    else:
+        shown = " ".join(out.split())[:200] or "(empty)"
+        lines.append((False, "final message", f"lacks the file's line, so no tool call shows: {shown}"))
+
+    # Run-worker.sh prints a final-text launcher's output as it came: then the output is the answer, and any
+    # JSON in it is the model's own writing, not the CLI's metadata. A failed run's answer goes to stderr, so
+    # nothing tells the two apart: its output names no model.
+    named = models(output) if status == 0 and output.strip() != out.strip() else None
+    if not output.strip():
+        lines.append((None, "routed model", "not exposed: the CLI wrote no output"))
+    elif status != 0:
+        lines.append((None, "routed model", "not checked: the launch failed"))
+    elif named is None:
+        lines.append((None, "routed model", "not exposed: this launcher's output is its final text"))
+    else:
+        lines.append((None, "routed model", ", ".join(named) if named else "not named in the CLI's output"))
+
+    if status == 0:
+        ran = [picked or moved for picked, moved in RAN_AS.findall(err)]
+        linked, detail = hist_parent(probe, ran[-1] if ran else launcher)
+        lines.append((linked, "hist parent", detail))
+    else:
+        lines.append((None, "hist parent", "not checked: the launch failed"))
+
+    print(f"probe-launcher {launcher} ({probe})")
+    for passed, name, detail in lines:
+        mark = {True: "pass", False: "FAIL", None: "    "}[passed]
+        print(f"  {mark}  {name}: {detail}")
+    return 1 if any(passed is False for passed, _, _ in lines) else 0
+
+
+def stop(number: int, frame: object) -> None:
+    """A termination signal ends the probe through its cleanup, as a Ctrl-C does."""
+    raise SystemExit(128 + number)
+
+
+def main() -> int:
+    for number in (signal.SIGTERM, signal.SIGHUP):
+        signal.signal(number, stop)
+    parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
+    parser.add_argument("launcher", help="a launcher run-worker.sh supports, such as cms or ocargh")
+    parser.add_argument("--timeout", type=float, default=600, help="seconds before the run is stopped")
+    arguments = parser.parse_args()
+    return report(arguments.launcher, arguments.timeout)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

@@ -1,0 +1,185 @@
+{
+  "spec": "SkillInstall.tla",
+  "skill": ".agents/skills/verify-skill-install/SKILL.md",
+  "tlaTools": {
+    "version": "1.7.4",
+    "url": "https://github.com/tlaplus/tlaplus/releases/download/v1.7.4/tla2tools.jar",
+    "sha256": "936a262061c914694dfd669a543be24573c45d5aa0ff20a8b96b23d01e050e88"
+  },
+  "checks": [
+    {
+      "config": "journal-stops.cfg",
+      "expect": "pass",
+      "quick": true,
+      "what": "every property, two skills, three operations, stops after journal writes, newest-first rollbacks",
+      "timeoutSeconds": 60
+    },
+    {
+      "config": "one-skill-any-order.cfg",
+      "expect": "pass",
+      "quick": true,
+      "what": "every property, one skill, four operations, any rollback order the code accepts",
+      "timeoutSeconds": 60
+    },
+    {
+      "config": "every-window.cfg",
+      "expect": "pass",
+      "quick": true,
+      "what": "every property, two skills, three operations, a stop anywhere, any rollback order the code accepts",
+      "timeoutSeconds": 60
+    },
+    {
+      "config": "journal-stops-four.cfg",
+      "expect": "pass",
+      "quick": false,
+      "what": "every property, two skills, four operations, stops after journal writes, newest-first rollbacks",
+      "timeoutSeconds": 60
+    },
+    {
+      "config": "every-window-four.cfg",
+      "expect": "pass",
+      "quick": false,
+      "what": "every property, two skills, four operations, a stop anywhere, any rollback order the code accepts",
+      "timeoutSeconds": 180
+    },
+    {
+      "config": "mutations/a-rollback-crosses-newer.cfg",
+      "expect": "NoStuckRollback",
+      "quick": true,
+      "what": "rollback without _ensure_no_newer_active_operation",
+      "timeoutSeconds": 60
+    },
+    {
+      "config": "mutations/c-rollback-keeps-state.cfg",
+      "expect": "RollbackRestores",
+      "quick": true,
+      "what": "rollback without _restore_state_entry",
+      "timeoutSeconds": 60
+    },
+    {
+      "config": "mutations/d-quarantine-keeps-entry.cfg",
+      "expect": "StatusAgrees",
+      "quick": true,
+      "what": "quarantine without removing the managed entry",
+      "timeoutSeconds": 60
+    },
+    {
+      "config": "mutations/f-rollback-skips-aside.cfg",
+      "expect": "NoStuckRollback",
+      "quick": true,
+      "what": "rollback without moving the new tree aside",
+      "timeoutSeconds": 60
+    },
+    {
+      "config": "mutations/g-rollback-restores-whole-state.cfg",
+      "expect": "RollbackStaysOnItsSkill",
+      "quick": true,
+      "what": "F1 before its fix: rollback writes back the whole saved install state",
+      "timeoutSeconds": 60
+    },
+    {
+      "config": "mutations/h-rollback-trusts-phase-for-new-tree.cfg",
+      "expect": "NoStuckRollback",
+      "quick": true,
+      "what": "line 799 deciding from the journaled phase, as before F3's fix; the occupied-target check makes the rollback refuse",
+      "timeoutSeconds": 60
+    },
+    {
+      "config": "mutations/i-rollback-trusts-prepared-phase.cfg",
+      "expect": "NoStuckRollback",
+      "quick": true,
+      "what": "F2 before its fix: a prepared operation is taken to have moved nothing",
+      "timeoutSeconds": 60
+    },
+    {
+      "config": "mutations/j-rollback-unjournaled.cfg",
+      "expect": "StatusAgrees",
+      "quick": true,
+      "what": "F4 before its fix: rollback journals nothing until it ends",
+      "timeoutSeconds": 60
+    }
+  ],
+  "coverage": {
+    "syncCommit": "8f114d454d5a29902f9fb5848a5691672daf8e96",
+    "code": [
+      {
+        "file": "AGENT-ENGINEERING/SKILL-SYSTEM/skill_system/operations.py",
+        "kind": "py-function",
+        "unit": "SkillSystem._ensure_no_incomplete",
+        "sha256": "2eec67fefb3d4a102401c6fc09fbe58f784eb8590148c4007499ac3ab98881c6"
+      },
+      {
+        "file": "AGENT-ENGINEERING/SKILL-SYSTEM/skill_system/operations.py",
+        "kind": "py-function",
+        "unit": "SkillSystem._phase",
+        "sha256": "b676f677cfd105fc490402b3c818046829d2f0cf03d29c17bb24630d13b19a67"
+      },
+      {
+        "file": "AGENT-ENGINEERING/SKILL-SYSTEM/skill_system/operations.py",
+        "kind": "py-function",
+        "unit": "SkillSystem._install_under_lock",
+        "sha256": "2ef5b4f4ac76b8884dc501791c3bb6c74796609d926dcf1cd23c2d266932328f"
+      },
+      {
+        "file": "AGENT-ENGINEERING/SKILL-SYSTEM/skill_system/operations.py",
+        "kind": "py-function",
+        "unit": "SkillSystem.rollback",
+        "sha256": "52a66d962640a8ab77051e7852fbd16e973f7bcb530a3bd2649c687c0cbaa7e8"
+      },
+      {
+        "file": "AGENT-ENGINEERING/SKILL-SYSTEM/skill_system/operations.py",
+        "kind": "py-function",
+        "unit": "SkillSystem._ensure_no_newer_active_operation",
+        "sha256": "18a458549f1b47b39cc72e62e321707a6a4a19cf4b0472f39966763c7e74bca9"
+      },
+      {
+        "file": "AGENT-ENGINEERING/SKILL-SYSTEM/skill_system/operations.py",
+        "kind": "py-function",
+        "unit": "SkillSystem._preserve_current",
+        "sha256": "8aede3ff8c7703f29733f9430d9c97598346fdad52098d29ef6976d80b0c49fe"
+      },
+      {
+        "file": "AGENT-ENGINEERING/SKILL-SYSTEM/skill_system/operations.py",
+        "kind": "py-function",
+        "unit": "SkillSystem._begin_rollback",
+        "sha256": "8c6ee0aed25a4383d879ad77d210c183f6cf250d01395a7a924078f394294e4c"
+      },
+      {
+        "file": "AGENT-ENGINEERING/SKILL-SYSTEM/skill_system/operations.py",
+        "kind": "py-function",
+        "unit": "SkillSystem._restore_state_entry",
+        "sha256": "a4f092493cf12c3471edf5e0c98a8cb4988e33f78a1f03c86a854eff2e3483f5"
+      },
+      {
+        "file": "AGENT-ENGINEERING/SKILL-SYSTEM/skill_system/operations.py",
+        "kind": "py-function",
+        "unit": "SkillSystem._rollback_install",
+        "sha256": "4c9231b32757d3f31c0ec32d56b78e8873b5021c9844db8afbbb4ae18894d177"
+      },
+      {
+        "file": "AGENT-ENGINEERING/SKILL-SYSTEM/skill_system/operations.py",
+        "kind": "py-function",
+        "unit": "SkillSystem.quarantine",
+        "sha256": "72e892a5ad0f5565448292588546d8b9e77a43229d879310ede2cbce1aa7fc1b"
+      },
+      {
+        "file": "AGENT-ENGINEERING/SKILL-SYSTEM/skill_system/operations.py",
+        "kind": "py-function",
+        "unit": "SkillSystem._rollback_quarantine",
+        "sha256": "978663532e99db046c2201f1f9ace5c34be59c3efa758e6811c179ea516ff6e4"
+      },
+      {
+        "file": "AGENT-ENGINEERING/SKILL-SYSTEM/skill_system/journal.py",
+        "kind": "py-function",
+        "unit": "list_incomplete_operations",
+        "sha256": "29e242be354ccda9e83ce2ec6825332bdb4a168067409ab02c26ed4dc20bd162"
+      },
+      {
+        "file": "AGENT-ENGINEERING/SKILL-SYSTEM/skill_system/model.py",
+        "kind": "py-function",
+        "unit": "iter_skill_states",
+        "sha256": "a0f9981bae066313ab7a7a7ea2d7b68182af115fcca17a1023f3bfb6978b3e38"
+      }
+    ]
+  }
+}

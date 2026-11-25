@@ -1,0 +1,7 @@
+[hosts]
+consolidation_trusted = ["codex", "claude", "devin", "kimi", "antigravity"]
+
+[consolidation]
+catalog_pruning = "conservative"
+self_catalog_target = 128
+repo_catalog_target = 128

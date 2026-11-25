@@ -1,0 +1,6 @@
+interface:
+  display_name: "Bookmarks"
+  short_description: "Read X bookmark folders, download or analyze content"
+  default_prompt: "Use $bookmarks to find my X bookmark folder from its approximate name, read all its content, and download linked data or analyze it as requested."
+policy:
+  allow_implicit_invocation: false

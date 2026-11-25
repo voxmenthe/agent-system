@@ -1,0 +1,17 @@
+{
+  "name": "review-after-commit",
+  "version": "0.2.0",
+  "description": "Deliver a read-only exact-range review request after configured commit events.",
+  "author": {
+    "name": "Jeff Coggshall"
+  },
+  "interface": {
+    "displayName": "Review After Commit",
+    "shortDescription": "Review exact commit events without changing the repository.",
+    "longDescription": "Adds lifecycle hooks that deliver host-neutral read-only review requests at the configured cadence.",
+    "developerName": "Jeff Coggshall",
+    "category": "Developer Tools",
+    "capabilities": ["Read"],
+    "defaultPrompt": "Work normally. When the enabled hook supplies a ReviewRequest, perform the requested read-only advisory review in the conversation."
+  }
+}

@@ -1,0 +1,112 @@
+#!/usr/bin/env python3
+"""Warn about a wave's quotas without gating or launching its workers."""
+from __future__ import annotations
+
+import argparse
+import os
+from pathlib import Path
+import re
+import subprocess
+import sys
+
+# One quota allowance per row, shared with run-wave.sh, which bars a whole row when a
+# worker on it exhausts the account.
+ROUTES_FILE = Path(__file__).resolve().parent / "launcher-routes.tsv"
+SECTIONS = {"Devin": "devin", "Claude": "claude", "Codex": "codex", "Grok": "grok",
+            "Kimi": "kimi", "Command Code": "cmd", "Antigravity": "antigravity",
+            "OpenCode Go": "opencode", "Amp": "amp", "TypeSafe": "typesafe"}
+WINDOW = re.compile(
+    r"^[ \t]+(.+?):[ \t]+\[[^]]*\].*?"
+    r"(?:(\d+(?:\.\d+)?)% used\b|used \((\d+(?:\.\d+)?)%\))"
+)
+
+
+def _routes() -> dict[str, tuple[str, str]]:
+    """launcher -> (harness, account), "" for the harness's primary account."""
+    rows = ROUTES_FILE.read_text(encoding="utf-8").splitlines()
+    if not rows or rows[0] != "harness\taccount\tlaunchers":
+        raise ValueError(f"{ROUTES_FILE} lacks its header")
+    routes = {}
+    for row in rows[1:]:
+        fields = row.split("\t")
+        if len(fields) != 3:
+            raise ValueError(f"{ROUTES_FILE}: not harness, account, launchers: {row!r}")
+        harness, account, launchers = fields
+        for launcher in launchers.split():
+            routes[launcher] = (harness, "" if account == "-" else account)
+    return routes
+
+
+def _fetch_usage(harnesses: list[str]) -> str:
+    env = dict(os.environ)
+    env.setdefault("BASH_AGENTS_FILE", str(Path.home() / ".bash_agents"))
+    try:
+        result = subprocess.run(
+            ["bash", "-c", 'source "$BASH_AGENTS_FILE" >/dev/null 2>&1; usage -a "$1"',
+             "wave-usage", ",".join(harnesses)], env=env, stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+            text=True, encoding="utf-8", errors="replace",
+        )
+    except OSError:
+        return ""
+    return result.stdout if result.returncode == 0 else ""
+
+
+def _windows(output: str) -> dict[tuple[str, str], list[str]]:
+    windows: dict[tuple[str, str], list[str]] = {}
+    harness = None
+    for line in output.splitlines():
+        section = re.match(r"^── (.*?) ─", line)
+        if section:
+            harness = SECTIONS.get(section[1])
+        window = WINDOW.match(line) if harness else None
+        if not window:
+            continue
+        name, percent = window[1], window[2] or window[3]
+        account = re.search(r"\((codex2|grok2|grok3|agy2)\)", name)
+        warnings = windows.setdefault((harness, account[1] if account else ""), [])
+        if float(percent) > 80:
+            reset = re.search(r"\b(?:resets|renews)\b[^;·]*", line)
+            detail = f"{name} {percent}% used"
+            warnings.append(detail + (f", {reset[0].strip()}" if reset else ""))
+    return windows
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(
+        prog="wave-usage", add_help=False, allow_abbrev=False,
+        description="Warn about quotas above 80% or unknown; never gate a wave.",
+    )
+    parser.add_argument("--help", action="help", help="show usage and exit")
+    parser.add_argument("wave", metavar="wave.txt")
+    args = parser.parse_args()
+    manifest = Path(args.wave).read_text(encoding="utf-8", errors="replace")
+    launchers = dict.fromkeys(re.findall(r"^@@ launcher=([^\s]+)", manifest, re.M))
+    if not launchers:
+        raise ValueError("no @@ launcher= lines in manifest")
+    routes = _routes()
+    groups: dict[tuple[str, str], list[str]] = {}
+    for launcher in launchers:
+        route = ("cmd", "") if launcher.startswith("cmd:") else routes.get(launcher)
+        if route is None:
+            print(f"wave-usage: {launcher} quota unknown ({launcher})")
+        else:
+            groups.setdefault(route, []).append(launcher)
+    harnesses = list(dict.fromkeys(harness for harness, account in groups))
+    windows = _windows(_fetch_usage(harnesses)) if harnesses else {}
+    for route, names in groups.items():
+        harness, account = route
+        label = harness + (f" ({account})" if account else "")
+        warnings = windows.get(route, [f"{label} quota unknown"])
+        for warning in warnings:
+            prefix = "" if route not in windows else f"{harness} "
+            print(f"wave-usage: {prefix}{warning} ({', '.join(names)})")
+    return 0
+
+
+if __name__ == "__main__":
+    try:
+        sys.exit(main())
+    except (OSError, ValueError) as error:
+        print(f"wave-usage: {' '.join(str(error).split())}", file=sys.stderr)
+        sys.exit(2)

@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+# The identity of an uncommitted review target: its base commit, and the tree the base would have with every
+# in-scope path as it stands now. Editing, adding (tracked or not) or deleting an in-scope file, or changing its
+# mode, gives a new identity; nothing outside the paths does. Ignored files are left out.
+#
+#   review-identity BASE PATH...    prints "BASE-COMMIT TREE"
+#
+# Run inside the repository. It stages into a throwaway index, so the worktree and the real index are untouched;
+# the blobs it hashes are unreferenced objects that git gc prunes.
+set -euo pipefail
+(( $# >= 2 )) || { echo 'usage: review-identity BASE PATH...' >&2; exit 2; }
+base=$(git rev-parse -q --verify "$1^{commit}") || { echo "review-identity: $1 is not a commit" >&2; exit 2; }
+shift
+scratch=$(mktemp -d)
+trap 'rm -rf -- "$scratch"' EXIT
+export GIT_INDEX_FILE="$scratch/index"
+git read-tree "$base"
+git add -A -- "$@"
+tree=$(git write-tree)
+printf '%s %s\n' "$base" "$tree"

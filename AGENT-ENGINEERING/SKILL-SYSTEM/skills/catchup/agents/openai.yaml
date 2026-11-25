@@ -1,0 +1,7 @@
+interface:
+  display_name: "Catch up"
+  short_description: "What changed, what needs you, and what is still running"
+  default_prompt: "Use $catchup to tell me what changed since my last message, what needs me, and what is still running."
+
+policy:
+  allow_implicit_invocation: false

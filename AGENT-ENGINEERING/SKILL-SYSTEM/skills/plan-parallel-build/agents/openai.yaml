@@ -1,0 +1,4 @@
+interface:
+  display_name: "Plan Parallel Build"
+  short_description: "Plan parallel implementation workstreams"
+  default_prompt: "Use $plan-parallel-build to turn this specified project into a coherent parallel implementation plan."

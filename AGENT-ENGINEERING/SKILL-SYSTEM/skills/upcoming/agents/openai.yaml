@@ -1,0 +1,7 @@
+interface:
+  display_name: "Upcoming Market Catalysts"
+  short_description: "Summarize macro, earnings, and options expiries"
+  default_prompt: "Use $upcoming to build a source-labeled summary of the most important macro releases, company earnings, and options expiration dates scheduled over the next few days."
+
+policy:
+  allow_implicit_invocation: false

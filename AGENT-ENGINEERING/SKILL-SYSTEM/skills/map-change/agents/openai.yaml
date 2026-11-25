@@ -1,0 +1,7 @@
+interface:
+  display_name: "Map Change"
+  short_description: "Map existing behavior before changing it"
+  default_prompt: "Use $map-change to map the current behavior and smallest coherent change surface."
+
+policy:
+  allow_implicit_invocation: true

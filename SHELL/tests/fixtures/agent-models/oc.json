@@ -1,0 +1,13 @@
+{
+  "location": {"directory": "/fixture-project"},
+  "data": [
+    {"providerID": "opencode", "id": "future-coding-free", "name": "Future Coding Free", "description": "A provider-described stealth coding model", "enabled": true, "status": "active", "limit": {"context": 262144, "output": 65536}, "capabilities": {"tools": true, "input": ["text", "image"], "output": ["text"]}, "variants": [{"id": "high", "settings": {"secret": "DO_NOT_LEAK"}}, {"id": "xhigh"}], "cost": [{"input": 0, "output": 0, "cache": {"read": 0, "write": 0}}], "headers": {"Authorization": "DO_NOT_LEAK"}, "settings": {"apiKey": "DO_NOT_LEAK"}},
+    {"providerID": "opencode-go", "id": "future-coding-free", "name": "Future Coding Free Go", "enabled": true, "status": "active", "capabilities": {"tools": true, "output": ["text"]}, "variants": [], "cost": [{"input": 0, "output": 0}]},
+    {"providerID": "openrouter", "id": "future-coding-free", "name": "Other Provider", "enabled": true, "capabilities": {"tools": true, "output": ["text"]}, "cost": [{"input": 0, "output": 0}]},
+    {"providerID": "opencode", "id": "disabled", "name": "Disabled", "enabled": false},
+    {"providerID": "opencode", "id": "decision-only", "name": "Decision Only", "enabled": true, "capabilities": {"tools": false, "output": ["text"]}},
+    {"providerID": "opencode", "id": "gemini-4-argon", "name": "Gemini 4 Argon", "enabled": true, "capabilities": {"tools": true, "output": ["text"]}, "variants": [{"id": "high"}], "cost": [{"input": 2, "output": 10, "cache": {"read": 0.1, "write": 0}}]},
+    {"providerID": "opencode-go", "id": "gemini-4-argon", "name": "Gemini 4 Argon Go", "enabled": true, "capabilities": {"tools": true, "output": ["text"]}, "cost": [{"input": 2, "output": 10}]},
+    {"providerID": "opencode", "id": "tiered", "name": "Tiered Price", "enabled": true, "capabilities": {"tools": true, "output": ["text"]}, "cost": [{"input": 0, "output": 0}, {"input": 1, "output": 2, "tier": {"type": "context", "size": 200000}}]}
+  ]
+}

@@ -1,0 +1,7 @@
+interface:
+  display_name: "Show Me Clearly"
+  short_description: "Explain code with clear visual walkthroughs"
+  default_prompt: "Use $show-me-clearly to explain this mechanism with a clear question-led narrative and bounded ASCII visuals."
+
+policy:
+  allow_implicit_invocation: false

@@ -1,0 +1,7 @@
+interface:
+  display_name: "Skiller"
+  short_description: "Recommend the skills a task or plan should use"
+  default_prompt: "Use $skiller to recommend which skills this work should use, and at which step."
+
+policy:
+  allow_implicit_invocation: false

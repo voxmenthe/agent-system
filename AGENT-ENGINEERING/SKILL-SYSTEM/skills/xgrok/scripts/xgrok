@@ -1,0 +1,360 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+usage() {
+  cat <<'EOF'
+Usage: xgrok [--mode harvest|whathappened|list-summary|macro|dlresearch|agents] [--grok-home PATH | --grok2 | --grok3] [BRIEF_FILE]
+       xgrok --usage [--grok-home PATH | --grok2 | --grok3]
+       xgrok --setup-worker-home [--grok-home PATH | --grok2 | --grok3]
+
+Read a delegated X-retrieval brief from BRIEF_FILE or standard input, run Grok
+(default grok-4.7; override with XGROK_MODEL) at medium reasoning effort
+(XGROK_EFFORT=medium|high; low is refused) with mutation-capable tools disabled, and emit
+Grok's JSON envelope. Use --grok2, --grok3 or --grok-home to route to another account.
+XGROK_SYSTEM_PROMPT=lean replaces Grok Build's coding-agent system prompt with
+references/worker-system-prompt.md.
+
+Workers run a lean profile: no coding, image or planning tools, no Claude or
+Cursor skills, rules, MCP servers or hooks, and an empty HOME and working
+directory. When ACCOUNT_HOME-xworker (for example ~/.grok-xworker) holds a
+login to the same xAI user as ACCOUNT_HOME, workers run there, which also drops
+Grok's bundled skills and the account's MCP servers; a login to another user is
+refused with a warning. XGROK_NO_WORKER_HOME=1 skips the worker home.
+--setup-worker-home creates that directory; log in to it once with the command
+it prints.
+
+With --usage, skip retrieval and print the selected account's subscription
+quota (used/remaining percentage and reset time) via the grok billing RPC.
+EOF
+}
+
+mode="harvest"
+brief_file=""
+usage_only=0
+setup_worker_home=0
+explicit_mode=0
+
+while (($#)); do
+  case "$1" in
+    --mode)
+      if (($# < 2)); then
+        echo "xgrok: --mode requires a value" >&2
+        exit 2
+      fi
+      mode="$2"
+      explicit_mode=1
+      shift 2
+      ;;
+    --usage)
+      usage_only=1
+      shift
+      ;;
+    --setup-worker-home)
+      setup_worker_home=1
+      shift
+      ;;
+    --grok-home)
+      if (($# < 2)); then
+        echo "xgrok: --grok-home requires a path" >&2
+        exit 2
+      fi
+      export GROK_HOME="$2"
+      shift 2
+      ;;
+    --grok2|--secondary)
+      export GROK_HOME="${GROK2_HOME:-$HOME/.grok2}"
+      shift
+      ;;
+    --grok3)
+      export GROK_HOME="${GROK3_HOME:-$HOME/.grok3}"
+      shift
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    --)
+      shift
+      break
+      ;;
+    -*)
+      echo "xgrok: unknown option: $1" >&2
+      usage >&2
+      exit 2
+      ;;
+    *)
+      if [[ -n "$brief_file" ]]; then
+        echo "xgrok: expected at most one brief file" >&2
+        exit 2
+      fi
+      brief_file="$1"
+      shift
+      ;;
+  esac
+done
+
+if (($#)); then
+  if [[ -n "$brief_file" || $# -gt 1 ]]; then
+    echo "xgrok: expected at most one brief file" >&2
+    exit 2
+  fi
+  brief_file="$1"
+fi
+
+script_dir="$(CDPATH='' cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+skill_dir="$(dirname -- "$script_dir")"
+if ((usage_only)); then
+  if ((explicit_mode)); then
+    echo "xgrok: --usage cannot be combined with --mode" >&2
+    exit 2
+  fi
+  if [[ -n "$brief_file" ]]; then
+    echo "xgrok: --usage does not take a brief file" >&2
+    exit 2
+  fi
+  usage_helper="$script_dir/xgrok_usage.py"
+  if [[ ! -f "$usage_helper" ]]; then
+    echo "xgrok: missing usage helper: $usage_helper" >&2
+    exit 1
+  fi
+  exec python3 "$usage_helper"
+fi
+
+account_home="${GROK_HOME:-$HOME/.grok}"
+account_home="${account_home%/}"
+worker_account_home="$account_home-xworker"
+
+# same_login A B: both auth.json files name the same, non-empty set of xAI user IDs.
+# A worker home logged in as another user loses the X tools or hits that user's
+# quota while every packet still looks like a result. Prints nothing.
+same_login() {
+  python3 - "$1" "$2" <<'PY'
+import json, sys
+
+def user_ids(path):
+    try:
+        with open(path, encoding="utf-8") as f:
+            data = json.load(f)
+    except (OSError, ValueError):
+        return set()
+    entries = data.values() if isinstance(data, dict) else []
+    return {e["user_id"] for e in entries if isinstance(e, dict) and e.get("user_id")}
+
+account, worker = user_ids(sys.argv[1]), user_ids(sys.argv[2])
+sys.exit(0 if account and account == worker else 1)
+PY
+}
+
+if ((setup_worker_home)); then
+  if ((explicit_mode || usage_only)) || [[ -n "$brief_file" ]]; then
+    echo "xgrok: --setup-worker-home takes only --grok-home, --grok2 or --grok3" >&2
+    exit 2
+  fi
+  mkdir -p -- "$worker_account_home"
+  # The X skills (/macro, /whathappened, ...) stay in the account home.
+  [[ -e "$worker_account_home/skills" || -L "$worker_account_home/skills" ]] \
+    || ln -s -- "$account_home/skills" "$worker_account_home/skills"
+  if [[ -e "$worker_account_home/config.toml" ]]; then
+    echo "xgrok: keeping existing $worker_account_home/config.toml" >&2
+  else
+    cat >"$worker_account_home/config.toml" <<EOF
+# xgrok worker home, written by xgrok --setup-worker-home. X retrieval workers need
+# their brief, the worker protocol and the X tools; everything else here is removed.
+# No [mcp_servers] and no [endpoints]: workers talk to xAI directly.
+[cli]
+auto_update = false
+
+[telemetry]
+trace_upload = false
+
+[harness]
+disable_workspace_teleport = true
+
+[skills]
+ignore = ["$worker_account_home/bundled"]
+
+[compat.claude]
+skills = false
+rules = false
+agents = false
+mcps = false
+hooks = false
+
+[compat.cursor]
+skills = false
+rules = false
+agents = false
+mcps = false
+hooks = false
+EOF
+  fi
+  if [[ -f "$worker_account_home/auth.json" ]]; then
+    if ! same_login "$account_home/auth.json" "$worker_account_home/auth.json"; then
+      echo "xgrok: $worker_account_home is logged in as a different xAI user than $account_home" >&2
+      echo "  (or either auth.json is unreadable); log in again as the same account:" >&2
+      echo "  GROK_HOME=$worker_account_home grok login" >&2
+      exit 1
+    fi
+    echo "xgrok: $worker_account_home is ready and logged in as the same user as $account_home" >&2
+  else
+    echo "xgrok: log in once, as the same account as $account_home:" >&2
+    echo "  GROK_HOME=$worker_account_home grok login" >&2
+  fi
+  exit 0
+fi
+
+case "$mode" in
+  harvest|whathappened|list-summary|macro|dlresearch|agents) ;;
+  *)
+    echo "xgrok: unsupported mode: $mode" >&2
+    exit 2
+    ;;
+esac
+
+# Medium by default; low is refused because low-effort workers answered without searching.
+effort="${XGROK_EFFORT:-medium}"
+case "$effort" in
+  medium|high) ;;
+  *)
+    echo "xgrok: XGROK_EFFORT must be medium or high, not: $effort" >&2
+    exit 2
+    ;;
+esac
+
+system_prompt_args=()
+case "${XGROK_SYSTEM_PROMPT:-default}" in
+  default) ;;
+  lean)
+    system_prompt_file="$skill_dir/references/worker-system-prompt.md"
+    if [[ ! -f "$system_prompt_file" ]]; then
+      echo "xgrok: missing worker system prompt: $system_prompt_file" >&2
+      exit 1
+    fi
+    system_prompt_args=(--system-prompt-override "$(<"$system_prompt_file")")
+    ;;
+  *)
+    echo "xgrok: XGROK_SYSTEM_PROMPT must be lean or default, not: $XGROK_SYSTEM_PROMPT" >&2
+    exit 2
+    ;;
+esac
+
+grok_bin="$(command -v grok || true)"
+if [[ -z "$grok_bin" ]]; then
+  echo "xgrok: grok is not on PATH" >&2
+  exit 127
+fi
+
+protocol_file="$skill_dir/references/worker-protocol.md"
+
+if [[ ! -f "$protocol_file" ]]; then
+  echo "xgrok: missing worker protocol: $protocol_file" >&2
+  exit 1
+fi
+
+tmp_root="$(mktemp -d "${TMPDIR:-/tmp}/xgrok.XXXXXX")"
+request_file="$tmp_root/request.md"
+prompt_file="$tmp_root/prompt.md"
+
+cleanup() {
+  rm -f -- "$prompt_file" "$request_file"
+  rmdir -- "$tmp_root" 2>/dev/null || true
+}
+trap cleanup EXIT HUP INT TERM
+
+if [[ -n "$brief_file" ]]; then
+  if [[ ! -f "$brief_file" ]]; then
+    echo "xgrok: brief file not found: $brief_file" >&2
+    exit 1
+  fi
+  cp -- "$brief_file" "$request_file"
+else
+  if [[ -t 0 ]]; then
+    echo "xgrok: provide a brief file or pipe a brief on standard input" >&2
+    exit 2
+  fi
+  cat >"$request_file"
+fi
+
+if [[ ! -s "$request_file" ]]; then
+  echo "xgrok: retrieval brief is empty" >&2
+  exit 2
+fi
+
+# Tools an X worker never uses. Their definitions were 45% of every model turn's
+# static context before 2026-09-28; the spawn/kill/get subagent tools stay listed
+# by Grok regardless.
+idle_tools="kill_command_or_subagent,todo_write,get_command_or_subagent_output,spawn_subagent,scheduler_create,scheduler_delete,scheduler_list,monitor,search_tool,use_tool,workflow,enter_plan_mode,exit_plan_mode,ask_user_question,send_feedback,image_gen,image_edit,image_to_video,reference_to_video"
+
+if [[ "$mode" == "harvest" ]]; then
+  disallowed_tools="run_terminal_cmd,read_file,list_dir,grep,search_replace,write,web_search,web_fetch,$idle_tools"
+  {
+    cat "$protocol_file"
+    printf '\n\n# Delegated retrieval brief\n\n'
+    cat "$request_file"
+  } >"$prompt_file"
+else
+  disallowed_tools="run_terminal_cmd,search_replace,write,web_search,web_fetch,$idle_tools"
+  {
+    printf '/%s\n\n' "$mode"
+    cat "$request_file"
+    printf '\n\n'
+    if [[ "$mode" == "macro" ]]; then
+      printf 'Chat only. Do not create or update an archive file.\n\n'
+    fi
+    cat "$protocol_file"
+  } >"$prompt_file"
+fi
+
+# Lean worker profile. Grok Build otherwise re-reads ~104 KB of context an X
+# worker never uses on every model turn: ~/.agents and ~/.claude skills (found
+# through HOME), ~/.claude/CLAUDE.md as rules (the working directory was HOME),
+# Claude and Cursor MCP servers, and the tools above (measured 2026-09-28).
+# The worker home also leaves out the account's [endpoints] cliffcompaction
+# proxy: it compacts only past ~235k tokens, worker requests stay far below
+# that, and GROK_CLI_CHAT_PROXY_BASE_URL does not override config.toml.
+case "${XGROK_NO_WORKER_HOME:-0}" in
+  0|1) ;;
+  *)
+    echo "xgrok: XGROK_NO_WORKER_HOME must be 0 or 1, not: $XGROK_NO_WORKER_HOME" >&2
+    exit 2
+    ;;
+esac
+export GROK_HOME="$account_home"
+if [[ "${XGROK_NO_WORKER_HOME:-0}" == 1 ]]; then
+  echo "xgrok: XGROK_NO_WORKER_HOME=1; using $account_home" >&2
+elif [[ ! -f "$worker_account_home/auth.json" ]]; then
+  echo "xgrok: $worker_account_home has no login; using $account_home (see xgrok --setup-worker-home)" >&2
+elif same_login "$account_home/auth.json" "$worker_account_home/auth.json"; then
+  export GROK_HOME="$worker_account_home"
+else
+  echo "xgrok: WARNING $worker_account_home is logged in as a different xAI user than $account_home;" \
+    "using $account_home. Fix: GROK_HOME=$worker_account_home grok login" >&2
+fi
+for vendor in CLAUDE CURSOR; do
+  for surface in SKILLS RULES AGENTS MCPS HOOKS; do
+    export "GROK_${vendor}_${surface}_ENABLED=false"
+  done
+done
+worker_dir="${TMPDIR:-/tmp}/xgrok-worker-home"
+mkdir -p -- "$worker_dir"
+
+# Keep large briefs inline; harvest cannot read Grok Build's offloaded files.
+HOME="$worker_dir" "$grok_bin" \
+  --model "${XGROK_MODEL:-grok-4.7}" \
+  --effort "$effort" \
+  ${system_prompt_args[@]+"${system_prompt_args[@]}"} \
+  --prompt-file "$prompt_file" \
+  --verbatim \
+  --cwd "$worker_dir" \
+  --output-format json \
+  --max-turns 12 \
+  --no-subagents \
+  --no-memory \
+  --no-plan \
+  --disable-web-search \
+  --disallowed-tools "$disallowed_tools" \
+  --deny "Bash" \
+  --deny "Edit" \
+  --deny "Write" \
+  --deny "WebFetch"

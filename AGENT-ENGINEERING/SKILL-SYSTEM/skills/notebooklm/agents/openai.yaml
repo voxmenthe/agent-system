@@ -1,0 +1,7 @@
+interface:
+  display_name: "Gemini Notebook (NotebookLM)"
+  short_description: "Upload papers and generate Audio Overviews in NotebookLM"
+  default_prompt: "Use $notebooklm to turn this paper into a short Audio Overview with PhD-level hosts and save it to TEMP/."
+
+policy:
+  allow_implicit_invocation: false

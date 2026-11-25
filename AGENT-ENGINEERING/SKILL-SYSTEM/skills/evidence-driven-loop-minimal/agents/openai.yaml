@@ -1,0 +1,7 @@
+interface:
+  display_name: "Evidence Loop Minimal"
+  short_description: "Run the minimal evidence-driven improvement loop"
+  default_prompt: "Use $evidence-driven-loop-minimal to improve this task through a compact prediction-action-observation loop."
+
+policy:
+  allow_implicit_invocation: false

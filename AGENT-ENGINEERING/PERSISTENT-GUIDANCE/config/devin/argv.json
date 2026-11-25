@@ -1,0 +1,28 @@
+// This configuration file allows you to pass permanent command line arguments to VS Code.
+// Only a subset of arguments is currently supported to reduce the likelihood of breaking
+// the installation.
+//
+// PLEASE DO NOT CHANGE WITHOUT UNDERSTANDING THE IMPACT
+//
+// NOTE: Changing this file requires a restart of VS Code.
+{
+	// Use software rendering instead of hardware accelerated rendering.
+	// This can help in cases where you see rendering issues in VS Code.
+	// "disable-hardware-acceleration": true,
+
+	// Allows to disable crash reporting.
+	// Should restart the app if the value is changed.
+	"enable-crash-reporter": true,
+
+	// Unique id used for correlating crash reports sent from this instance.
+	// Do not edit this value.
+	"crash-reporter-id": "5e60b2d9-22fb-495e-853e-92553518b9d4",
+
+	// Disable hardware acceleration to reduce issues with sliding windows freezing
+	"disable-hardware-acceleration": true,
+
+	// Raise V8 old-space limit for the main process (24 GiB).
+	// Mitigates Devin browser-process OOM crashes; does not fix leaks.
+	// Requires a full quit + relaunch of Devin.
+	"js-flags": "--max-old-space-size=24576"
+}

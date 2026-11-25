@@ -1,0 +1,7 @@
+interface:
+  display_name: "Fanout"
+  short_description: "Parallel divergent ideation"
+  default_prompt: "Use $fanout to explore divergent approaches for this open-ended decision before converging."
+
+policy:
+  allow_implicit_invocation: false

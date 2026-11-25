@@ -1,0 +1,7 @@
+interface:
+  display_name: "Create Formal Verification Skill"
+  short_description: "Model-check where a bug costs most and tests reach least"
+  default_prompt: "Use $create-formal-verification-skill to formally verify the riskiest promise in this code and leave a project-local verify skill that rechecks it."
+
+policy:
+  allow_implicit_invocation: false

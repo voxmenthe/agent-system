@@ -1,0 +1,6 @@
+interface:
+  display_name: "Explain Research"
+  short_description: "Synthesize or teach research in interactive HTML."
+  default_prompt: "Use $explain-research to turn these papers or documents into an evidence synthesis or deep interactive tutorial."
+policy:
+  allow_implicit_invocation: false

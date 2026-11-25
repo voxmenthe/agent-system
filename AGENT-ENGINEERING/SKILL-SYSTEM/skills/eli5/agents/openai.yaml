@@ -1,0 +1,7 @@
+interface:
+  display_name: "eli5"
+  short_description: "Quick plain-language explainer"
+  default_prompt: "Use $eli5 to explain this simply."
+
+policy:
+  allow_implicit_invocation: false

@@ -1,0 +1,7 @@
+interface:
+  display_name: "GPT Pro Bridge"
+  short_description: "Second opinions from ChatGPT Pro via Chrome"
+  default_prompt: "Use $gpt to get a ChatGPT Pro second opinion on this difficult design or review question."
+
+policy:
+  allow_implicit_invocation: false

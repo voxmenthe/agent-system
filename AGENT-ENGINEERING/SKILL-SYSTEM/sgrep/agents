@@ -1,0 +1,128 @@
+#!/usr/bin/env bash
+# Reach the hosts the skill and guidance systems don't. Command Code and Pi get
+# links to the shared ~/.agents/skills/sgrep, as their other skills do. OpenCode
+# loads no persistent guidance, so it gets the kernel's "Find code" section in
+# its global AGENTS.md. Install the skill first: bin/skill-system install sgrep --apply
+# Usage: agents install|uninstall|status
+set -euo pipefail
+
+kernel="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../PERSISTENT-GUIDANCE" && pwd)/AGENTS.md"
+shared_skill="$HOME/.agents/skills/sgrep"
+# Each entry is link:target, with targets relative like the neighbouring links.
+links=(
+  "$HOME/.commandcode/skills/sgrep:../../.agents/skills/sgrep"
+  "$HOME/.pi/agent/skills/sgrep:../../../.agents/skills/sgrep"
+)
+opencode_agents_md="$HOME/.config/opencode/AGENTS.md"
+start_marker='<!-- SGREP_START -->'
+end_marker='<!-- SGREP_END -->'
+
+kernel_section() {
+  local section
+  section=$(awk '$0 == "### Find code" { on = 1; print; next } on && /^#/ { exit } on { print }' "$kernel")
+  if [[ -z "$section" ]]; then
+    echo "no '### Find code' section in $kernel" >&2
+    return 1
+  fi
+  printf '%s\n' "$section"
+}
+
+block_body() {
+  awk -v start="$start_marker" -v end="$end_marker" \
+    '$0 == end { inside = 0 } inside { print } $0 == start { inside = 1 }' "$1"
+}
+
+# The OpenCode file without our block.
+without_block() {
+  awk -v start="$start_marker" -v end="$end_marker" \
+    '$0 == start { skip = 1 } !skip { print } $0 == end { skip = 0 }' "$opencode_agents_md"
+}
+
+is_ours() {
+  [[ -L "$1" && "$(readlink "$1")" == "$2" ]]
+}
+
+install() {
+  local entry link target section rest=""
+  if [[ ! -f "$shared_skill/SKILL.md" ]]; then
+    echo "missing $shared_skill; run bin/skill-system install sgrep --apply first" >&2
+    return 1
+  fi
+  section=$(kernel_section)
+
+  for entry in "${links[@]}"; do
+    link="${entry%%:*}" target="${entry#*:}"
+    is_ours "$link" "$target" && continue
+    if [[ -e "$link" || -L "$link" ]]; then
+      echo "refusing to replace $link; move it aside, then rerun" >&2
+      return 1
+    fi
+    mkdir -p "$(dirname "$link")"
+    ln -s "$target" "$link"
+  done
+
+  if [[ -f "$opencode_agents_md" ]]; then
+    rest=$(without_block)
+  else
+    mkdir -p "$(dirname "$opencode_agents_md")"
+  fi
+  {
+    [[ -n "${rest//[$'\n\t ']/}" ]] && printf '%s\n\n' "$rest"
+    printf '%s\n%s\n%s\n' "$start_marker" "$section" "$end_marker"
+  } > "$opencode_agents_md"
+  status
+}
+
+uninstall() {
+  local entry link target rest
+  for entry in "${links[@]}"; do
+    link="${entry%%:*}" target="${entry#*:}"
+    if is_ours "$link" "$target"; then
+      rm "$link"
+    elif [[ -e "$link" || -L "$link" ]]; then
+      echo "left $link: not our link to the shared skill" >&2
+    fi
+  done
+
+  if grep -qxF "$start_marker" "$opencode_agents_md" 2> /dev/null; then
+    rest=$(without_block)
+    if [[ -n "${rest//[$'\n\t ']/}" ]]; then
+      printf '%s\n' "$rest" > "$opencode_agents_md"
+    else
+      rm "$opencode_agents_md"
+    fi
+  fi
+  status
+}
+
+status() {
+  local entry link target state
+  for entry in "${links[@]}"; do
+    link="${entry%%:*}" target="${entry#*:}"
+    if is_ours "$link" "$target"; then
+      state=installed
+    elif [[ -e "$link" || -L "$link" ]]; then
+      state=conflict
+    else
+      state=missing
+    fi
+    printf '%-10s %s\n' "$state" "$link"
+  done
+
+  if ! grep -qxF "$start_marker" "$opencode_agents_md" 2> /dev/null; then
+    state=missing
+  elif diff -q <(kernel_section) <(block_body "$opencode_agents_md") > /dev/null; then
+    state=installed
+  else
+    state="stale (rerun install)"
+  fi
+  printf '%-10s %s\n' "$state" "$opencode_agents_md"
+}
+
+case "${1:-}" in
+  install | uninstall | status) "$1" ;;
+  *)
+    echo "usage: $(basename "$0") install|uninstall|status" >&2
+    exit 2
+    ;;
+esac

@@ -1,0 +1,10 @@
+---
+description: Load the owner-controlled cross-host agent policy kernel.
+alwaysApply: true
+---
+
+# Cross-host policy adapter
+
+Before task routing or substantive work, read and follow `~/.codex/AGENTS.md` as the always-on policy kernel. Its embedded routing table catalogs the packs under `~/.codex/policy/packs`; read every applicable pack before work governed by that pack.
+
+If that same kernel is already present in the active instruction context, do not load a second copy. If the kernel or a required pack cannot be read, stop before mutation and report the missing managed projection.

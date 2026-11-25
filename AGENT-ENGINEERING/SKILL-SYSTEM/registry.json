@@ -1,0 +1,1996 @@
+{
+  "schema_version": 1,
+  "skills": {
+    "architecture-plan": {
+      "dependencies": [],
+      "effect_ceiling": "local-write",
+      "evaluation_profile": "baseline-candidate",
+      "install_targets": [
+        "~/.agents/skills/architecture-plan"
+      ],
+      "lifecycle": "experimental",
+      "ownership": "custom",
+      "provenance": {
+        "license": "owner-authored",
+        "local_modifications": "Snapshot import plus generated agents/openai.yaml; distilled owner-authored diagnosis-before-remedy, evidence-provenance, contradiction, and repair-handoff safeguards were added. Added a partial-context divergence probe at the existing ownership/depth boundary, preserving justified adapters and independently owned policy. 2026-10-04: owner-approved implicit selection for unsettled consequential boundary decisions; proportional output, evidence reuse, diagnostic rather than numerical design gates, and shorter routing description. Preserves the partial-context divergence probe and behavior-abstraction evidence gate.",
+        "observed_hash": "sha256:ed2c6f9ad167d061c0a6c2931a80fc21ec13cd47af8062b4e429536584a21e11",
+        "origin": "owner-live-library",
+        "revision": "20260731T001252Z",
+        "snapshot": "20260731T001252Z"
+      },
+      "source": "skills/architecture-plan"
+    },
+    "arxiv": {
+      "dependencies": [],
+      "effect_ceiling": "read-only",
+      "evaluation_profile": "arxiv-mcp-research",
+      "install_targets": [
+        "~/.agents/skills/arxiv"
+      ],
+      "lifecycle": "experimental",
+      "ownership": "custom",
+      "provenance": {
+        "license": "owner-authored",
+        "local_modifications": "Converted from deferred-non-core legacy-unmanaged to canonical custom on 2026-08-04 under owner direction. Body imported verbatim; metadata rewritten to the canonical contract: description gained explicit negative trigger language, and the agentskills-style MCP dependencies section was dropped from agents/openai.yaml (the strict contract allows only interface and policy sections; the two MCP adapters remain documented in the body).",
+        "origin": "owner-live-library",
+        "revision": "2026-08-04-owner-approved-conversion",
+        "snapshot": "20260731T001252Z"
+      },
+      "source": "skills/arxiv"
+    },
+    "ask-matt": {
+      "dependencies": [],
+      "effect_ceiling": "read-only",
+      "evaluation_profile": "retirement-candidate",
+      "install_targets": [
+        "~/.agents/skills/ask-matt"
+      ],
+      "lifecycle": "retired",
+      "ownership": "legacy-unmanaged",
+      "provenance": {
+        "disposition": "quarantined-after-owner-approval",
+        "exit_phase": 4,
+        "license": "MIT",
+        "observed_hash": "sha256:a84901cc82b46bc29be15e682c40577adce8942d07f9ad2d0a401b693ff8a3b5",
+        "origin": "https://github.com/mattpocock/skills.git",
+        "revision": "2ab958093e83e0ec752e6c1c5932da465bf23e0c",
+        "snapshot": "20260731T001252Z"
+      }
+    },
+    "backwards": {
+      "dependencies": [],
+      "effect_ceiling": "local-write",
+      "evaluation_profile": "explicit-only-working-backwards",
+      "install_targets": [
+        "~/.agents/skills/backwards"
+      ],
+      "lifecycle": "experimental",
+      "ownership": "custom",
+      "provenance": {
+        "license": "owner-authored",
+        "local_modifications": "Converted from deferred legacy-unmanaged to canonical custom on 2026-08-30 under owner direction. The live body was imported intact; the description and both supported host metadata controls now require explicit invocation.",
+        "origin": "owner-live-library",
+        "revision": "2026-08-30-owner-approved-conversion",
+        "snapshot": "20260731T001252Z"
+      },
+      "source": "skills/backwards"
+    },
+    "batch-grill": {
+      "dependencies": [],
+      "effect_ceiling": "read-only",
+      "evaluation_profile": "explicit-only-decision-interview",
+      "install_targets": [
+        "~/.agents/skills/batch-grill"
+      ],
+      "lifecycle": "experimental",
+      "ownership": "custom",
+      "provenance": {
+        "license": "MIT",
+        "local_modifications": "Owner-approved rewrite: narrows the workflow to explicit breadth-first decision-frontier interviews, prioritizes governing decisions over low-level detail, removes exhaustiveness and hidden-delegation assumptions, and keeps all writes separately authorized. 2026-08-04: added disable-model-invocation frontmatter so the skill is user-invoked only on Grok and Kimi as well as Codex (Devin still lists metadata).",
+        "origin": "https://github.com/mattpocock/skills.git",
+        "reference_revision": "2ab958093e83e0ec752e6c1c5932da465bf23e0c",
+        "revision": "2026-08-02-owner-approved-rewrite"
+      },
+      "source": "skills/batch-grill"
+    },
+    "batch-grill-me": {
+      "dependencies": [],
+      "effect_ceiling": "read-only",
+      "evaluation_profile": "retirement-candidate",
+      "install_targets": [
+        "~/.agents/skills/batch-grill-me"
+      ],
+      "lifecycle": "retired",
+      "ownership": "legacy-unmanaged",
+      "provenance": {
+        "disposition": "quarantined-after-owner-approval",
+        "exit_phase": 4,
+        "license": "MIT",
+        "observed_hash": "sha256:16fca87916b738c4e94afd0673326c211304fad807ae7ded8fe51318fb3e93af",
+        "origin": "https://github.com/mattpocock/skills.git",
+        "revision": "2ab958093e83e0ec752e6c1c5932da465bf23e0c",
+        "snapshot": "20260731T001252Z"
+      }
+    },
+    "bookmarks": {
+      "dependencies": [],
+      "effect_ceiling": "local-write",
+      "evaluation_profile": "authenticated-x-bookmark-ingestion",
+      "install_targets": [
+        "~/.agents/skills/bookmarks"
+      ],
+      "lifecycle": "experimental",
+      "ownership": "custom",
+      "provenance": {
+        "license": "owner-authored",
+        "local_modifications": "Owner-requested X bookmark-folder workflow with approximate-name resolution, whole-folder visible capture, download and analysis modes, distinct save/post/resource dates, quoted/thread/image follow-ups, verified transfers, deduplication with all source references, and checked browser cleanup. Connector-first transport and scoped tab ownership draw on wsj and gpt; best-effort completeness and read-back manifests draw on chats. These are design references, not runtime skill dependencies. Uses the existing managed explicit-only invocation policy. 2026-10-19: owner-requested tools replace rendered-timeline scraping with scripts/x-folder.js, a page helper that copies X's own folder, folder-list, and thread responses (no requests, cookies, or storage), and scripts/bookmarks.py for cursor-derived bookmark-added bounds, coverage checks, prior-snapshot diffs, and validated non-overwriting downloads; capture mechanics measured on 2026-10-18/19 are folded into references.",
+        "origin": "PAPERS/ADHOC/AA-DOCS/process-improvements-X-bookmarks.md; X-RESULTS/META-SEARCH-INFO/x-bookmark-folder-navigation.md; skills/wsj; skills/gpt; skills/chats",
+        "revision": "2026-10-19-response-capture-tools"
+      },
+      "source": "skills/bookmarks"
+    },
+    "bro": {
+      "dependencies": [],
+      "effect_ceiling": "read-only",
+      "evaluation_profile": "explicit-only-plain-language-restatement",
+      "install_targets": [
+        "~/.agents/skills/bro"
+      ],
+      "lifecycle": "experimental",
+      "ownership": "custom",
+      "provenance": {
+        "license": "owner-authored",
+        "local_modifications": "Converted from deferred-non-core legacy-unmanaged to canonical custom on 2026-08-04 under owner direction. The live tree had drifted from the frozen snapshot (legacy-modified): the retained owner edit adding the style-rule paragraphs and TL;DR is preserved in the canonical body. Metadata was rewritten to the canonical contract: trigger-language description, explicit-only policy moved from the disable-model-invocation frontmatter key to agents/openai.yaml, and default_prompt added. 2026-08-04: visibility changed to fully discoverable on all hosts under owner direction \u2014 the explicit-only policy section was removed from agents/openai.yaml and the description now uses ordinary positive triggers. 2026-10-04: owner-approved return to explicit-only invocation on both supported metadata controls; plain-language style body preserved.",
+        "origin": "owner-live-library",
+        "revision": "2026-08-04-owner-approved-conversion",
+        "snapshot": "20260731T001252Z"
+      },
+      "source": "skills/bro"
+    },
+    "code-like-luke": {
+      "dependencies": [],
+      "effect_ceiling": "local-write",
+      "evaluation_profile": "explicit-only-code-design-guidance",
+      "install_targets": [
+        "~/.agents/skills/code-like-luke"
+      ],
+      "lifecycle": "experimental",
+      "ownership": "custom",
+      "provenance": {
+        "license": "owner-authored",
+        "local_modifications": "Owner approved the existing canonical candidate for ordinary managed installation on 2026-08-12. Normalized the description to the trigger contract and paired the existing Codex explicit-only policy with disable-model-invocation for the probed Grok and Kimi hosts.",
+        "origin": "owner-authored",
+        "revision": "2026-08-12-owner-approved-initial-registry"
+      },
+      "source": "skills/code-like-luke"
+    },
+    "code-review": {
+      "dependencies": [],
+      "effect_ceiling": "read-only",
+      "evaluation_profile": "retirement-candidate",
+      "install_targets": [
+        "~/.agents/skills/code-review"
+      ],
+      "lifecycle": "retired",
+      "ownership": "legacy-unmanaged",
+      "provenance": {
+        "disposition": "quarantined-after-owner-approval",
+        "exit_phase": 4,
+        "license": "MIT",
+        "observed_hash": "sha256:24da6721b5fc3351d8d4d25e269c931a6e4b2f000e771d8ed13e291efa42f7dd",
+        "origin": "https://github.com/mattpocock/skills.git",
+        "revision": "2ab958093e83e0ec752e6c1c5932da465bf23e0c",
+        "snapshot": "20260731T001252Z"
+      }
+    },
+    "codebase-design": {
+      "dependencies": [],
+      "effect_ceiling": "read-only",
+      "evaluation_profile": "probation",
+      "install_targets": [
+        "~/.agents/skills/codebase-design"
+      ],
+      "lifecycle": "retired",
+      "ownership": "legacy-unmanaged",
+      "provenance": {
+        "disposition": "quarantined-after-owner-approval",
+        "exit_phase": 7,
+        "license": "MIT",
+        "observed_hash": "sha256:bd3cfc43edbce9d6770c1225e4fcf1cff4f3351c0ba9ac72eaf2b091dee2a984",
+        "origin": "https://github.com/mattpocock/skills.git",
+        "revision": "2ab958093e83e0ec752e6c1c5932da465bf23e0c",
+        "snapshot": "20260731T001252Z"
+      }
+    },
+    "debugging": {
+      "dependencies": [],
+      "effect_ceiling": "local-write",
+      "evaluation_profile": "baseline-candidate",
+      "install_targets": [
+        "~/.agents/skills/debugging"
+      ],
+      "lifecycle": "experimental",
+      "ownership": "custom",
+      "provenance": {
+        "license": "owner-authored",
+        "local_modifications": "Owner-rewritten merge reviewed 2026-08-03.",
+        "notes": "Consolidates production-debugging and the legacy diagnosing-bugs into one evidence-first diagnosis route.",
+        "origin": "skill-library-assessment-consolidation",
+        "revision": "sha256:db04cc8071c57e1688669b9a0f57a68b2b6ca4c12145447380542ccc5f8a56a0"
+      },
+      "source": "skills/debugging"
+    },
+    "delegate": {
+      "dependencies": [],
+      "effect_ceiling": "external-write",
+      "evaluation_profile": "explicit-multi-model-delegation",
+      "install_targets": [
+        "~/.agents/skills/delegate"
+      ],
+      "lifecycle": "experimental",
+      "ownership": "custom",
+      "provenance": {
+        "license": "owner-authored",
+        "local_modifications": "Owner-requested initial skill based on live launcher experiments across Antigravity, Kimi Code, Devin, Codex, and Grok. The bundled adapter allowlists launchers, maps Codex to final-message modes, and structurally extracts clean final text from Kimi and Grok. Added scoped and bare GPT-5.6 Luna max routes on 2026-08-28 for basic work and clear-cut code implementations.",
+        "origin": "owner-authored",
+        "revision": "2026-09-30-owner-requested-claude-oracles"
+      },
+      "source": "skills/delegate"
+    },
+    "design-an-interface": {
+      "dependencies": [],
+      "effect_ceiling": "read-only",
+      "evaluation_profile": "probation",
+      "install_targets": [
+        "~/.agents/skills/design-an-interface"
+      ],
+      "lifecycle": "retired",
+      "ownership": "legacy-unmanaged",
+      "provenance": {
+        "disposition": "quarantined-after-owner-approval",
+        "exit_phase": 7,
+        "license": "MIT",
+        "observed_hash": "sha256:cfd0080941ccb62d74996b2058ad03335c09c2d1501844ef0a1713d991325b05",
+        "origin": "https://github.com/mattpocock/skills.git",
+        "revision": "2ab958093e83e0ec752e6c1c5932da465bf23e0c",
+        "snapshot": "20260731T001252Z"
+      }
+    },
+    "diagnosing-bugs": {
+      "dependencies": [],
+      "effect_ceiling": "read-only",
+      "evaluation_profile": "retirement-candidate",
+      "install_targets": [
+        "~/.agents/skills/diagnosing-bugs"
+      ],
+      "lifecycle": "retired",
+      "ownership": "legacy-unmanaged",
+      "provenance": {
+        "disposition": "quarantined-after-owner-approval",
+        "exit_phase": 7,
+        "license": "MIT",
+        "notes": "Consolidated into debugging (skills/debugging) on 2026-08-03.",
+        "observed_hash": "sha256:f11410975ea428b9570162eaccca2b1b8f83ac82a04f49d60b7548a103a7bdf0",
+        "origin": "https://github.com/mattpocock/skills.git",
+        "revision": "2ab958093e83e0ec752e6c1c5932da465bf23e0c",
+        "snapshot": "20260731T001252Z"
+      }
+    },
+    "diff-review": {
+      "dependencies": [],
+      "effect_ceiling": "read-only",
+      "evaluation_profile": "review-skill-v2",
+      "install_targets": [
+        "~/.agents/skills/diff-review"
+      ],
+      "lifecycle": "experimental",
+      "ownership": "custom",
+      "provenance": {
+        "license": "owner-authored",
+        "local_modifications": "Promoted the evaluated candidate with a read-only exact-target contract, evidence provenance, protected-boundary restraint, complete path receipts, conditional Review Scan guidance, and private automatic-outcome recording.",
+        "notes": "Accepted by the 2026-08-29 routing, controlled, protected, signal, and historical evaluation recorded under evaluations/results/review-skill-v2. The 2026-11-04 verifiability redline (workflow step 6's tests and simplification lanes; reader load in the maintainability reference) was re-evaluated against the then-canonical text with the same harness, model and effort: no controlled hard-gate or comparative failures in either arm, no candidate finding on a protected fixture, and 1 of 2 historical known findings matched in both (evaluations/results/review-skill-v2/2026-11-04-*).",
+        "origin": "owner-evaluated-review-skill-v2",
+        "revision": "sha256:a8d8e31f6bb1af642db81e91f345cd095c973a5b98c2b506264d8338fd8f4fd0"
+      },
+      "source": "skills/diff-review"
+    },
+    "docs-update": {
+      "dependencies": [],
+      "effect_ceiling": "local-write",
+      "evaluation_profile": "retirement-candidate",
+      "install_targets": [
+        "~/.agents/skills/docs-update"
+      ],
+      "lifecycle": "retired",
+      "ownership": "legacy-unmanaged",
+      "provenance": {
+        "disposition": "quarantined-after-owner-approval",
+        "exit_phase": 7,
+        "license": "owner-authored",
+        "local_modifications": "Lossless snapshot import; generated agents/openai.yaml was added for Release 1.",
+        "observed_hash": "sha256:f5e99e00b6c73c767da9dcae7b3f6c9ea2b0272687acf42d79a498f10bfc67ea",
+        "origin": "owner-live-library",
+        "revision": "20260731T001252Z",
+        "snapshot": "20260731T001252Z"
+      }
+    },
+    "domain-modeling": {
+      "dependencies": [],
+      "effect_ceiling": "local-write",
+      "evaluation_profile": "probation",
+      "install_targets": [
+        "~/.agents/skills/domain-modeling"
+      ],
+      "lifecycle": "retired",
+      "ownership": "legacy-unmanaged",
+      "provenance": {
+        "disposition": "quarantined-after-owner-approval",
+        "exit_phase": 7,
+        "license": "MIT",
+        "observed_hash": "sha256:b662e3d2ebaba04a9b3121aafaf24933cea481e4a003d20fa8df7852fa104162",
+        "origin": "https://github.com/mattpocock/skills.git",
+        "revision": "2ab958093e83e0ec752e6c1c5932da465bf23e0c",
+        "snapshot": "20260731T001252Z"
+      }
+    },
+    "edit-article": {
+      "dependencies": [],
+      "effect_ceiling": "local-write",
+      "evaluation_profile": "borrowed-utility",
+      "install_targets": [
+        "~/.agents/skills/edit-article"
+      ],
+      "lifecycle": "retired",
+      "ownership": "legacy-unmanaged",
+      "provenance": {
+        "disposition": "quarantined-after-owner-approval",
+        "exit_phase": 7,
+        "license": "MIT",
+        "observed_hash": "sha256:84db6f13c11ba1c4ffa0784d0dd9b6f70760b3bee43271e425ce794f43b2a9ec",
+        "origin": "https://github.com/mattpocock/skills.git",
+        "revision": "2ab958093e83e0ec752e6c1c5932da465bf23e0c",
+        "snapshot": "20260731T001252Z"
+      }
+    },
+    "eli5": {
+      "dependencies": [],
+      "effect_ceiling": "local-write",
+      "evaluation_profile": "explicit-only-plain-language-explainer",
+      "install_targets": [
+        "~/.agents/skills/eli5"
+      ],
+      "lifecycle": "experimental",
+      "ownership": "custom",
+      "provenance": {
+        "license": "owner-authored",
+        "local_modifications": "Owner-approved 2026-08-25 promotion of the reviewed candidate as canonical explicit-only custom skill. Body imported verbatim; metadata rewritten to the canonical contract: description normalized to the explicit-invocation trigger language, paired disable-model-invocation and allow_implicit_invocation false added for Grok/Kimi and Codex, short_description widened to the 25-64 character contract, and default_prompt now names $eli5.",
+        "observed_hash": "sha256:38ff79b141983bdcd4f674a8035f439c4a6ef05ec6a1ac5d947a73960f46a86f",
+        "origin": "owner-live-library",
+        "revision": "2026-08-25-owner-approved-promotion"
+      },
+      "source": "skills/eli5"
+    },
+    "evidence-driven-loop-guided": {
+      "dependencies": [],
+      "effect_ceiling": "local-write",
+      "evaluation_profile": "explicit-only-evidence-loop-guided",
+      "install_targets": [
+        "~/.agents/skills/evidence-driven-loop-guided"
+      ],
+      "lifecycle": "experimental",
+      "ownership": "custom",
+      "provenance": {
+        "license": "owner-authored",
+        "local_modifications": "Owner-approved 2026-08-14 promotion of the reviewed guided candidate for side-by-side testing. It keeps evaluation design and experiment strategy agent-owned while adding optional domain and long-running-work guidance; invocation remains explicit-only. Added two owner-approved evaluator-validity questions for completed correct timed work and physically plausible end-to-end gains; no new benchmark stage.",
+        "origin": "owner-designed-evidence-loop-candidate",
+        "revision": "2026-08-14-owner-approved-v1"
+      },
+      "source": "skills/evidence-driven-loop-guided"
+    },
+    "evidence-driven-loop-instrumented": {
+      "dependencies": [],
+      "effect_ceiling": "local-write",
+      "evaluation_profile": "explicit-only-evidence-loop-instrumented",
+      "install_targets": [
+        "~/.agents/skills/evidence-driven-loop-instrumented"
+      ],
+      "lifecycle": "experimental",
+      "ownership": "custom",
+      "provenance": {
+        "license": "owner-authored",
+        "local_modifications": "Owner-approved 2026-08-14 promotion of the reviewed instrumented candidate for side-by-side testing. It adds optional campaign, capture, and selection infrastructure without prescribing a universal evaluator; invocation remains explicit-only.",
+        "origin": "owner-designed-evidence-loop-candidate",
+        "revision": "2026-08-14-owner-approved-v1"
+      },
+      "source": "skills/evidence-driven-loop-instrumented"
+    },
+    "evidence-driven-loop-judged": {
+      "dependencies": [
+        "orchestrate"
+      ],
+      "effect_ceiling": "local-write",
+      "evaluation_profile": "explicit-only-evidence-loop-judged",
+      "install_targets": [
+        "~/.agents/skills/evidence-driven-loop-judged"
+      ],
+      "lifecycle": "experimental",
+      "ownership": "custom",
+      "provenance": {
+        "license": "owner-authored",
+        "local_modifications": "Owner-approved 2026-08-14 addition of a judged companion for fuzzy-evidence improvement loops. It requires independent subagent LLM judgment, preserves evaluator uncertainty, and supports human adjudication; invocation remains explicit-only.",
+        "origin": "owner-designed-evidence-loop-candidate",
+        "revision": "2026-08-14-owner-approved-v1"
+      },
+      "source": "skills/evidence-driven-loop-judged"
+    },
+    "evidence-driven-loop-minimal": {
+      "dependencies": [],
+      "effect_ceiling": "local-write",
+      "evaluation_profile": "explicit-only-evidence-loop-minimal",
+      "install_targets": [
+        "~/.agents/skills/evidence-driven-loop-minimal"
+      ],
+      "lifecycle": "experimental",
+      "ownership": "custom",
+      "provenance": {
+        "license": "owner-authored",
+        "local_modifications": "Owner-approved 2026-08-14 promotion of the reviewed minimal candidate for side-by-side testing. It preserves the compact generalized ARC-style prediction, action, observation, and revision loop; invocation remains explicit-only.",
+        "origin": "owner-designed-evidence-loop-candidate",
+        "revision": "2026-08-14-owner-approved-v1"
+      },
+      "source": "skills/evidence-driven-loop-minimal"
+    },
+    "explain-code": {
+      "dependencies": [
+        "create-verification-skill"
+      ],
+      "effect_ceiling": "local-write",
+      "evaluation_profile": "explicit-only-html-code-explainer",
+      "install_targets": [
+        "~/.agents/skills/explain-code"
+      ],
+      "lifecycle": "experimental",
+      "ownership": "custom",
+      "provenance": {
+        "license": "owner-authored",
+        "local_modifications": "Owner-approved 2026-08-09 consolidation of explain-codebase, explain-diff, and explain-progress. The codebase and change workflows remain separate references behind one explicit-only entry point; shared artifact guidance now treats modern CSS, motion, shaders, WebGL2, and WebGPU as optional progressive enhancements that must improve understanding and retain accessible static fallbacks. 2026-09-06: added a small linked Mermaid authoring reference distilled against official syntax guidance; standalone Codex Mermaid route archived. 2026-09-15: replaced MCQ and separate Feynman exercises with question-and-reveal understanding checks, no text entry, a 70% medium / 30% advanced mix, and hidden-bank refresh controls.",
+        "origin": "owner-live-library-consolidation",
+        "revision": "sha256:6e2f500f0b5f0f9af7120753bde519feca873d64dd1a073800799d8c4a8bcf0d",
+        "snapshot": "20260731T001252Z"
+      },
+      "source": "skills/explain-code"
+    },
+    "explain-codebase": {
+      "dependencies": [],
+      "effect_ceiling": "local-write",
+      "evaluation_profile": "deferred-non-core",
+      "install_targets": [
+        "~/.agents/skills/explain-codebase"
+      ],
+      "lifecycle": "retired",
+      "ownership": "legacy-unmanaged",
+      "provenance": {
+        "disposition": "quarantined-after-owner-approval",
+        "exit_phase": 7,
+        "license": "owner-authored",
+        "notes": "Retired on 2026-08-09 after its workflow was preserved in canonical explicit-only skill explain-code, references/codebase.md.",
+        "observed_hash": "sha256:40ffb62d40733899cd7a81ea2997566bb3c3a9741e6227e108424e67fc309003",
+        "origin": "owner-live-library",
+        "revision": "20260731T001252Z",
+        "snapshot": "20260731T001252Z"
+      }
+    },
+    "explain-diff": {
+      "dependencies": [],
+      "effect_ceiling": "local-write",
+      "evaluation_profile": "deferred-non-core",
+      "install_targets": [
+        "~/.agents/skills/explain-diff"
+      ],
+      "lifecycle": "retired",
+      "ownership": "legacy-unmanaged",
+      "provenance": {
+        "disposition": "quarantined-after-owner-approval",
+        "exit_phase": 7,
+        "license": "owner-authored",
+        "notes": "Retired on 2026-08-09 after its causal before/after and source-anchor guidance was merged into canonical explicit-only skill explain-code, references/change.md. The matching ~/.codex/skills duplicate is preserved in a dated recoverable backup.",
+        "observed_hash": "sha256:052ad5cb0854147eeb7080cfd32fbbb27098e362c0f0792c5ee7140258328991",
+        "origin": "owner-live-library",
+        "revision": "20260731T001252Z",
+        "snapshot": "20260731T001252Z"
+      }
+    },
+    "explain-progress": {
+      "dependencies": [],
+      "effect_ceiling": "local-write",
+      "evaluation_profile": "deferred-non-core",
+      "install_targets": [
+        "~/.agents/skills/explain-progress"
+      ],
+      "lifecycle": "retired",
+      "ownership": "legacy-unmanaged",
+      "provenance": {
+        "disposition": "quarantined-after-owner-approval",
+        "exit_phase": 7,
+        "license": "owner-authored",
+        "notes": "Retired on 2026-08-09 after its goal assessment, present-day verdict, journey, costs, and unfinished-work workflow became the base of canonical explicit-only skill explain-code, references/change.md. The matching ~/.codex/skills duplicate is preserved in a dated recoverable backup.",
+        "observed_hash": "sha256:450bdda706ca1a1c460a0533795e80436ec513b7e9bf910c61eeb7e131f57fe2",
+        "origin": "owner-live-library",
+        "revision": "20260731T001252Z",
+        "snapshot": "20260731T001252Z"
+      }
+    },
+    "explain-research": {
+      "dependencies": [
+        "create-verification-skill"
+      ],
+      "effect_ceiling": "local-write",
+      "evaluation_profile": "explicit-only-html-research-explainer",
+      "install_targets": [
+        "~/.agents/skills/explain-research"
+      ],
+      "lifecycle": "experimental",
+      "ownership": "custom",
+      "provenance": {
+        "license": "owner-authored",
+        "local_modifications": "Converted to canonical custom on 2026-08-09 under owner direction. The research workflow remains substantially intact; metadata now makes invocation explicit-only, and artifact guidance treats modern CSS, motion, shaders, WebGL2, and WebGPU as optional progressive enhancements that must improve understanding, remain evidence-bound, and retain accessible static fallbacks. 2026-09-15: replaced MCQ and separate Feynman exercises with question-and-reveal understanding checks, no text entry, a 70% medium / 30% advanced mix, and hidden-bank refresh controls.",
+        "origin": "owner-live-library",
+        "revision": "sha256:8ebf67d98936020ce000d1894cc6c35b263092ba211e50f761baa2df0063c23f",
+        "snapshot": "20260731T001252Z"
+      },
+      "source": "skills/explain-research"
+    },
+    "fanout": {
+      "dependencies": [
+        "orchestrate"
+      ],
+      "effect_ceiling": "git-mutation",
+      "evaluation_profile": "explicit-divergent-ideation",
+      "install_targets": [
+        "~/.agents/skills/fanout"
+      ],
+      "lifecycle": "experimental",
+      "ownership": "custom",
+      "provenance": {
+        "license": "owner-authored",
+        "local_modifications": "Converted from deferred-non-core legacy-unmanaged to canonical custom on 2026-08-04 under owner direction. Body imported verbatim; metadata rewritten to the canonical contract: description gained explicit negative trigger language, and agents/openai.yaml gained the required default_prompt and a 25-64 character short_description.",
+        "origin": "owner-live-library",
+        "revision": "2026-08-04-owner-approved-conversion",
+        "snapshot": "20260731T001252Z"
+      },
+      "source": "skills/fanout"
+    },
+    "frame-change": {
+      "dependencies": [],
+      "effect_ceiling": "read-only",
+      "evaluation_profile": "change-workflow",
+      "install_targets": [
+        "~/.agents/skills/frame-change"
+      ],
+      "lifecycle": "experimental",
+      "ownership": "custom",
+      "provenance": {
+        "license": "owner-authored",
+        "notes": "Initial Release 1 implementation.",
+        "origin": "personal-agent-development-system-plan",
+        "revision": "sha256:96309d565e4078fa2605762c837ad66bb78f31f74582b6b8a6fd6b3e5c483665"
+      },
+      "source": "skills/frame-change"
+    },
+    "greenfield": {
+      "dependencies": [],
+      "effect_ceiling": "local-write",
+      "evaluation_profile": "greenfield-spike-planning",
+      "install_targets": [
+        "~/.agents/skills/greenfield"
+      ],
+      "lifecycle": "experimental",
+      "ownership": "custom",
+      "provenance": {
+        "license": "owner-authored",
+        "local_modifications": "Owner-approved candidate renamed from greenfield-spikes to greenfield before its first registration and projection. Updated 2026-08-14 with recursive evidence-seam split rules, qualitative workstream sizing, and explicit same-wave independence checks.",
+        "origin": "owner-designed-greenfield-candidate",
+        "revision": "2026-08-14-owner-approved-split-rules"
+      },
+      "source": "skills/greenfield"
+    },
+    "herenow-deploy": {
+      "dependencies": [],
+      "effect_ceiling": "external-write",
+      "evaluation_profile": "explicit-only-herenow-deployment",
+      "install_targets": [
+        "~/.agents/skills/herenow-deploy"
+      ],
+      "lifecycle": "experimental",
+      "ownership": "custom",
+      "provenance": {
+        "license": "owner-authored",
+        "origin": "owner-authored",
+        "revision": "2026-08-08-owner-requested-listing"
+      },
+      "source": "skills/herenow-deploy"
+    },
+    "git-publish": {
+      "dependencies": [],
+      "effect_ceiling": "git-mutation",
+      "evaluation_profile": "baseline-candidate",
+      "install_targets": [
+        "~/.agents/skills/git-publish"
+      ],
+      "lifecycle": "retired",
+      "ownership": "legacy-unmanaged",
+      "provenance": {
+        "disposition": "quarantined-after-owner-approval",
+        "exit_phase": 7,
+        "license": "owner-authored",
+        "local_modifications": "Lossless snapshot import; generated agents/openai.yaml was added for Release 1. Retired 2026-08-04 under owner direction: publication authority is exercised directly, not through a permanent route. Canonical source removed; recovery evidence retained.",
+        "observed_hash": "sha256:fae02e1f89c05a79700ff9086a25e6b2c0b05a003d39df2bc4e05177703b6719",
+        "origin": "owner-live-library",
+        "revision": "20260731T001252Z",
+        "snapshot": "20260731T001252Z"
+      }
+    },
+    "grill-me": {
+      "dependencies": [],
+      "effect_ceiling": "read-only",
+      "evaluation_profile": "retirement-candidate",
+      "install_targets": [
+        "~/.agents/skills/grill-me"
+      ],
+      "lifecycle": "retired",
+      "ownership": "legacy-unmanaged",
+      "provenance": {
+        "disposition": "quarantined-after-owner-approval",
+        "exit_phase": 4,
+        "license": "MIT",
+        "observed_hash": "sha256:7a136f5581f9bec9074e3b8f96a4bbac011697d14eaa71700e9684df521fba4e",
+        "origin": "https://github.com/mattpocock/skills.git",
+        "revision": "2ab958093e83e0ec752e6c1c5932da465bf23e0c",
+        "snapshot": "20260731T001252Z"
+      }
+    },
+    "grill-with-docs": {
+      "dependencies": [],
+      "effect_ceiling": "local-write",
+      "evaluation_profile": "retirement-candidate",
+      "install_targets": [
+        "~/.agents/skills/grill-with-docs"
+      ],
+      "lifecycle": "retired",
+      "ownership": "legacy-unmanaged",
+      "provenance": {
+        "disposition": "quarantined-after-owner-approval",
+        "exit_phase": 4,
+        "license": "MIT",
+        "observed_hash": "sha256:8780b757431d99ba2f2b2a042ac18c03ce31344b4f0729f8a13f177efd4debf5",
+        "origin": "https://github.com/mattpocock/skills.git",
+        "revision": "2ab958093e83e0ec752e6c1c5932da465bf23e0c",
+        "snapshot": "20260731T001252Z"
+      }
+    },
+    "grilling": {
+      "dependencies": [],
+      "effect_ceiling": "read-only",
+      "evaluation_profile": "explicit-only-decision-interview",
+      "install_targets": [
+        "~/.agents/skills/grilling"
+      ],
+      "lifecycle": "experimental",
+      "ownership": "custom",
+      "provenance": {
+        "license": "MIT",
+        "local_modifications": "Converted from legacy-unmanaged to canonical custom on 2026-08-30 under owner direction. The live body was retained intact; the description and both supported host controls now require explicit invocation. On 2026-10-01, the owner requested three-question batches by default, with explicit pacing overrides and dependency ordering preserved.",
+        "origin": "https://github.com/mattpocock/skills.git",
+        "reference_revision": "2ab958093e83e0ec752e6c1c5932da465bf23e0c",
+        "revision": "2026-10-01-owner-requested-three-question-default",
+        "snapshot": "20260731T001252Z"
+      },
+      "source": "skills/grilling"
+    },
+    "illustrate": {
+      "dependencies": [],
+      "effect_ceiling": "local-write",
+      "evaluation_profile": "explicit-only-xiaohei-illustrate",
+      "install_targets": [
+        "~/.agents/skills/illustrate"
+      ],
+      "lifecycle": "experimental",
+      "ownership": "custom",
+      "provenance": {
+        "license": "MIT",
+        "local_modifications": "English translation of the vendored Ian Xiaohei skill, renamed from ian-xiaohei-illustrations-en to illustrate. Visual IP, example PNGs, and attribution preserved; the English projection does not bundle a separate LICENSE file. Explicit-only on Codex, Grok, and Kimi. Paired with Chinese original illustrate-cn.",
+        "origin": "https://github.com/helloianneo/ian-xiaohei-illustrations.git",
+        "reference_revision": "91b560849e8f883922cc2fa8a358a668caa94105",
+        "revision": "2026-08-20-rename-illustrate"
+      },
+      "source": "skills/illustrate"
+    },
+    "illustrate-cn": {
+      "dependencies": [],
+      "effect_ceiling": "local-write",
+      "evaluation_profile": "explicit-only-xiaohei-illustrate-cn",
+      "install_targets": [
+        "~/.agents/skills/illustrate-cn"
+      ],
+      "lifecycle": "experimental",
+      "ownership": "custom",
+      "provenance": {
+        "license": "MIT",
+        "local_modifications": "Vendored Chinese original of the Ian Xiaohei skill, renamed from ian-xiaohei-illustrations to illustrate-cn. Explicit-only on Codex, Grok, and Kimi. Paired with English translation illustrate.",
+        "origin": "https://github.com/helloianneo/ian-xiaohei-illustrations.git",
+        "reference_revision": "91b560849e8f883922cc2fa8a358a668caa94105",
+        "revision": "2026-08-20-rename-illustrate-cn"
+      },
+      "source": "skills/illustrate-cn"
+    },
+    "handoff": {
+      "dependencies": [],
+      "effect_ceiling": "local-write",
+      "evaluation_profile": "retirement-candidate",
+      "install_targets": [
+        "~/.agents/skills/handoff"
+      ],
+      "lifecycle": "retired",
+      "ownership": "legacy-unmanaged",
+      "provenance": {
+        "disposition": "quarantined-after-owner-approval",
+        "exit_phase": 7,
+        "license": "MIT",
+        "observed_hash": "sha256:bc5b72537a2f05e4dd97df1bbfadfc29a3867a69990066031b79ebb39ce87af9",
+        "origin": "https://github.com/mattpocock/skills.git",
+        "revision": "2ab958093e83e0ec752e6c1c5932da465bf23e0c",
+        "snapshot": "20260731T001252Z"
+      }
+    },
+    "implement": {
+      "dependencies": [],
+      "effect_ceiling": "git-mutation",
+      "evaluation_profile": "retirement-candidate",
+      "install_targets": [
+        "~/.agents/skills/implement"
+      ],
+      "lifecycle": "retired",
+      "ownership": "legacy-unmanaged",
+      "provenance": {
+        "disposition": "quarantined-after-owner-approval",
+        "exit_phase": 7,
+        "license": "MIT",
+        "observed_hash": "sha256:79cbe384e9799d9ccfe71378be9b5ff0f260b1bacc38e1531ed783f83cba0c93",
+        "origin": "https://github.com/mattpocock/skills.git",
+        "revision": "2ab958093e83e0ec752e6c1c5932da465bf23e0c",
+        "snapshot": "20260731T001252Z"
+      }
+    },
+    "implement-change": {
+      "dependencies": [],
+      "effect_ceiling": "local-write",
+      "evaluation_profile": "change-workflow",
+      "install_targets": [
+        "~/.agents/skills/implement-change"
+      ],
+      "lifecycle": "experimental",
+      "ownership": "custom",
+      "provenance": {
+        "license": "owner-authored",
+        "notes": "Initial Release 1 implementation.",
+        "origin": "personal-agent-development-system-plan",
+        "revision": "sha256:cff60049c040d146ae84731c2f2638299096f241963be7ca4bad553779c56b81"
+      },
+      "source": "skills/implement-change"
+    },
+    "improve-codebase-architecture": {
+      "dependencies": [],
+      "effect_ceiling": "local-write",
+      "evaluation_profile": "retirement-candidate",
+      "install_targets": [
+        "~/.agents/skills/improve-codebase-architecture"
+      ],
+      "lifecycle": "retired",
+      "ownership": "legacy-unmanaged",
+      "provenance": {
+        "disposition": "quarantined-after-owner-approval",
+        "exit_phase": 4,
+        "license": "MIT",
+        "observed_hash": "sha256:013fd18de52434727d0e28988dda94b286ef71ccea5d96984faf6f5e1f339125",
+        "origin": "https://github.com/mattpocock/skills.git",
+        "revision": "2ab958093e83e0ec752e6c1c5932da465bf23e0c",
+        "snapshot": "20260731T001252Z"
+      }
+    },
+    "intent": {
+      "dependencies": [],
+      "effect_ceiling": "read-only",
+      "evaluation_profile": "baseline-candidate",
+      "install_targets": [
+        "~/.agents/skills/intent"
+      ],
+      "lifecycle": "experimental",
+      "ownership": "custom",
+      "provenance": {
+        "license": "owner-authored",
+        "local_modifications": "Lossless snapshot import; existing runtime metadata retained. 2026-08-13: paired Codex's explicit-only policy with disable-model-invocation for Grok and Kimi.",
+        "observed_hash": "sha256:151305ba822c680a5c0cac1e53693622ed73f7f775fc40e3851f79fcd6c735ea",
+        "origin": "owner-live-library",
+        "revision": "20260731T001252Z",
+        "snapshot": "20260731T001252Z"
+      },
+      "source": "skills/intent"
+    },
+    "loop-me": {
+      "dependencies": [],
+      "effect_ceiling": "read-only",
+      "evaluation_profile": "retirement-candidate",
+      "install_targets": [
+        "~/.agents/skills/loop-me"
+      ],
+      "lifecycle": "retired",
+      "ownership": "legacy-unmanaged",
+      "provenance": {
+        "disposition": "quarantined-after-owner-approval",
+        "exit_phase": 4,
+        "license": "MIT",
+        "observed_hash": "sha256:c1dca4abec9a0926cafe4d019885c5e0d73f0241bd5db60480ed48a2836e3ae4",
+        "origin": "https://github.com/mattpocock/skills.git",
+        "revision": "2ab958093e83e0ec752e6c1c5932da465bf23e0c",
+        "snapshot": "20260731T001252Z"
+      }
+    },
+    "map-change": {
+      "dependencies": [],
+      "effect_ceiling": "read-only",
+      "evaluation_profile": "change-workflow",
+      "install_targets": [
+        "~/.agents/skills/map-change"
+      ],
+      "lifecycle": "experimental",
+      "ownership": "custom",
+      "provenance": {
+        "license": "owner-authored",
+        "notes": "Initial Release 1 implementation. 2026-10-04: owner-approved implicit selection for uncertain authorized change impact, reuse of existing mapping, and concise inline handoff.",
+        "origin": "personal-agent-development-system-plan",
+        "revision": "sha256:95b09d0ec4b31ca5b67383c90f6c0fea19aec51c6c5587e65175a0fa1e89d497"
+      },
+      "source": "skills/map-change"
+    },
+    "learning-workspace": {
+      "dependencies": [],
+      "effect_ceiling": "local-write",
+      "evaluation_profile": "task-local-continuity",
+      "install_targets": [
+        "~/.agents/skills/learning-workspace"
+      ],
+      "lifecycle": "stable",
+      "ownership": "custom",
+      "provenance": {
+        "license": "MIT",
+        "local_modifications": "Owner-directed 2026-09-01 adaptation of arc-code's durable evidence, prediction/probe/reconciliation, and model-correction lessons into an explicit-only, domain-agnostic task-local continuity skill. Adds bounded notes, warning guards, helper admission, resume checks, privacy and authority limits, and direct stable production lifecycle. 2026-10-13: owner-approved implicit selection when losing a long authorized task's evidence and frontier would force costly rework. 2026-10-25: the notes template's Resume state lists skills to reread, because Codex 0.164 drops an invoked skill's text at compaction (PLANS/AGENT-SYSTEM-REVIEW adoption plan 5.1).",
+        "origin": "https://github.com/jerber/arc-code.git",
+        "reference_revision": "6b33c1f7c2ad45997663c69157f5559d1be61bd9",
+        "revision": "sha256:6d043ebe0c3f4642ac7c7e36ee1bd3acb3023b78f6fbe1f6a7b62270899bee2c"
+      },
+      "source": "skills/learning-workspace"
+    },
+    "production-debugging": {
+      "dependencies": [],
+      "effect_ceiling": "read-only",
+      "evaluation_profile": "retirement-candidate",
+      "install_targets": [
+        "~/.agents/skills/production-debugging"
+      ],
+      "lifecycle": "retired",
+      "ownership": "legacy-unmanaged",
+      "provenance": {
+        "disposition": "quarantined-after-owner-approval",
+        "exit_phase": 7,
+        "license": "owner-authored",
+        "local_modifications": "Lossless snapshot import; generated agents/openai.yaml was added for Release 1.",
+        "notes": "Consolidated into debugging (skills/debugging) on 2026-08-03; observed_hash records the quarantined revised tree, superseding the snapshot hash.",
+        "observed_hash": "sha256:b67e7d1f364b0629ab2b79a25944d4062d08245486d9fae12ddc794957ad5bf1",
+        "origin": "owner-live-library",
+        "revision": "20260731T001252Z",
+        "snapshot": "20260731T001252Z"
+      }
+    },
+    "plan-parallel-build": {
+      "dependencies": [],
+      "effect_ceiling": "local-write",
+      "evaluation_profile": "parallel-build-planning",
+      "install_targets": [
+        "~/.agents/skills/plan-parallel-build"
+      ],
+      "lifecycle": "experimental",
+      "ownership": "custom",
+      "provenance": {
+        "license": "owner-authored",
+        "local_modifications": "Owner-approved 2026-08-14 direct-implementation planning skill. It balances early usable delivery with durable independent ownership, recursively splits long streams only at coherent seams, resolves cross-stream contracts before same-wave work, and produces one readable implementation plan without requiring extensive hardening. 2026-10-04: shorter planning-only description preserves a user request for a coding-agent plan; large autonomous work alone is not a trigger.",
+        "origin": "owner-designed-parallel-build-skill",
+        "revision": "2026-08-14-owner-approved-v1"
+      },
+      "source": "skills/plan-parallel-build"
+    },
+    "prototype": {
+      "dependencies": [],
+      "effect_ceiling": "local-write",
+      "evaluation_profile": "retirement-candidate",
+      "install_targets": [
+        "~/.agents/skills/prototype"
+      ],
+      "lifecycle": "retired",
+      "ownership": "legacy-unmanaged",
+      "provenance": {
+        "disposition": "quarantined-after-owner-approval",
+        "exit_phase": 7,
+        "license": "MIT",
+        "observed_hash": "sha256:2c409185d7f0ff56d1d460c70bc987df33f5e16cf658e63f765846b6a0515df7",
+        "origin": "https://github.com/mattpocock/skills.git",
+        "revision": "2ab958093e83e0ec752e6c1c5932da465bf23e0c",
+        "snapshot": "20260731T001252Z"
+      }
+    },
+    "request-refactor-plan": {
+      "dependencies": [],
+      "effect_ceiling": "external-write",
+      "evaluation_profile": "retirement-candidate",
+      "install_targets": [
+        "~/.agents/skills/request-refactor-plan"
+      ],
+      "lifecycle": "retired",
+      "ownership": "legacy-unmanaged",
+      "provenance": {
+        "disposition": "quarantined-after-owner-approval",
+        "exit_phase": 4,
+        "license": "MIT",
+        "local_modifications": "Live snapshot contains an owner wording delta from the audited Matt reference; preserve it independently of upstream.",
+        "observed_hash": "sha256:bd19d2909fba2e04d832c72d52fe55facfff8ce46c34c9533e21457ccbb58065",
+        "origin": "https://github.com/mattpocock/skills.git",
+        "revision": "2ab958093e83e0ec752e6c1c5932da465bf23e0c",
+        "snapshot": "20260731T001252Z"
+      }
+    },
+    "research": {
+      "dependencies": [],
+      "effect_ceiling": "local-write",
+      "evaluation_profile": "explicit-only-primary-source-research",
+      "install_targets": [
+        "~/.agents/skills/research"
+      ],
+      "lifecycle": "experimental",
+      "ownership": "custom",
+      "provenance": {
+        "license": "MIT",
+        "local_modifications": "Converted from a modified legacy live tree to canonical custom on 2026-08-30 under owner direction. The root workflow was rewritten around direct primary-source research and optional separately authorized delegation; unrelated nested skill roots were excluded from the projection and remain recoverable in quarantine. Both supported host controls require explicit invocation.",
+        "origin": "https://github.com/mattpocock/skills.git",
+        "reference_revision": "2ab958093e83e0ec752e6c1c5932da465bf23e0c",
+        "revision": "2026-08-30-owner-approved-conversion",
+        "snapshot": "20260731T001252Z"
+      },
+      "source": "skills/research"
+    },
+    "route-policy": {
+      "dependencies": [],
+      "effect_ceiling": "read-only",
+      "evaluation_profile": "baseline-candidate",
+      "install_targets": [
+        "~/.agents/skills/route-policy"
+      ],
+      "lifecycle": "retired",
+      "ownership": "legacy-unmanaged",
+      "provenance": {
+        "disposition": "quarantined-after-owner-approval",
+        "exit_phase": 7,
+        "license": "owner-authored",
+        "local_modifications": "Lossless snapshot import; generated agents/openai.yaml was added for Release 1. Retired 2026-10-23 under owner direction: task policy routing and the generated routing table live directly in the always-on AGENTS.md kernel. Canonical source removed; recovery evidence retained.",
+        "observed_hash": "sha256:73ec0d75f635801cbdb39d1ed1b39e78388dc1fc9a7b24dab52ca2d069357d84",
+        "origin": "owner-live-library",
+        "revision": "20260731T001252Z",
+        "snapshot": "20260731T001252Z"
+      }
+    },
+    "scaffold-exercises": {
+      "dependencies": [],
+      "effect_ceiling": "local-write",
+      "evaluation_profile": "retirement-candidate",
+      "install_targets": [
+        "~/.agents/skills/scaffold-exercises"
+      ],
+      "lifecycle": "retired",
+      "ownership": "legacy-unmanaged",
+      "provenance": {
+        "disposition": "quarantined-after-owner-approval",
+        "exit_phase": 7,
+        "license": "MIT",
+        "observed_hash": "sha256:5e1002a19e6d6e35a5eb0abf2f93777323ec02e764b2ceb74f0ce00ca9699958",
+        "origin": "https://github.com/mattpocock/skills.git",
+        "revision": "2ab958093e83e0ec752e6c1c5932da465bf23e0c",
+        "snapshot": "20260731T001252Z"
+      }
+    },
+    "scientific-figure-making": {
+      "dependencies": [],
+      "effect_ceiling": "local-write",
+      "evaluation_profile": "explicit-only-publication-figures",
+      "install_targets": [
+        "~/.agents/skills/scientific-figure-making"
+      ],
+      "lifecycle": "experimental",
+      "ownership": "custom",
+      "provenance": {
+        "license": "CC-BY-NC-4.0; adapted with attribution (upstream license added 2026-09-06, after the adapted revision)",
+        "local_modifications": "Adapted from REFERENCE-REPOS/figures4papers/scientific-figure-making at revision 565e6b97a9609e14ac07bee83dcb94589034fe27. Rewrote frontmatter and host metadata to the explicit-only canonical contract, kept the palette/style/helper contracts, and added references/figure-gallery.md with script-grounded examples from the figure_* project scripts plus NOTICE.md attribution. No upstream code vendored.",
+        "origin": "https://github.com/ChenLiu-1996/figures4papers",
+        "reference_revision": "565e6b97a9609e14ac07bee83dcb94589034fe27",
+        "revision": "2026-09-05-owner-requested-adaptation"
+      },
+      "source": "skills/scientific-figure-making"
+    },
+    "show-code": {
+      "dependencies": [],
+      "effect_ceiling": "local-write",
+      "evaluation_profile": "code-context-guided-trace-contract-questions",
+      "install_targets": [
+        "~/.agents/skills/show-code"
+      ],
+      "lifecycle": "experimental",
+      "ownership": "custom",
+      "provenance": {
+        "license": "owner-authored",
+        "local_modifications": "Owner-selected combination of gallery A guided diff, B runtime trace, C data contract, and E question-led review. A single code-focused walkthrough, Markdown template, and optional local HTML renderer; separate from show-me-clearly and explain-code.",
+        "origin": "owner-authored",
+        "revision": "2026-09-07-owner-approved-show-code"
+      },
+      "source": "skills/show-code"
+    },
+    "show-code-change": {
+      "dependencies": [],
+      "effect_ceiling": "local-write",
+      "evaluation_profile": "retired-superseded-by-show-me",
+      "install_targets": [
+        "~/.agents/skills/show-code-change"
+      ],
+      "lifecycle": "retired",
+      "ownership": "legacy-unmanaged",
+      "provenance": {
+        "disposition": "quarantined-after-owner-approval",
+        "exit_phase": 7,
+        "license": "owner-authored",
+        "local_modifications": "Initial owner-requested implementation based on the local compact-visual-representations article; specialized to pinned before-and-after code deltas and separated from rich HTML explanation. Retired after the owner preferred the unified show-me workflow.",
+        "notes": "Retired on 2026-08-14 after its visual-diff workflow was consolidated into canonical explicit-only skill show-me. The exact live tree remains in journaled quarantine.",
+        "observed_hash": "sha256:75427e7770949724264f11688045c456d1911d8fd3a3194d19a08b314e220a61",
+        "origin": "owner-authored",
+        "revision": "2026-08-13-owner-approved-initial"
+      }
+    },
+    "show-code-flow": {
+      "dependencies": [],
+      "effect_ceiling": "local-write",
+      "evaluation_profile": "retired-superseded-by-show-me",
+      "install_targets": [
+        "~/.agents/skills/show-code-flow"
+      ],
+      "lifecycle": "retired",
+      "ownership": "legacy-unmanaged",
+      "provenance": {
+        "disposition": "quarantined-after-owner-approval",
+        "exit_phase": 7,
+        "license": "owner-authored",
+        "local_modifications": "Initial owner-requested implementation based on the local compact-visual-representations article; specialized to runtime and state flow and separated from static topology and rich HTML explanation. Retired after the owner preferred the unified show-me workflow.",
+        "notes": "Retired on 2026-08-14 after its runtime-flow workflow was consolidated into canonical explicit-only skill show-me. The exact live tree remains in journaled quarantine.",
+        "observed_hash": "sha256:f13339d8c53dde2b0a3f38fe7c1a37fc21c0f66d4c617f41bd1c9062da5dafb4",
+        "origin": "owner-authored",
+        "revision": "2026-08-13-owner-approved-initial"
+      }
+    },
+    "show-code-structure": {
+      "dependencies": [],
+      "effect_ceiling": "local-write",
+      "evaluation_profile": "retired-superseded-by-show-me",
+      "install_targets": [
+        "~/.agents/skills/show-code-structure"
+      ],
+      "lifecycle": "retired",
+      "ownership": "legacy-unmanaged",
+      "provenance": {
+        "disposition": "quarantined-after-owner-approval",
+        "exit_phase": 7,
+        "license": "owner-authored",
+        "local_modifications": "Initial owner-requested implementation based on the local compact-visual-representations article; specialized to static code topology and separated from runtime flow and rich HTML explanation. Retired after the owner preferred the unified show-me workflow.",
+        "notes": "Retired on 2026-08-14 after its static-structure workflow was consolidated into canonical explicit-only skill show-me. The exact live tree remains in journaled quarantine.",
+        "observed_hash": "sha256:eede4b4ccee31a08a5f76d7ce6cf073a22c9653d55379ac4da36e945746c9928",
+        "origin": "owner-authored",
+        "revision": "2026-08-13-owner-approved-initial"
+      }
+    },
+    "show-me": {
+      "dependencies": [],
+      "effect_ceiling": "local-write",
+      "evaluation_profile": "concise-visual-diagrams-and-html",
+      "install_targets": [
+        "~/.agents/skills/show-me"
+      ],
+      "lifecycle": "experimental",
+      "ownership": "custom",
+      "provenance": {
+        "license": "MIT",
+        "local_modifications": "Vendored from REFERENCE-REPOS/humanlayer-skills/plugins/show-me/skills/show-me/SKILL.md at revision 3c2629142c5d437428269b1b722b08c0b87f574d. Configured as explicit user-invokable only across supported hosts: added disable-model-invocation: true to frontmatter, explicit trigger contract in description, and allow_implicit_invocation: false in agents/openai.yaml.",
+        "origin": "https://github.com/humanlayer/skills",
+        "revision": "3c2629142c5d437428269b1b722b08c0b87f574d"
+      },
+      "source": "skills/show-me"
+    },
+    "show-me-clearly": {
+      "dependencies": [],
+      "effect_ceiling": "local-write",
+      "evaluation_profile": "question-led-ascii-code-explanation",
+      "install_targets": [
+        "~/.agents/skills/show-me-clearly"
+      ],
+      "lifecycle": "experimental",
+      "ownership": "custom",
+      "provenance": {
+        "license": "owner-authored",
+        "local_modifications": "Owner-approved promotion of the existing 2026-08-23 candidate as the replacement for retired show-me. It keeps the question-led narrative, color-assisted ASCII orientation, bounded zooms, local source receipts, and deterministic output checker, with concise peer-voice guidance for plain technical language.",
+        "origin": "owner-authored",
+        "revision": "2026-08-23-owner-approved-show-me-replacement"
+      },
+      "source": "skills/show-me-clearly"
+    },
+    "tdd": {
+      "dependencies": [],
+      "effect_ceiling": "local-write",
+      "evaluation_profile": "explicit-only-tdd",
+      "install_targets": [
+        "~/.agents/skills/tdd"
+      ],
+      "lifecycle": "experimental",
+      "ownership": "custom",
+      "provenance": {
+        "license": "MIT",
+        "local_modifications": "Converted from legacy-unmanaged to canonical custom on 2026-08-30 under owner direction. The test-first vertical-slice workflow and reference files were retained, the stale code-review dependency was removed, and both supported host controls now require explicit invocation. Owner-approved 2026-10-03 terminology resolution consumes the declared authority or existing default glossary and retains CONTEXT reading when no authority is declared; no glossary write or seam-policy change.",
+        "origin": "https://github.com/mattpocock/skills.git",
+        "reference_revision": "2ab958093e83e0ec752e6c1c5932da465bf23e0c",
+        "revision": "2026-08-30-owner-approved-conversion",
+        "snapshot": "20260731T001252Z"
+      },
+      "source": "skills/tdd"
+    },
+    "teach": {
+      "dependencies": [],
+      "effect_ceiling": "local-write",
+      "evaluation_profile": "explicit-only-stateful-teaching-workspace",
+      "install_targets": [
+        "~/.agents/skills/teach"
+      ],
+      "lifecycle": "experimental",
+      "ownership": "custom",
+      "provenance": {
+        "license": "MIT",
+        "local_modifications": "Owner-approved conversion to an ordinary managed custom skill on 2026-08-12. Removed the upstream argument-hint frontmatter key because the shared validator admits only portable core metadata plus the probed cross-host invocation key; normalized the description to the trigger contract; and added the required Codex default_prompt in agents/openai.yaml.",
+        "origin": "https://github.com/mattpocock/skills.git",
+        "reference_revision": "84fdeffd12f2ee307994d1eb6feb48173b6e0502",
+        "revision": "2026-08-12-owner-approved-custom-conversion"
+      },
+      "source": "skills/teach"
+    },
+    "to-tickets": {
+      "dependencies": [],
+      "effect_ceiling": "external-write",
+      "evaluation_profile": "explicit-only-tracer-bullet-ticket-publishing",
+      "install_targets": [
+        "~/.agents/skills/to-tickets"
+      ],
+      "lifecycle": "experimental",
+      "ownership": "custom",
+      "provenance": {
+        "license": "MIT",
+        "local_modifications": "Owner-approved canonical import on 2026-08-12. Normalized the description to the trigger contract and added the required Codex default_prompt in agents/openai.yaml; the ticket workflow is otherwise unchanged. Owner-approved 2026-10-03 adaptation replaces unavailable setup dependencies with supplied tracker and label authority and reuses an existing breakdown/publication grant; no destination is invented.",
+        "origin": "https://github.com/mattpocock/skills.git",
+        "revision": "84fdeffd12f2ee307994d1eb6feb48173b6e0502"
+      },
+      "source": "skills/to-tickets"
+    },
+    "to-questionnaire": {
+      "dependencies": [],
+      "effect_ceiling": "local-write",
+      "evaluation_profile": "retirement-candidate",
+      "install_targets": [
+        "~/.agents/skills/to-questionnaire"
+      ],
+      "lifecycle": "retired",
+      "ownership": "legacy-unmanaged",
+      "provenance": {
+        "disposition": "quarantined-after-owner-approval",
+        "exit_phase": 7,
+        "license": "MIT",
+        "observed_hash": "sha256:5275c812036cb35b1496fb9dc3be91864c51daeb53d9335841444ecea5cf9639",
+        "origin": "https://github.com/mattpocock/skills.git",
+        "revision": "2ab958093e83e0ec752e6c1c5932da465bf23e0c",
+        "snapshot": "20260731T001252Z"
+      }
+    },
+    "to-spec": {
+      "dependencies": [],
+      "effect_ceiling": "external-write",
+      "evaluation_profile": "retirement-candidate",
+      "install_targets": [
+        "~/.agents/skills/to-spec"
+      ],
+      "lifecycle": "retired",
+      "ownership": "legacy-unmanaged",
+      "provenance": {
+        "disposition": "quarantined-after-owner-approval",
+        "exit_phase": 4,
+        "license": "MIT",
+        "observed_hash": "sha256:f76d635d31db99b22063fca354643573d138592d513a583f670160a4bfaee371",
+        "origin": "https://github.com/mattpocock/skills.git",
+        "revision": "2ab958093e83e0ec752e6c1c5932da465bf23e0c",
+        "snapshot": "20260731T001252Z"
+      }
+    },
+    "ubiquitous-language": {
+      "dependencies": [],
+      "effect_ceiling": "local-write",
+      "evaluation_profile": "explicit-only-domain-glossary",
+      "install_targets": [
+        "~/.agents/skills/ubiquitous-language"
+      ],
+      "lifecycle": "experimental",
+      "ownership": "custom",
+      "provenance": {
+        "license": "MIT",
+        "local_modifications": "Converted from legacy-unmanaged to canonical custom on 2026-08-30 under owner direction. The live body was retained intact, a default prompt was added, and the description plus both supported host controls require explicit invocation. Owner-approved 2026-10-03 adaptation resolves the declared terminology document before the existing/default glossary, preserves existing structure and unrelated context, and reruns against that same authority.",
+        "origin": "https://github.com/mattpocock/skills.git",
+        "reference_revision": "2ab958093e83e0ec752e6c1c5932da465bf23e0c",
+        "revision": "2026-08-30-owner-approved-conversion",
+        "snapshot": "20260731T001252Z"
+      },
+      "source": "skills/ubiquitous-language"
+    },
+    "verify-change": {
+      "dependencies": [],
+      "effect_ceiling": "read-only",
+      "evaluation_profile": "change-workflow",
+      "install_targets": [
+        "~/.agents/skills/verify-change"
+      ],
+      "lifecycle": "experimental",
+      "ownership": "custom",
+      "provenance": {
+        "license": "owner-authored",
+        "notes": "Owner-approved implicit invocation on 2026-09-06. Acceptance verification reuses sufficient attributable evidence, distinguishes self-checks from non-author independent verification, and avoids duplicating diff-review; retains the four dispositions and existing authority boundaries. Owner-approved moderately high impact/evidence threshold on 2026-10-03; existing implicit eligibility and read-only acceptance remain unchanged.",
+        "origin": "personal-agent-development-system-plan",
+        "revision": "sha256:79971a333733e314551dee3535a880b1fbf3b266ca569407c917dfc5b939dee7"
+      },
+      "source": "skills/verify-change"
+    },
+    "wayfinder": {
+      "dependencies": [],
+      "effect_ceiling": "external-write",
+      "evaluation_profile": "retirement-candidate",
+      "install_targets": [
+        "~/.agents/skills/wayfinder"
+      ],
+      "lifecycle": "retired",
+      "ownership": "legacy-unmanaged",
+      "provenance": {
+        "disposition": "quarantined-after-owner-approval",
+        "exit_phase": 4,
+        "license": "MIT",
+        "observed_hash": "sha256:8e746346377548da35dfaf329e10bcdb5c5255009ff8e856b3b7113d1d114895",
+        "origin": "https://github.com/mattpocock/skills.git",
+        "revision": "2ab958093e83e0ec752e6c1c5932da465bf23e0c",
+        "snapshot": "20260731T001252Z"
+      }
+    },
+    "wsj": {
+      "dependencies": [],
+      "effect_ceiling": "local-write",
+      "evaluation_profile": "authenticated-wsj-research",
+      "install_targets": [
+        "~/.agents/skills/wsj"
+      ],
+      "lifecycle": "experimental",
+      "ownership": "custom",
+      "provenance": {
+        "license": "owner-authored",
+        "local_modifications": "Owner-approved restoration and rename from wsj-research to wsj before its first registry projection. On 2026-08-09 the primary Codex transport changed from the AppleScript helper to the Chrome plugin after direct authenticated homepage, latest-feed, and article smoke tests; the helper remains compatibility-only and its existing browser-state location is retained. On 2026-11-05, at owner direction, Claude in Chrome tools became the first transport on every host when present, because they read pages without bringing Chrome to the front; the host Chrome plugin is second and the helper last.",
+        "origin": "owner-codex-local-library",
+        "revision": "2026-11-05-claude-in-chrome-first"
+      },
+      "source": "skills/wsj"
+    },
+    "xgrok": {
+      "dependencies": [],
+      "effect_ceiling": "read-only",
+      "evaluation_profile": "x-evidence-delegation",
+      "install_targets": [
+        "~/.agents/skills/xgrok"
+      ],
+      "lifecycle": "experimental",
+      "ownership": "custom",
+      "provenance": {
+        "license": "owner-authored",
+        "local_modifications": "Converted from deferred-non-core legacy-unmanaged to canonical custom on 2026-08-04 under owner direction. The live tree had drifted from the frozen snapshot (legacy-modified): the retained owner edits adding the output-orientation and parent-answer composition sections, the synthesis-regressions reference, and the extended worker protocol and tests are preserved by importing the live tree verbatim; metadata already satisfied the canonical contract.",
+        "origin": "owner-live-library",
+        "revision": "2026-08-04-owner-approved-conversion",
+        "snapshot": "20260731T001252Z"
+      },
+      "source": "skills/xgrok"
+    },
+    "gpt": {
+      "dependencies": [],
+      "effect_ceiling": "external-write",
+      "evaluation_profile": "authenticated-chatgpt-bridge",
+      "install_targets": [
+        "~/.agents/skills/gpt"
+      ],
+      "lifecycle": "experimental",
+      "ownership": "custom",
+      "provenance": {
+        "license": "owner-authored",
+        "local_modifications": "Relocated from the Codex-local library to one shared managed projection on 2026-08-04 under owner direction, following the wsj precedent. Runtime state and caches (.last_session.json, .dedicated_window.json, .send.lock, pytest/ruff caches, __pycache__, .bak) are excluded from canonical source; note the scripts write session state into the live tree, which will surface as locally-modified drift after use. Description gained explicit-only invocation and negative trigger language; agents/openai.yaml was created with allow_implicit_invocation: false. The former Codex-local tree is retained outside discovery at ~/.codex/skill-backups/20260804/gpt. 2026-08-04: added disable-model-invocation frontmatter so the skill is user-invoked only on Grok and Kimi as well as Codex (Devin still lists metadata).",
+        "origin": "owner-codex-local-library",
+        "revision": "2026-08-04-owner-approved-shared-projection"
+      },
+      "source": "skills/gpt"
+    },
+    "gpt-context": {
+      "dependencies": [
+        "gpt"
+      ],
+      "effect_ceiling": "external-write",
+      "evaluation_profile": "authenticated-chatgpt-context-seeding",
+      "install_targets": [
+        "~/.agents/skills/gpt-context"
+      ],
+      "lifecycle": "experimental",
+      "ownership": "custom",
+      "provenance": {
+        "license": "owner-authored",
+        "local_modifications": "Owner-requested context-seeding workflow built on the gpt skill's profile-pinned Chrome bridge. It selects and verifies Chat mode before uploading 1-10 ordered files, rechecks Chat before each send attempt, leaves the Chat model/effort unchanged, submits one fixed no-response prompt, renames from the first basename, verifies prompt/attachments/title, and rejects known Work-model metadata.",
+        "origin": "owner-authored",
+        "revision": "2026-08-28-owner-requested-initial"
+      },
+      "source": "skills/gpt-context"
+    },
+    "chats": {
+      "dependencies": [
+        "gpt"
+      ],
+      "effect_ceiling": "local-write",
+      "evaluation_profile": "authenticated-chatgpt-transcript-export",
+      "install_targets": [
+        "~/.agents/skills/chats"
+      ],
+      "lifecycle": "experimental",
+      "ownership": "custom",
+      "provenance": {
+        "license": "owner-authored",
+        "local_modifications": "Renamed from download-chatgpt-conversation to chats, made explicit-user-only across supported hosts with disable-model-invocation and allow_implicit_invocation false, added connector-first authenticated retrieval with AppleEvents as an explicit fallback, and bounded date-range pagination with a validated created-at-or-before-updated-at invariant.",
+        "origin": "owner-authored",
+        "revision": "2026-08-08-owner-corrected-connector-first-workflow"
+      },
+      "source": "skills/chats"
+    },
+    "upcoming": {
+      "dependencies": [],
+      "effect_ceiling": "read-only",
+      "evaluation_profile": "upcoming-macro-and-earnings-calendar",
+      "install_targets": [
+        "~/.agents/skills/upcoming"
+      ],
+      "lifecycle": "experimental",
+      "ownership": "custom",
+      "provenance": {
+        "license": "owner-authored",
+        "local_modifications": "Owner-approved free-only workflow with an exact request allowlist, Finnhub primary and Alpha Vantage secondary earnings discovery, optional conservative FRED gap detection, a broader 8-12 name earnings default, key options-expiration coverage from official Cboe and OCC/OIC calendars, explicit schedule-confidence labels, and mandatory first-party verification for selected events.",
+        "origin": "owner-authored",
+        "revision": "2026-08-17-earnings-and-options-expiration-coverage"
+      },
+      "source": "skills/upcoming"
+    },
+    "ponytail": {
+      "dependencies": [],
+      "effect_ceiling": "read-only",
+      "evaluation_profile": "explicit-only-minimal-implementation",
+      "install_targets": [
+        "~/.agents/skills/ponytail"
+      ],
+      "lifecycle": "experimental",
+      "ownership": "custom",
+      "provenance": {
+        "license": "MIT",
+        "local_modifications": "Owner-evaluated rewrite that limits Ponytail to explicitly invoked bounded implementation or design, preserves required safeguards, and removes implicit review, audit, verification, and scan routing.",
+        "notes": "Accepted by the 2026-08-29 main and held-out routing evaluations; implicit invocation is disabled in provider metadata.",
+        "origin": "https://github.com/DietrichGebert/ponytail",
+        "reference_revision": "2ed6c52c9d7e5e56942508591085fd45dea277d3",
+        "revision": "sha256:52b66c9d774af3286cbf21b90ff510186c76fb2896089d9342dd671a4037af7f"
+      },
+      "source": "skills/ponytail"
+    },
+    "ponytail-audit": {
+      "dependencies": [],
+      "effect_ceiling": "read-only",
+      "evaluation_profile": "retired-replaced-by-simplify-audit",
+      "install_targets": [
+        "~/.agents/skills/ponytail-audit"
+      ],
+      "lifecycle": "retired",
+      "ownership": "legacy-unmanaged",
+      "provenance": {
+        "disposition": "quarantined-after-owner-approval",
+        "exit_phase": 4,
+        "license": "MIT",
+        "local_modifications": "Vendored from upstream skills/ponytail-audit; SKILL.md body verbatim. Frontmatter re-encoded to the canonical single-line quoted contract. Added agents/openai.yaml with implicit invocation allowed.",
+        "observed_hash": "sha256:fa492b5f36d0d7687d35c282065b76ba26c6f0bbe662e06e415860075b7fa3ea",
+        "origin": "https://github.com/DietrichGebert/ponytail",
+        "reference_revision": "2ed6c52c9d7e5e56942508591085fd45dea277d3",
+        "revision": "2026-08-15-initial"
+      }
+    },
+    "ponytail-review": {
+      "dependencies": [],
+      "effect_ceiling": "read-only",
+      "evaluation_profile": "retired-replaced-by-simplify-review",
+      "install_targets": [
+        "~/.agents/skills/ponytail-review"
+      ],
+      "lifecycle": "retired",
+      "ownership": "legacy-unmanaged",
+      "provenance": {
+        "disposition": "quarantined-after-owner-approval",
+        "exit_phase": 4,
+        "license": "MIT",
+        "local_modifications": "Vendored from upstream skills/ponytail-review; SKILL.md body verbatim. Frontmatter re-encoded to the canonical single-line quoted contract. Added agents/openai.yaml with implicit invocation allowed.",
+        "observed_hash": "sha256:09c282244217b59913607585372c694cf0d2b429559c4183f54415eb43666e10",
+        "origin": "https://github.com/DietrichGebert/ponytail",
+        "reference_revision": "2ed6c52c9d7e5e56942508591085fd45dea277d3",
+        "revision": "2026-08-15-initial"
+      }
+    },
+    "simplify-audit": {
+      "dependencies": [],
+      "effect_ceiling": "read-only",
+      "evaluation_profile": "safe-whole-repository-simplification-audit",
+      "install_targets": [
+        "~/.agents/skills/simplify-audit"
+      ],
+      "lifecycle": "experimental",
+      "ownership": "custom",
+      "provenance": {
+        "license": "MIT",
+        "local_modifications": "Owner-evaluated repository and plan/design audit revised on 2026-09-01 for implicit invocation and a rebuttable minimum-direct-path presumption. Extra stages, gates, artifacts, handoffs, compatibility paths, and abstractions must justify themselves against direct delivery, validation, rollback, observability, and dogfooding. 2026-10-04: owner-approved narrower proactive entry requires observed burden inside the affected scope, reuses evidence, and avoids automatic audit/report chaining.",
+        "notes": "Replaces the retired ponytail-audit route without retaining an implicit alias.",
+        "origin": "owner-evaluated-ponytail-rewrite",
+        "reference_revision": "2ed6c52c9d7e5e56942508591085fd45dea277d3",
+        "revision": "sha256:6fd9c0b44f0cff22f5ef6a2277bfe32d93ef487bf0649c45a87553e5f9a04f9a"
+      },
+      "source": "skills/simplify-audit"
+    },
+    "simplify-review": {
+      "dependencies": [],
+      "effect_ceiling": "read-only",
+      "evaluation_profile": "safe-bounded-simplification-review",
+      "install_targets": [
+        "~/.agents/skills/simplify-review"
+      ],
+      "lifecycle": "experimental",
+      "ownership": "custom",
+      "provenance": {
+        "license": "MIT",
+        "local_modifications": "Owner-evaluated bounded-diff rewrite that requires a concrete current cost, preserved invariants, and evidence before recommending subtraction.",
+        "notes": "Replaces the retired ponytail-review route; protected fixtures reject proxy-driven or safety-threatening deletion advice.",
+        "origin": "owner-evaluated-ponytail-rewrite",
+        "reference_revision": "2ed6c52c9d7e5e56942508591085fd45dea277d3",
+        "revision": "sha256:f3c67a9b2077a1c090e25756c34f65cbed677102675b370b919333af9134ca17"
+      },
+      "source": "skills/simplify-review"
+    },
+    "synthesize-market-state": {
+      "dependencies": [
+        "wsj",
+        "xgrok"
+      ],
+      "effect_ceiling": "local-write",
+      "evaluation_profile": "explicit-only-market-state-synthesis",
+      "install_targets": [
+        "~/.agents/skills/synthesize-market-state"
+      ],
+      "lifecycle": "experimental",
+      "ownership": "custom",
+      "provenance": {
+        "license": "owner-authored",
+        "local_modifications": "Owner-approved initial canonical import on 2026-08-30. The live workflow was retained intact; its WSJ and xgrok dependencies are explicit in the registry, and both supported host controls require explicit invocation.",
+        "origin": "owner-live-library",
+        "revision": "2026-08-30-owner-approved-initial"
+      },
+      "source": "skills/synthesize-market-state"
+    },
+    "unlazy": {
+      "dependencies": [],
+      "effect_ceiling": "local-write",
+      "evaluation_profile": "unlazy-gated-completion",
+      "install_targets": [
+        "~/.agents/skills/unlazy"
+      ],
+      "lifecycle": "experimental",
+      "ownership": "custom",
+      "provenance": {
+        "license": "MIT",
+        "local_modifications": "Vendored SKILL.md, LICENSE, scripts/, references/, and templates/ verbatim from upstream v2.0.0; README.md, CHANGELOG.md, and CONTRIBUTING.md not vendored. Frontmatter license and metadata keys dropped to fit the canonical contract (license and source recorded in provenance). Added agents/openai.yaml; on 2026-08-30 both supported explicit-only controls were added under owner direction.",
+        "origin": "https://github.com/Leonxlnx/unlazy.git",
+        "reference_revision": "ed9e8d2b5919698cf2c54bda270d507e10b69617",
+        "revision": "2026-08-16-initial"
+      },
+      "source": "skills/unlazy"
+    },
+    "create-verification-skill": {
+      "dependencies": [],
+      "effect_ceiling": "local-write",
+      "evaluation_profile": "verification-capability-setup",
+      "install_targets": [
+        "~/.agents/skills/create-verification-skill"
+      ],
+      "lifecycle": "experimental",
+      "ownership": "custom",
+      "provenance": {
+        "license": "MIT",
+        "local_modifications": "Owner-authorized minimal dogfood adaptation: target-native discovery, affected-surface proof, one driver owner, separate product/acceptance ownership and local-only effects. Owner-approved selective implicit invocation with material-gap thresholds; directly owns bounded verification glue and conditional tool-construction, coverage, and UI-driver references. Added conditional terminal, stateful-workload and real-component visual guidance, exercised on owned target-local pilots. Bundles scripts/html_preflight.py, adapted from diagram-design's scripts/self_check.py (MIT, revision d35ae86), which explain-code and explain-research run before rendering.",
+        "origin": "https://github.com/cursor/plugins.git",
+        "reference_revision": "93b00b89ef425a9c1bac0d0b317dfc49c930ac99",
+        "revision": "sha256:d13d1ff175f708b7a367abfcd83ce3fe9b6b140fa1951ea604a78eb76f240dff"
+      },
+      "source": "skills/create-verification-skill"
+    },
+    "maintain-verification-skill": {
+      "dependencies": [],
+      "effect_ceiling": "local-write",
+      "evaluation_profile": "verification-capability-upkeep",
+      "install_targets": [
+        "~/.agents/skills/maintain-verification-skill"
+      ],
+      "lifecycle": "experimental",
+      "ownership": "custom",
+      "provenance": {
+        "license": "MIT",
+        "local_modifications": "Owner-authorized minimal dogfood adaptation: target-native discovery, affected-surface proof, one driver owner, separate product/acceptance ownership and local-only effects. Owner-approved selective implicit invocation for materially affected recipes; directly owns bounded driver/fixture repairs, preserves accepted behavior and affected coverage.",
+        "origin": "https://github.com/cursor/plugins.git",
+        "reference_revision": "93b00b89ef425a9c1bac0d0b317dfc49c930ac99",
+        "revision": "sha256:1636d3c18fcb6c9ab789f877cc561f2bfa6e3137496c73f9446ec523166abf59"
+      },
+      "source": "skills/maintain-verification-skill"
+    },
+    "poteto": {
+      "dependencies": [
+        "architecture-plan",
+        "create-verification-skill",
+        "diff-review",
+        "frame-change",
+        "implement-change",
+        "maintain-verification-skill",
+        "map-change",
+        "show-me-clearly",
+        "verify-change"
+      ],
+      "effect_ceiling": "external-write",
+      "evaluation_profile": "minimal-pstack-dogfood",
+      "install_targets": [
+        "~/.agents/skills/poteto"
+      ],
+      "lifecycle": "experimental",
+      "ownership": "custom",
+      "provenance": {
+        "license": "owner-authored",
+        "local_modifications": "Owner-authorized explicit-only coordinator composing existing stage owners and the two attributed verification-capability leaves; one writer, native fresh verification, bounded objective loop, task-local checkpoint and scoped parent PR edge. Added the compact template-respecting source-bound handoff and updated invocation examples for selectively discoverable verification owners; coordinator and remaining explicit-only leaves retain their boundaries. 2026-10-04: composition and initial request reflect eligible mapping and architecture; coordinator, implementation owner and optional explanation remain explicit-only.",
+        "origin": "260905-pstack-minimal-dogfood-implementation-plan",
+        "revision": "sha256:ad1e20607ad2fd615370a779a7cc7979ce26cdbdb1a1b1175669b446524a71a2"
+      },
+      "source": "skills/poteto"
+    },
+    "nyt": {
+      "dependencies": [],
+      "effect_ceiling": "local-write",
+      "evaluation_profile": "authenticated-publication-research",
+      "install_targets": [
+        "~/.agents/skills/nyt"
+      ],
+      "lifecycle": "experimental",
+      "ownership": "custom",
+      "provenance": {
+        "license": "owner-authored",
+        "origin": "owner-requested-wsj-companion",
+        "revision": "2026-09-06",
+        "local_modifications": "New Chrome-first publication workflow and rendered-DOM AppleScript compatibility helper; no WSJ-specific payload assumptions."
+      },
+      "source": "skills/nyt"
+    },
+    "washp": {
+      "dependencies": [],
+      "effect_ceiling": "local-write",
+      "evaluation_profile": "authenticated-publication-research",
+      "install_targets": [
+        "~/.agents/skills/washp"
+      ],
+      "lifecycle": "experimental",
+      "ownership": "custom",
+      "provenance": {
+        "license": "owner-authored",
+        "origin": "owner-requested-wsj-companion",
+        "revision": "2026-09-06",
+        "local_modifications": "New Chrome-first publication workflow and rendered-DOM AppleScript compatibility helper; no WSJ-specific payload assumptions."
+      },
+      "source": "skills/washp"
+    },
+    "agent-browser": {
+      "dependencies": [],
+      "effect_ceiling": "external-write",
+      "evaluation_profile": "codex-local-port",
+      "install_targets": [
+        "~/.agents/skills/agent-browser"
+      ],
+      "lifecycle": "experimental",
+      "ownership": "custom",
+      "provenance": {
+        "license": "owner-authored-replacement",
+        "origin": "codex-local-library",
+        "revision": "2026-09-06-owner-approved-reconciliation",
+        "observed_hash": "sha256:35623e540cc0126a1ec8e01afcdb5f7edf2063a8309405fc0e5797b8b735f0d9",
+        "snapshot": "20260907T023520Z-skill-system-reconciliation",
+        "local_modifications": "Original compact CLI guidance checked against official web documentation and installed version 0.27.0; no old command catalog imported. Paired invocation controls now permit implicit selection without expanding task authority.",
+        "notes": "Owner-approved implicit invocation on 2026-09-06; no provider skill import."
+      },
+      "source": "skills/agent-browser"
+    },
+    "codebase-search-and-understanding-expert": {
+      "dependencies": [],
+      "effect_ceiling": "read-only",
+      "evaluation_profile": "codex-local-port",
+      "install_targets": [
+        "~/.agents/skills/codebase-search-and-understanding-expert"
+      ],
+      "lifecycle": "experimental",
+      "ownership": "custom",
+      "provenance": {
+        "license": "owner-authored-replacement",
+        "origin": "codex-local-library",
+        "revision": "2026-09-06-owner-approved-reconciliation",
+        "observed_hash": "sha256:b6e7b986a625229acd6fbf82b2c262ac9d31234eb4cb78d770afef05721380a7",
+        "snapshot": "20260907T023520Z-skill-system-reconciliation",
+        "local_modifications": "Native-first original search guidance; omitted four heuristic/setup scripts and mandatory Kit or personal shell sourcing. Paired invocation controls now permit implicit selection without expanding task authority. 2026-10-04: shorter understanding-only description and shared-evidence boundary distinguish change-impact mapping without repeating exploration. 2026-10-13: search step names sgrep for behaviour search when names are unknown, and the index caution no longer excludes sgrep's automatic index. 2026-10-22: one rule (answer from where each part of the question lives) leads; a history section adds a question-to-source table and tested git -S and hist recipes for why, where-from and plan-status questions; the description excludes routine first-step reads; Claude Code enablement follows. Assessment: PLANS/SKILLS/2026-10-22-codebase-search-skill-assessment-and-plan.md.",
+        "notes": "Owner-approved implicit invocation on 2026-09-06; no provider skill import."
+      },
+      "source": "skills/codebase-search-and-understanding-expert"
+    },
+    "dialectic": {
+      "dependencies": [],
+      "effect_ceiling": "local-write",
+      "evaluation_profile": "explicit-only-codex-local-port",
+      "install_targets": [
+        "~/.agents/skills/dialectic"
+      ],
+      "lifecycle": "experimental",
+      "ownership": "custom",
+      "provenance": {
+        "license": "owner-authored-replacement",
+        "origin": "codex-local-library",
+        "revision": "2026-09-06-owner-approved-reconciliation",
+        "observed_hash": "sha256:60c3d4e39613a5c2399a6fc7731fec8bee9621e6c7f9debeaf23b3d988e977ae",
+        "snapshot": "20260907T023520Z-skill-system-reconciliation",
+        "local_modifications": "Original concise protocol retaining independent committed perspectives and evidence-checked parent synthesis; removed fixed budgets, covert typing, host-specific launchers, and forced recursion.",
+        "notes": "Paired explicit-only invocation controls; no provider skill import."
+      },
+      "source": "skills/dialectic"
+    },
+    "orchestrate": {
+      "dependencies": [],
+      "effect_ceiling": "local-write",
+      "evaluation_profile": "explicit-only-codex-local-port",
+      "install_targets": [
+        "~/.agents/skills/orchestrate"
+      ],
+      "lifecycle": "experimental",
+      "ownership": "custom",
+      "provenance": {
+        "license": "owner-authored-replacement",
+        "origin": "codex-local-library",
+        "revision": "2026-09-06-owner-approved-reconciliation",
+        "observed_hash": "sha256:ea97953a0566b1fd5ed4eaaf2b1e73b7b2db2c4cf68d5631555f0317a55ad1a8",
+        "snapshot": "20260907T023520Z-skill-system-reconciliation",
+        "local_modifications": "Named native-agent package replacing root-level declaration; original bounded ownership and join guidance, independent of external delegate workers.",
+        "notes": "Paired explicit-only invocation controls; no provider skill import."
+      },
+      "source": "skills/orchestrate"
+    },
+    "prepare-context": {
+      "dependencies": [],
+      "effect_ceiling": "local-write",
+      "evaluation_profile": "explicit-only-codex-local-port",
+      "install_targets": [
+        "~/.agents/skills/prepare-context"
+      ],
+      "lifecycle": "experimental",
+      "ownership": "custom",
+      "provenance": {
+        "license": "not-declared-in-retained-local-script",
+        "origin": "codex-local-library",
+        "revision": "2026-09-06-owner-approved-reconciliation",
+        "observed_hash": "sha256:b1c37c05ae95fd4cd9afad3a871c177ed8282ae6c8e15105c49455087999a5c1",
+        "snapshot": "20260907T023520Z-skill-system-reconciliation",
+        "local_modifications": "Retained resolver with native rg recommendations replacing Codex/Claude-private and Kit assumptions; original concise package-relative local bundle instructions. Incorporated the useful Claude preparation guidance: component focus and source inventories, bounded history fallback, optional native workers with disjoint writers and parent assembly, and final coverage checks. Resolver and explicit-only invocation unchanged.",
+        "notes": "Paired explicit-only invocation controls; no provider skill import."
+      },
+      "source": "skills/prepare-context"
+    },
+    "recent-commits-digest": {
+      "dependencies": [],
+      "effect_ceiling": "git-mutation",
+      "evaluation_profile": "codex-local-port",
+      "install_targets": [
+        "~/.agents/skills/recent-commits-digest"
+      ],
+      "lifecycle": "experimental",
+      "ownership": "custom",
+      "provenance": {
+        "license": "not-declared-in-retained-local-script",
+        "origin": "codex-local-library",
+        "revision": "2026-09-06-owner-approved-reconciliation",
+        "observed_hash": "sha256:71b3e9bd5bb24245200fb46485519a88de9d10231f3173325bf0ea82fa2f65f4",
+        "snapshot": "20260907T023520Z-skill-system-reconciliation",
+        "local_modifications": "Retained digest script byte-for-byte; original package-relative instructions preserve ff-only pulls and no-pull history requests. Paired invocation controls now permit implicit selection without expanding task authority.",
+        "notes": "Owner-approved implicit invocation on 2026-09-06; no provider skill import."
+      },
+      "source": "skills/recent-commits-digest"
+    },
+    "web-research-then-plan": {
+      "dependencies": [],
+      "effect_ceiling": "local-write",
+      "evaluation_profile": "explicit-only-codex-local-port",
+      "install_targets": [
+        "~/.agents/skills/web-research-then-plan"
+      ],
+      "lifecycle": "experimental",
+      "ownership": "custom",
+      "provenance": {
+        "license": "owner-authored-replacement",
+        "origin": "codex-local-library",
+        "revision": "2026-09-06-owner-approved-reconciliation",
+        "observed_hash": "sha256:2b1ab86d453acfcb007c482fab6b92a6af60384441b8780d17cfe9b257cc8ca2",
+        "snapshot": "20260907T023520Z-skill-system-reconciliation",
+        "local_modifications": "Original concise research-to-plan protocol; requested location and optional existing index preserved without mandatory framework or permission rituals.",
+        "notes": "Paired explicit-only invocation controls; no provider skill import."
+      },
+      "source": "skills/web-research-then-plan"
+    },
+    "spx-daily-report": {
+      "dependencies": [],
+      "effect_ceiling": "local-write",
+      "evaluation_profile": "free-spx-report-and-history",
+      "install_targets": [
+        "~/.agents/skills/spx-daily-report"
+      ],
+      "lifecycle": "experimental",
+      "ownership": "custom",
+      "provenance": {
+        "license": "owner-authored",
+        "origin": "owner-requested-spx-report-workflow",
+        "revision": "2026-09-17-initial",
+        "local_modifications": "Created after owner-confirmed intent and tested free Cboe/OCC reconstruction; includes wider overnight stress distributions and Options-owned snapshot persistence."
+      },
+      "source": "skills/spx-daily-report"
+    },
+    "codemap": {
+      "dependencies": [],
+      "effect_ceiling": "local-write",
+      "evaluation_profile": "explicit-only-source-linked-codemap",
+      "install_targets": [
+        "~/.agents/skills/codemap"
+      ],
+      "lifecycle": "experimental",
+      "ownership": "custom",
+      "provenance": {
+        "license": "owner-authored",
+        "origin": "owner-requested-codemap-workflow",
+        "revision": "2026-10-02-initial",
+        "notes": "Distills the owner-approved CLARA simpler CODE-MAP.md format: exactly two short paragraphs per area, mechanics followed by evidence-backed design choices and verified source links. Explicit invocation only at the owner's request."
+      },
+      "source": "skills/codemap"
+    },
+    "sgrep": {
+      "dependencies": [],
+      "effect_ceiling": "read-only",
+      "evaluation_profile": "semantic-code-search-needle-questions",
+      "install_targets": [
+        "~/.agents/skills/sgrep"
+      ],
+      "lifecycle": "experimental",
+      "ownership": "custom",
+      "provenance": {
+        "license": "owner-authored",
+        "origin": "owner-authored-2026-10-13",
+        "revision": "2026-10-13-owner-approved-all-hosts",
+        "local_modifications": "Written for the sgrep 0.3.0 CLI from the 2026-10-13 four-agent evaluation (ASSESSMENTS/sgrep-eval-261013). Owner-approved implicit invocation for every host, including Codex and Claude Code, on 2026-10-13. Same day: PATH guidance aims implementation searches at the code folder and plan, decision, and motivation searches at PLANS then docs, and external-tool questions at REFERENCE."
+      },
+      "source": "skills/sgrep"
+    },
+    "council": {
+      "dependencies": [
+        "delegate"
+      ],
+      "effect_ceiling": "external-write",
+      "evaluation_profile": "explicit-blind-judged-external-panel",
+      "install_targets": [
+        "~/.agents/skills/council"
+      ],
+      "lifecycle": "experimental",
+      "ownership": "custom",
+      "provenance": {
+        "license": "owner-authored",
+        "origin": "owner-requested-port-of-ztools-council-classic",
+        "revision": "2026-10-16-owner-approved-promotion",
+        "local_modifications": "Classic-lite port of the ztools council CLI (PLANS/SKILLS/2026-10-15-council-skill-plan.md): a read-only external panel through delegate's run-wave.sh, a sealed parent candidate, blind external judges on an anonymized packet (scripts/judge-packet.sh), and parent edit-best synthesis with a RUN.md audit. Plain-language rosters, optional role packs and lanes ported from council's role packs. Owner removed the default time limit on 2026-10-16; a time budget applies only when the user names one. Accepted on two live runs on 2026-10-16."
+      },
+      "source": "skills/council"
+    },
+    "notebooklm": {
+      "dependencies": [],
+      "effect_ceiling": "external-write",
+      "evaluation_profile": "authenticated-notebooklm-audio-weaker-agent-e2e",
+      "install_targets": [
+        "~/.agents/skills/notebooklm"
+      ],
+      "lifecycle": "experimental",
+      "ownership": "custom",
+      "provenance": {
+        "license": "owner-authored",
+        "origin": "owner-requested-2026-10-22",
+        "revision": "2026-10-23-owner-approved-promotion",
+        "local_modifications": "Written from a live mapping of Gemini Notebook's private batchexecute RPCs in the owner's signed-in Chrome (create, rename, upload, Audio Overview options, artifacts, download rendition, usage meter), with mutating calls captured in dry-run mode. scripts/nblm.js is the in-page client; scripts/nblm.py drives one background tab through AppleScript and moves downloads out of ~/Downloads. Promoted on owner request after GPT-6.1 Sol (low) and Kimi K3 (high) each completed a paper-to-audio request from the skill alone (evaluations/runs/2026-10-23-notebooklm-weaker-agents.md); the one shared failure, a missing --out directory, was fixed so --out creates it. Runtime state lives in ~/.codex/state/nblm, outside the skill tree."
+      },
+      "source": "skills/notebooklm"
+    },
+    "catchup": {
+      "dependencies": [
+        "delegate"
+      ],
+      "effect_ceiling": "read-only",
+      "evaluation_profile": "explicit-seeded-session-catchup",
+      "install_targets": [
+        "~/.agents/skills/catchup"
+      ],
+      "lifecycle": "experimental",
+      "ownership": "custom",
+      "provenance": {
+        "license": "owner-authored",
+        "origin": "PLANS/AGENT-SYSTEM-REVIEW/2026-10-23-adoption-plan.md item 3.2",
+        "revision": "2026-10-25-initial",
+        "local_modifications": "Written to the adoption plan's contract (boundary, live sources, output order, never-rules) from the boundary-reference pattern two reference projects reached independently (F1). Reads hist, delegate's wave-status fleet view, the learning workspace, git and the session's own processes; it writes nothing. Owner-use acceptance (a seeded scenario, then three real returns) is pending."
+      },
+      "source": "skills/catchup"
+    },
+    "skiller": {
+      "dependencies": [],
+      "effect_ceiling": "read-only",
+      "evaluation_profile": "explicit-skill-recommendation",
+      "install_targets": [
+        "~/.agents/skills/skiller"
+      ],
+      "lifecycle": "experimental",
+      "ownership": "custom",
+      "provenance": {
+        "license": "owner-authored",
+        "origin": "owner request, 2026-10-25: an explicit-only skill that feeds the agent a brief description of every skill and asks it to recommend the ones a task should use, mainly during intent, grilling, or plan creation",
+        "revision": "2026-10-25-initial",
+        "local_modifications": "scripts/catalog reads the installed skills live (SKILL.md front matter, agents/openai.yaml short_description) from the directory skiller is installed in, so the catalog never drifts from the library: brief lines for all, full descriptions for a shortlist. Explicit-only skills are absent from hosts' own skill lists, which is why the catalog exists. Advice only; it writes nothing."
+      },
+      "source": "skills/skiller"
+    },
+    "create-formal-verification-skill": {
+      "dependencies": [],
+      "effect_ceiling": "local-write",
+      "evaluation_profile": "formal-verification-setup",
+      "install_targets": [
+        "~/.agents/skills/create-formal-verification-skill"
+      ],
+      "lifecycle": "experimental",
+      "ownership": "custom",
+      "provenance": {
+        "license": "MIT",
+        "local_modifications": "Owner-directed explicit-only adaptation after a two-target trial in this repository (the delegate wave runner and the skill-install transactions, which found four real bugs). Adds scripts/check, a TLC runner with a pinned, sha256-checked tla2tools.jar, drift coverage of the code each model describes and a guard that keeps the verify skill's sync commit equal to the manifest's; a fixed layout for models, views, mutations and findings; a scratch-worktree proof; and references/tla-lessons.md from the trial and the ChartLab verifications. Names the vendored statechart skill, with a view.mjs beside each model, for showing a counterexample; adapts pstack's /maintain-formal-verification-skill (revision 4dd1d05818d19792e7cd6e818f1667f95f7e1dbe) as references/maintain.md.",
+        "origin": "https://github.com/cursor/plugins.git",
+        "reference_revision": "9580c23696ac8d7abed0c166f2f9918800afb819",
+        "revision": "sha256:2118d4a37400bed2c08b9589092049c742e7d017a43660f043e5ff9d2906dd7b"
+      },
+      "source": "skills/create-formal-verification-skill"
+    },
+    "options-levels": {
+      "dependencies": [],
+      "effect_ceiling": "local-write",
+      "evaluation_profile": "options-levels-transcript-to-futures-map",
+      "install_targets": [
+        "~/.agents/skills/options-levels"
+      ],
+      "lifecycle": "experimental",
+      "ownership": "custom",
+      "provenance": {
+        "license": "owner-authored",
+        "origin": "owner-requested-options-levels-skill",
+        "revision": "2026-10-26-initial",
+        "local_modifications": "Created under the owner-approved 10-26 market-process plan (section 2): guidance and references for an author's options levels pages; its commands (mkt levels) stay in scripts/grok-X-adhoc beside the palette, chain and basis code they import, as spx-daily-report runs another checkout's code."
+      },
+      "source": "skills/options-levels"
+    },
+    "solutionize": {
+      "dependencies": [
+        "delegate",
+        "learning-workspace",
+        "orchestrate"
+      ],
+      "effect_ceiling": "external-write",
+      "evaluation_profile": "explicit-solution-hunt-with-rerun-confirmation",
+      "install_targets": [
+        "~/.agents/skills/solutionize"
+      ],
+      "lifecycle": "experimental",
+      "ownership": "custom",
+      "provenance": {
+        "license": "owner-authored",
+        "origin": "owner-requested-solutionize-from-draft-prompt",
+        "revision": "2026-10-27-owner-approved-v1",
+        "local_modifications": "Owner's draft prompt, confirmed intent and five rounds of 2026-10-27 corrections (PLANS/SKILLS/2026-10-27-solutionize-skill-plan.md): an honest premise that a solution exists out of view; waves of independent attacks with one agent or many, foundations first, lines written in the problem's own terms, within a user-set search scope (web access and readable local paths); wildcard lines, either the attacker's own choice or an angle read into a randomly drawn passage; an optional list of angles, labeled inspiration only and not exhaustive, consulted only when a run stalls and grown between runs; runs kept in an in-repo learning workspace; nothing called solved until the coordinator's clean rerun of the frozen check confirms it, with checker agents optional. Guidance only: no tool blocking, hidden information, or exclusion of other skills, which steps may call when the user asks. Launches through delegate's run-wave.sh or native subagents."
+      },
+      "source": "skills/solutionize"
+    },
+    "statechart": {
+      "dependencies": [],
+      "effect_ceiling": "local-write",
+      "evaluation_profile": "explicit-only-checked-statechart",
+      "install_targets": [
+        "~/.agents/skills/statechart"
+      ],
+      "lifecycle": "experimental",
+      "ownership": "custom",
+      "provenance": {
+        "license": "MIT",
+        "local_modifications": "Vendors pstack's statechart compiler unchanged except package.json (trimmed to name, private and type) and without its scripts/test corpus. Adds scripts/run, which runs it offline on the pinned, sha256-checked tla2tools.jar 1.7.4 that the formal-verification runner caches instead of installing TLC and Java with mise. SKILL.md is explicit-only, uses scripts/run with a new --out folder, and adds a section on charting verification targets' mutation and finding configs with a view.mjs beside the model.",
+        "origin": "https://github.com/cursor/plugins.git",
+        "reference_revision": "4dd1d05818d19792e7cd6e818f1667f95f7e1dbe",
+        "revision": "sha256:b3e7bc436db6a886d2976245068f75d4bd79520db2ae784178dc27db422a907b"
+      },
+      "source": "skills/statechart"
+    },
+    "be-ambitious": {
+      "dependencies": [],
+      "effect_ceiling": "local-write",
+      "evaluation_profile": "explicit-above-and-beyond-with-outside-judges",
+      "install_targets": [
+        "~/.agents/skills/be-ambitious"
+      ],
+      "lifecycle": "experimental",
+      "ownership": "custom",
+      "provenance": {
+        "license": "MIT",
+        "origin": "https://github.com/robonuggets/be-ambitious.git",
+        "reference_revision": "dc116a3ebd8cf772e4d0930626f67369bd60399d",
+        "revision": "2026-11-02-initial",
+        "local_modifications": "Adapted, not vendored, after three owner reviews (PLANS/SKILLS/2026-11-02-be-ambitious-skill-plan.md): one governing rule (do what was asked, above and beyond, with an outside judge; anything past the request comes alongside it, never in its place); explicit-only; two tracks: the request always delivered recognizably and raised with Depth and Range in light of an intent inferred from evidence (no stop to ask), and alongside it a same-session side project kept apart and reported only if verified, plus a bigger version planned whole (must be, needs, learned, working whole), suggested with a launch prompt and built after the request only when a multi-session skill is also named; missing inputs approximated with validation or built in the side project or bigger version; targets near the limit stated as floors with a quality bar; a two-way Check the aim; rewrites keep the original ask intact; a closing report that opens with what was asked and delivered, with an anti-gaming check; 'launches agents the user did not name' added to ask-first; pstack's line on leaving the user's choices open; a hand-off table to learning-workspace, solutionize, council (including council as an ambition panel), greenfield, the evidence loops, fanout, orchestrate, delegate, create-verification-skill and frame-change; examples and combined-usage prompts in references/examples.md. Front matter license and metadata keys moved to NOTICE.md and this record."
+      },
+      "source": "skills/be-ambitious"
+    },
+    "colab-jobs": {
+      "dependencies": [],
+      "effect_ceiling": "external-write",
+      "evaluation_profile": "authenticated-colab-weaker-agent-e2e",
+      "install_targets": [
+        "~/.agents/skills/colab-jobs"
+      ],
+      "lifecycle": "experimental",
+      "ownership": "custom",
+      "provenance": {
+        "license": "owner-authored",
+        "origin": "owner-requested-2026-11-22",
+        "revision": "2026-11-22-initial",
+        "local_modifications": "Refined from two proposals (PLANS/SKILLS/2026-11-21-colab-jobs-skill/) into PLANS/SKILLS/2026-11-22-colab-jobs-skill-plan.md after checking every claim against the installed google-colab-cli 0.8.0 source and a live CPU runtime. One standard-library helper (scripts/colab_job.py) over the official colab CLI with nine commands (doctor, up, push, install, run, wait, logs, pull, down); jobs run detached on the VM under a small runner (scripts/vm_ops.py) that records the exit code, so exec's always-zero status, idle timeouts and agent tool timeouts cannot hide an outcome; a local lease stops forgotten sessions; CLI output is redacted because a failed upload prints the runtime token. Explicit-only because it spends compute units on the owner's account."
+      },
+      "source": "skills/colab-jobs"
+    }
+  }
+}

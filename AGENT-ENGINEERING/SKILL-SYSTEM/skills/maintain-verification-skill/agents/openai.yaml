@@ -1,0 +1,6 @@
+interface:
+  display_name: "Maintain Verification Skill"
+  short_description: "Reconcile and re-drive affected verification paths"
+  default_prompt: "Use $maintain-verification-skill to reconcile and re-drive the existing verification recipe and its owned helpers affected by this change."
+policy:
+  allow_implicit_invocation: true

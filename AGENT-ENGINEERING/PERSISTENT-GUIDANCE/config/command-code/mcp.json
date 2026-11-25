@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "claude_in_chrome": {
+      "transport": "stdio",
+      "command": "@HOME@/.local/bin/claude",
+      "args": [
+        "--claude-in-chrome-mcp"
+      ]
+    }
+  }
+}

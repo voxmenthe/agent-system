@@ -1,0 +1,82 @@
+#!/usr/bin/env python3
+"""List the installed skills, read live from the directory this skill is installed in.
+
+    catalog              one line per skill: name, explicit or auto, brief description
+    catalog NAME...      each named skill's full front-matter description
+    catalog --full       every skill's full front-matter description
+
+explicit: runs only when invoked by name ($name in Codex, /name in Claude Code), and
+hosts leave it out of the agent's own skill list. auto: the agent may also load it on
+its own when the task matches its description.
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import re
+import sys
+from pathlib import Path
+
+SKILLS = Path(__file__).resolve().parents[2]
+SHORT = re.compile(r'^\s+short_description:\s*(".*")\s*$', re.M)
+
+
+def _value(raw: str) -> str:
+    # Skill-system front matter has one key per line; a quoted value is a JSON string.
+    return json.loads(raw) if raw.startswith('"') else raw
+
+
+def read_skill(root: Path) -> dict[str, str]:
+    path = root / "SKILL.md"
+    text = path.read_text()
+    end = text.find("\n---\n", 4)
+    if not text.startswith("---\n") or end == -1:
+        raise ValueError(f"no front matter in {path}")
+    fields = {}
+    for line in text[4:end].splitlines():
+        key, _, raw = line.partition(":")
+        fields[key.strip()] = _value(raw.strip())
+    if "description" not in fields:
+        raise ValueError(f"no description in {path}")
+    fields["mode"] = "explicit" if fields.get("disable-model-invocation") == "true" else "auto"
+    return fields
+
+
+def read_short(root: Path) -> str:
+    path = root / "agents/openai.yaml"
+    match = SHORT.search(path.read_text())
+    if not match:
+        raise ValueError(f"no short_description in {path}")
+    return json.loads(match[1])
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(
+        prog="catalog", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    parser.add_argument("names", nargs="*", metavar="NAME", help="print these skills' full descriptions")
+    parser.add_argument("--full", action="store_true", help="print every skill's full description")
+    args = parser.parse_args()
+    roots = sorted(path for path in SKILLS.iterdir() if (path / "SKILL.md").is_file())
+    if args.names:
+        installed = {root.name: root for root in roots}
+        if missing := [name for name in args.names if name not in installed]:
+            raise ValueError(f"no installed skill named {', '.join(missing)} in {SKILLS}")
+        roots = [installed[name] for name in args.names]
+    if args.names or args.full:
+        for root in roots:
+            skill = read_skill(root)
+            print(f"{root.name} · {skill['mode']}\n  {skill['description']}")
+        return 0
+    print(f"{len(roots)} skills in {SKILLS} (name · explicit or auto · brief description)")
+    for root in roots:
+        print(f"{root.name} · {read_skill(root)['mode']} · {read_short(root)}")
+    return 0
+
+
+if __name__ == "__main__":
+    try:
+        sys.exit(main())
+    except (OSError, ValueError) as error:
+        print(f"catalog: {error}", file=sys.stderr)
+        sys.exit(2)

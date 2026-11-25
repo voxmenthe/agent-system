@@ -1,0 +1,271 @@
+tap "gitkb/tap"
+tap "jundot/omlx", "https://github.com/jundot/omlx"
+tap "lightonai/tap"
+tap "stablyai/orca", trusted: { casks: ["orca"] }
+# ANSI HTML adapter
+brew "aha"
+# Code searching, linting, rewriting
+brew "ast-grep"
+# Automatic configure script builder
+brew "autoconf"
+# Tool for generating GNU Standards-compliant Makefiles
+brew "automake"
+# Library for command-line editing
+brew "readline"
+# Bourne-Again SHell, a UNIX command interpreter
+brew "bash"
+# Programmable completion for Bash 3.2
+brew "bash-completion", link: false
+# Programmable completion for Bash 4.2+
+brew "bash-completion@2"
+# Cryptography and SSL/TLS Toolkit
+brew "openssl@3"
+# Clone of cat(1) with syntax highlighting and Git integration
+brew "bat"
+# Software library to render fonts
+brew "freetype"
+# Core application library for C
+brew "glib"
+# OpenType text shaping engine
+brew "harfbuzz"
+# General-purpose data compression with high compression ratio
+brew "xz"
+# Remove large files or passwords from Git history like git-filter-branch
+brew "bfg"
+# Parser generator
+brew "bison"
+# Portable Foreign Function Interface library
+brew "libffi"
+# Open-source, cross-platform JavaScript runtime environment
+brew "node"
+# Secure and free password manager for all of your devices
+brew "bitwarden-cli"
+# New way to see and navigate directory trees
+brew "broot"
+# Ruby environment tool
+brew "chruby"
+# Manage multiple AI agents like Claude Code, Aider and Codex in your terminal
+brew "claude-squad"
+# Wrap Gemini CLI, Codex, Claude Code, Qwen Code as an API service
+brew "cliproxyapi"
+# Cross-platform make
+brew "cmake"
+# Container runtimes on MacOS (and Linux) with minimal setup
+brew "colima"
+# GNU File, Shell, and Text utilities
+brew "coreutils"
+# Get a file from an HTTP, HTTPS or FTP server
+brew "curl"
+# Secure runtime for JavaScript and TypeScript
+brew "deno"
+# Good-lookin' diffs with diff-highlight and more
+brew "diff-so-fancy"
+# Diff that understands syntax
+brew "difftastic"
+# Run arbitrary commands when files change
+brew "entr"
+# Modern, maintained replacement for ls
+brew "eza"
+# Fast, partial replacement for codemod (find/replace tool for programmers)
+brew "fastmod"
+# Simple, fast and user-friendly alternative to find
+brew "fd"
+# High quality MPEG Audio Layer III (MP3) encoder
+brew "lame"
+# VP8/VP9 video codec
+brew "libvpx"
+# Audio codec
+brew "opus"
+# Play, record, convert, and stream select audio and video codecs
+brew "ffmpeg"
+# Secure hashing function
+brew "libb2"
+# Vorbis general audio compression codec
+brew "libvorbis"
+# High quality, one-dimensional sample-rate conversion library
+brew "libsoxr"
+# Audio time stretcher tool and library
+brew "rubberband"
+# Play, record, convert, and stream audio and video
+brew "ffmpeg@6"
+# Monitor a directory for changes and run a shell command
+brew "fswatch"
+# Command-line fuzzy finder written in Go
+brew "fzf"
+# LLVM's OpenMP runtime library
+brew "libomp"
+# GitHub command-line tool
+brew "gh"
+# Distributed revision control system
+brew "git"
+# Automatic git commit --fixup
+brew "git-absorb"
+# Syntax-highlighting pager for git and diff output
+brew "git-delta"
+# Quickly rewrite git repository history
+brew "git-filter-repo"
+# Git extension for versioning large files
+brew "git-lfs"
+# Git blame for file trees
+brew "git-who"
+# Git LFS plugin that uploads and downloads using the Xet protocol
+brew "git-xet"
+# Render markdown on the CLI
+brew "glow"
+# GNU Privacy Guard (OpenPGP)
+brew "gnupg"
+# Open source programming language to build simple/reliable/efficient software
+brew "go"
+# Generic library support script
+brew "libtool"
+# Graph visualization software from AT&T and Bell Labs
+brew "graphviz"
+# Popular GNU data compression program
+brew "gzip"
+# Tools and libraries to manipulate images in select formats
+brew "imagemagick"
+# Git-compatible distributed version control system
+brew "jj"
+# Lightweight and flexible command-line JSON processor
+brew "jq"
+# Simple terminal UI for git commands
+brew "lazygit"
+# Input filter for the pager less
+brew "lesspipe"
+# YAML Parser
+brew "libyaml"
+# Scalable, high-performance WebRTC server
+brew "livekit"
+# Cross-platform library for audio I/O
+brew "portaudio"
+# Command-line interface to LiveKit
+brew "livekit-cli"
+# LLM inference in C/C++
+brew "llama.cpp"
+# Apple Silicon Monitor Top written in Go Lang
+brew "mactop"
+# CLI for Mermaid library
+brew "mermaid-cli"
+# Netwide Assembler (NASM) is an 80x86 assembler
+brew "nasm"
+# Manage multiple Node.js versions
+brew "nvm"
+# Development kit for the Java programming language
+brew "openjdk@21"
+# Swiss-army knife of markup format conversion
+brew "pandoc"
+# Execute binaries from Python packages in isolated environments
+brew "pipx"
+# Package compiler and linker metadata toolkit
+brew "pkgconf"
+# PDF rendering library (based on the xpdf-3.0 code base)
+brew "poppler"
+# Python version management
+brew "pyenv"
+# Easily download, build, install, upgrade, and uninstall Python packages
+brew "python-setuptools"
+# Interpreted, interactive, object-oriented programming language
+brew "python@3.12"
+# Interpreted, interactive, object-oriented programming language
+brew "python@3.13"
+# Interpreted, interactive, object-oriented programming language
+brew "python@3.14"
+# Rsync for cloud storage
+brew "rclone"
+# Perl-powered file rename script with many helpful built-ins
+brew "rename"
+# Pack repository contents into a single AI-friendly file
+brew "repomix"
+# Fast, efficient and secure backup program
+brew "restic"
+# Search tool like grep and The Silver Searcher
+brew "ripgrep"
+# Utility that provides fast incremental file transfer
+brew "rsync"
+# CLI proxy to minimize LLM token consumption
+brew "rtk"
+# Install Ruby, JRuby, Rubinius, TruffleRuby, or mruby
+brew "ruby-install"
+# Unsupervised text tokenizer and detokenizer
+brew "sentencepiece"
+# Static analysis and lint tool, for (ba)sh scripts
+brew "shellcheck"
+# Compressed read-only file system for Linux
+brew "squashfs"
+# Cross-shell prompt for astronauts
+brew "starship"
+# Change macOS audio source from the command-line
+brew "switchaudio-osx"
+# Tool Command Language
+brew "tcl-tk@8"
+# Modernized, complete, self-contained TeX/LaTeX engine
+brew "tectonic"
+# Terminal multiplexer
+brew "tmux"
+# Display directories as trees (with optional color/HTML output)
+brew "tree"
+# Extremely fast Python package installer and resolver, written in Rust
+brew "uv"
+# Executes a program periodically, showing output fullscreen
+brew "watch"
+# Watch files and take action when they change
+brew "watchman"
+# Convert HTML to PDF
+brew "weasyprint"
+# Internet file retriever
+brew "wget"
+# Generate your Xcode project from a spec file and your folder structure
+brew "xcodegen"
+# Modular BSD reimplementation of NASM
+brew "yasm"
+# Process YAML, JSON, XML, CSV and properties documents from the CLI
+brew "yq"
+# General-purpose lossless data-compression library
+brew "zlib"
+# Git-native knowledge base with AI-powered code intelligence
+brew "gitkb/tap/gitkb", trusted: true
+# LLM inference server optimized for Apple Silicon
+brew "jundot/omlx/omlx"
+# Semantic code search powered by ColBERT
+brew "lightonai/tap/colgrep", trusted: true
+# Full TeX Live distribution without GUI applications
+cask "mactex-no-gui"
+# Reverse proxy, secure introspectable tunnels to localhost
+cask "ngrok"
+# Open-source software for live streaming and screen recording
+cask "obs"
+# Scientific and technical publishing system built on Pandoc
+cask "quarto"
+# Multiplayer code editor
+cask "zed"
+go "github.com/golangci/golangci-lint/cmd/golangci-lint"
+go "golang.org/x/tools/gopls"
+go "honnef.co/go/tools/cmd/staticcheck"
+cargo "colgrep"
+cargo "sgrep", source: "https://github.com/context-dot-dev/sgrep"
+uv "browser-use"
+uv "cased-kit[all]"
+uv "council"
+uv "foreach-doc"
+uv "google-colab-cli"
+uv "harbor"
+uv "herenow"
+uv "issue-tracker"
+uv "jeffs-prompt-tools"
+uv "modal"
+uv "numpy"
+uv "parakeet-mlx"
+uv "scoped-omem"
+uv "ztools"
+npm "@earendil-works/pi-coding-agent"
+npm "@openai/codex"
+npm "code-functional-search"
+npm "code-search-jev-v2"
+npm "code-search-jev-v3"
+npm "code-search-jev-v4"
+npm "code-search-jev-v5"
+npm "code-search-jev-v6"
+npm "code-search-jev"
+npm "command-code"
+npm "jev-code-search"
+npm "swe-code-cli-searcher"

@@ -1,0 +1,6 @@
+interface:
+  display_name: "Synthesize Market State"
+  short_description: "Maintain recurring market regime state"
+  default_prompt: "Use $synthesize-market-state to produce a recurring market synthesis and safely update the durable state ledger."
+policy:
+  allow_implicit_invocation: false

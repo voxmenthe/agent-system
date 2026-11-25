@@ -1,0 +1,7 @@
+interface:
+  display_name: "GPT Context"
+  short_description: "Seed context files in ChatGPT Chat mode, never Work"
+  default_prompt: "Use $gpt-context to upload these files into a new ChatGPT conversation in Chat mode, never Work."
+
+policy:
+  allow_implicit_invocation: false

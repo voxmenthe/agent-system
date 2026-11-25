@@ -1,0 +1,6 @@
+interface:
+  display_name: "Poteto"
+  short_description: "Assess, build, verify and hand off one feature"
+  default_prompt: "Use $poteto with $implement-change to deliver this feature under the stated repository and PR authority."
+policy:
+  allow_implicit_invocation: false

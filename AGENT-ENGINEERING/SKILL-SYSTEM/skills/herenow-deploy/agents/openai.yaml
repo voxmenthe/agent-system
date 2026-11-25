@@ -1,0 +1,7 @@
+interface:
+  display_name: "HereNow Deploy"
+  short_description: "Publish and verify a static site on HereNow"
+  default_prompt: "Use $herenow-deploy to publish this static site to my HereNow account and verify the result."
+
+policy:
+  allow_implicit_invocation: false

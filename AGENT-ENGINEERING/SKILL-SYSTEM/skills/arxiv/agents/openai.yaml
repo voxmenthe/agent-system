@@ -1,0 +1,7 @@
+interface:
+  display_name: "arXiv Research"
+  short_description: "Research arXiv with two complementary MCPs"
+  default_prompt: "Use $arxiv to find, read, and synthesize the best arXiv evidence for this question."
+
+policy:
+  allow_implicit_invocation: false

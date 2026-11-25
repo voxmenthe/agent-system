@@ -1,0 +1,7 @@
+interface:
+  display_name: "Evidence Loop Judged"
+  short_description: "Improve fuzzy outcomes with independent judges"
+  default_prompt: "Use $evidence-driven-loop-judged to improve this fuzzy-evidence task with independent subagent judges and human escalation when needed."
+
+policy:
+  allow_implicit_invocation: false

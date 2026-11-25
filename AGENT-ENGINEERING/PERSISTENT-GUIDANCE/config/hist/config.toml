@@ -1,0 +1,69 @@
+# hist configuration: copy to ~/.hist/config.toml and edit the roots.
+# Transcript locations come only from this file. Roots may not overlap.
+
+[[sources]]                        # one entry per host installation or account
+adapter = "codex"
+label = "codex"                    # shown in message headers and `hist status`
+roots = ["~/.codex", "~/.codex-state", "~/.codex-par", "~/.codex-state-par"]
+
+[[sources]]
+adapter = "codex"
+label = "codex2"                   # a second Codex account
+roots = ["~/.codex2", "~/.codex-state2"]
+
+[[sources]]                        # API-key account (cdxk / --api-key): CODEX_HOME
+adapter = "codex"                  # plus per-repo homes under CODEX_STATE_ROOT
+label = "codex-api"
+roots = ["~/.codex-api", "~/.codex-state-api"]
+
+[[sources]]
+adapter = "claude"
+label = "claude"
+roots = ["~/.claude/projects"]
+
+[[sources]]
+adapter = "commandcode"
+label = "commandcode"
+roots = ["~/.commandcode/projects"]
+
+[[sources]]                        # holds opencode.db
+adapter = "opencode"
+label = "opencode"
+roots = ["~/.local/share/opencode"]
+
+[[sources]]                        # holds sessions.db
+adapter = "devin"
+label = "devin"
+roots = ["~/.local/share/devin/cli"]
+
+[[sources]]                        # the CLI's store, not the IDE's ~/.gemini/antigravity
+adapter = "antigravity"
+label = "antigravity"
+roots = ["~/.gemini/antigravity-cli"]
+
+[[sources]]                        # second Antigravity account (HOME=~/.agy2)
+adapter = "antigravity"
+label = "antigravity2"
+roots = ["~/.agy2/.gemini/antigravity-cli"]
+
+[[sources]]                        # Kimi Code: each home holding sessions/, up to four levels down
+adapter = "kimi"
+label = "kimi"
+roots = ["~/.kimi-code", "~/.kimi-code-state"]
+
+[discovery]
+# Scanned only to report session stores that no source claims.
+watch = ["~/.codex*", "~/.claude*", "~/.commandcode*", "~/.kimi*", "~/.grok*", "~/.local/share/opencode", "~/.agy2*"]
+exclude = []                       # paths or repositories never indexed
+
+[view]
+bytes = 8000
+worker = "header"                  # what a worker gets at start: header, view, or none
+# inject (the repositories shown the history view, or "all") is set per machine
+# in ~/.hist/config.toml; sync keeps that value.
+
+[summaries]
+# command = ["hist", "summarize", "devin"]  # or any hist-summarize/1 command; absent: outlines only
+timelines = []                     # timelines opted in to model-written summaries
+max_concurrency = 4
+max_attempts_per_day = 2000

@@ -1,0 +1,88 @@
+{
+  "schema_version": 2,
+  "packs": {
+    "memory": {
+      "file": "packs/memory.md",
+      "description": "Cross-session memory startup, fallible recall, candidate observations with trigger context, and explicit consolidation maintenance. Applies independently alongside task-specific packs.",
+      "applies_to": "all primary sessions; prior context; durable notes; handoff maintenance",
+      "load_before": "session start / handoff",
+      "risk": "elevated",
+      "dependencies": []
+    },
+    "implementation": {
+      "file": "packs/implementation.md",
+      "description": "Production code, executable configuration, scripts, dependencies, bug fixes, and implementation review. Not for prose-only changes.",
+      "applies_to": "production code/config/scripts; implementation or bug-fix work",
+      "load_before": "edit",
+      "risk": "normal",
+      "dependencies": []
+    },
+    "testing": {
+      "file": "packs/testing.md",
+      "description": "Every production behavior change, bug fix, risky refactor, public contract change, migration, concurrency change, or test edit.",
+      "applies_to": "behavior changes, bugs, tests, contracts, migrations, concurrency",
+      "load_before": "plan/edit",
+      "risk": "normal",
+      "dependencies": []
+    },
+    "architecture": {
+      "file": "packs/architecture.md",
+      "description": "Cross-module or subsystem design, public interfaces, domain models, new modules, deep-module work, broad refactors, abstractions, or load-bearing performance.",
+      "applies_to": "cross-module/public interface/new module/deep module/broad refactor/abstraction",
+      "load_before": "plan",
+      "risk": "elevated",
+      "dependencies": [
+        "implementation",
+        "testing"
+      ]
+    },
+    "python": {
+      "file": "packs/python.md",
+      "description": "Python source, packaging, pyproject or lock files, Python tests, typing, linting, or uv-based commands.",
+      "applies_to": "Python/pyproject/uv/pytest artifacts or commands",
+      "load_before": "edit/execute",
+      "risk": "normal",
+      "dependencies": [
+        "implementation"
+      ]
+    },
+    "git": {
+      "file": "packs/git.md",
+      "description": "Git mutation, staging, commits, history changes, deletion or restoration, publication, diff review, or multi-actor worktree coordination.",
+      "applies_to": "commit/rebase/reset/restore/delete/push/PR/diff coordination",
+      "load_before": "git mutation",
+      "risk": "high",
+      "dependencies": []
+    },
+    "docs": {
+      "file": "packs/docs.md",
+      "description": "Markdown, READMEs, setup or run instructions, durable docs, comments, docstrings, CLI help, or prose source-of-truth changes.",
+      "applies_to": "docs/README/setup/comments/docstrings/CLI help",
+      "load_before": "edit",
+      "risk": "normal",
+      "dependencies": []
+    },
+    "data-safety": {
+      "file": "packs/data-safety.md",
+      "description": "Schemas, migrations, backfills, transactions, durable state, serialization or wire formats, caches across deploys, or compatibility that can lose or reinterpret data.",
+      "applies_to": "schema/migration/backfill/persistence/transaction/wire format",
+      "load_before": "plan",
+      "risk": "high",
+      "dependencies": [
+        "architecture",
+        "git"
+      ]
+    },
+    "concurrency": {
+      "file": "packs/concurrency.md",
+      "description": "Async tasks, threads, processes, locks, queues, workers, schedulers, cancellation, shared state, parallelism, or distributed coordination.",
+      "applies_to": "async/thread/process/lock/queue/worker/race/cancellation",
+      "load_before": "plan",
+      "risk": "high",
+      "dependencies": [
+        "architecture",
+        "testing"
+      ]
+    }
+  }
+}

@@ -1,0 +1,71 @@
+{
+  "permissions": {
+    "allow": [
+      "Shell(cmd --version 2>&1; echo \"---\"; npm --loglevel=silent view command-code version 2>&1)",
+      "Shell(cmd:*)",
+      "Shell(mkdir -p \"$COMMANDCODE_SCRATCHPAD\" && cat > \"$COMMANDCODE_SCRATCHPAD/cmd_usage_test.exp\" <<'EXPECT' set timeout 30 log_user 1 spawn -noecho sh -c {cd \"$HOME\" && stty rows 30 columns 100 && exec cmd} expect { -re {>} {} timeout { puts stderr \"TIMED OUT waiting for prompt\"; exit 1 } eof { puts stderr \"CMD EXITED EARLY\"; exit 1 } } sleep 2 send -- \"/usage\\r\" expect { -re {([Uu]sage|credits|Credits|plan|Plan)} {} timeout { puts stderr \"TIMED OUT reading usage\"; exit 1 } eof { puts stderr \"CMD EXITED before usage\"; exit 1 } } sleep 4 send -- \"/exit\\r\" expect eof EXPECT /usr/bin/expect \"$COMMANDCODE_SCRATCHPAD/cmd_usage_test.exp\" 2>&1 | head -80)",
+      "Shell(cat > \"$COMMANDCODE_SCRATCHPAD/cmd_usage_test.exp\" <<'EXPECT' set timeout 30 log_user 1 spawn -noecho sh -c {cd \"$HOME\" && stty rows 40 columns 100 && exec cmd} expect { -re {Ask your question} {} timeout { puts stderr \"TIMED OUT waiting for prompt\"; exit 1 } eof { puts stderr \"CMD EXITED EARLY\"; exit 1 } } sleep 3 send -- \"/usage\\r\" expect { -re {redits} {} timeout { puts stderr \"TIMED OUT reading usage\"; exit 1 } eof { puts stderr \"CMD EXITED before usage\"; exit 1 } } sleep 3 send -- \"/exit\\r\" expect eof EXPECT /usr/bin/expect \"$COMMANDCODE_SCRATCHPAD/cmd_usage_test.exp\" 2>&1 | tail -60)",
+      "Shell(cat > \"$COMMANDCODE_SCRATCHPAD/cmd_usage_test.exp\" <<'EXPECT' set timeout 40 log_user 1 spawn -noecho sh -c {cd \"$HOME\" && stty rows 40 columns 100 && exec cmd} expect { -re {for shortcuts} {} timeout { puts stderr \"TIMED OUT waiting for prompt\"; exit 1 } eof { puts stderr \"CMD EXITED EARLY\"; exit 1 } } sleep 3 send -- \"/usage\\r\" sleep 6 send -- \"/exit\\r\" expect eof EXPECT /usr/bin/expect \"$COMMANDCODE_SCRATCHPAD/cmd_usage_test.exp\" 2>&1 | sed 's/\\x1b\\[[0-9;?]*[ -/]*[@-~]//g' | grep -v '^\\s*$' | tail -50)",
+      "Shell(cat > \"$COMMANDCODE_SCRATCHPAD/cmd_usage_test.exp\" <<'EXPECT' set timeout 40 log_user 1 spawn -noecho sh -c {cd \"$HOME\" && stty rows 40 columns 100 && exec cmd} expect { -re {for shortcuts} {} timeout { puts stderr \"TIMED OUT waiting for prompt\"; exit 1 } eof { puts stderr \"CMD EXITED EARLY\"; exit 1 } } sleep 3 send -- \"/usage\\n\" sleep 6 send -- \"/exit\\n\" expect eof EXPECT /usr/bin/expect \"$COMMANDCODE_SCRATCHPAD/cmd_usage_test.exp\" 2>&1 | sed 's/\\x1b\\[[0-9;?]*[ -/]*[@-~]//g' | grep -v '^\\s*$' | tail -60)",
+      "Shell(cat > \"$COMMANDCODE_SCRATCHPAD/cmd_usage_test.exp\" <<'EXPECT' set timeout 40 log_user 1 spawn -noecho sh -c {cd \"$HOME\" && stty rows 40 columns 100 && exec cmd} expect { -re {\\x1b\\]11;\\?\\x07} { send -- \"\\x1b\\]11;rgb:2828/2828/2828\\x07\"; exp_continue } -re {\\x1b\\]11;\\?\\x1b\\\\} { send -- \"\\x1b\\]11;rgb:2828/2828/2828\\x1b\\\\\"; exp_continue } -re {for shortcuts} {} timeout { puts stderr \"TIMED OUT waiting for prompt\"; exit 1 } eof { puts stderr \"CMD EXITED EARLY\"; exit 1 } } sleep 3 send -- \"/usage\\r\" sleep 8 send -- \"/exit\\r\" sleep 3 send -- \"\\x03\" expect eof EXPECT /usr/bin/expect \"$COMMANDCODE_SCRATCHPAD/cmd_usage_test.exp\" 2>&1 | sed 's/\\x1b\\[[0-9;?]*[ -/]*[@-~]//g' | grep -v '^\\s*$' | tail -60)",
+      "Shell(cat > \"$COMMANDCODE_SCRATCHPAD/cmd_usage_test.exp\" <<'EXPECT' set timeout 40 log_user 1 spawn -noecho sh -c {cd \"$HOME\" && stty rows 40 columns 100 && exec cmd} expect { -re {for shortcuts} {} timeout { puts stderr \"TIMED OUT waiting for prompt\"; exit 1 } eof { puts stderr \"CMD EXITED EARLY\"; exit 1 } } sleep 3 send -- \"hi\\r\" sleep 10 send -- \"/exit\\r\" sleep 3 expect eof EXPECT /usr/bin/expect \"$COMMANDCODE_SCRATCHPAD/cmd_usage_test.exp\" 2>&1 | sed 's/\\x1b\\[[0-9;?]*[ -/]*[@-~]//g' | grep -v '^\\s*$' | tail -40)",
+      "Shell(cat > \"$COMMANDCODE_SCRATCHPAD/cmd_usage_test.exp\" <<'EXPECT' set timeout 40 log_user 1 spawn -noecho sh -c {cd \"$HOME\" && stty rows 40 columns 100 && exec cmd} expect { -re {for shortcuts} {} timeout { puts stderr \"TIMED OUT waiting for prompt\"; exit 1 } eof { puts stderr \"CMD EXITED EARLY\"; exit 1 } } sleep 3 send -- \"/usage\" sleep 2 send -- \"\\r\" sleep 10 send -- \"/exit\" sleep 1 send -- \"\\r\" sleep 3 expect eof EXPECT /usr/bin/expect \"$COMMANDCODE_SCRATCHPAD/cmd_usage_test.exp\" 2>&1 | sed 's/\\x1b\\[[0-9;?]*[ -/]*[@-~]//g' | grep -v '^\\s*$' | tail -45)",
+      "Shell(grep:*)",
+      "Shell(B=@HOME@/.nvm/versions/node/v22.20.0/lib/node_modules/command-code/dist;:*)",
+      "Shell(cat > \"$COMMANDCODE_SCRATCHPAD/probe.exp\" <<'EXPECT' set timeout 15 log_user 0 spawn -noecho sh -c {cd \"$HOME\" && stty rows 40 columns 100 && exec cmd} expect { -re {for shortcuts} {} timeout { exit 1 } } sleep 2 send -- \"\\x04\" expect eof EXPECT /usr/bin/expect \"$COMMANDCODE_SCRATCHPAD/probe.exp\" 2>&1 | grep -oE '\\x1b\\[>[0-9;]*[a-zA-Z]|\\x1b\\[=|\\x1b\\[\\?[0-9;]*[hl]' | sort -u)",
+      "Shell(script:*)",
+      "Shell(sed:*)",
+      "Shell(sleep:*)",
+      "Shell(kill:*)",
+      "Shell(pkill:*)",
+      "Shell(cat > \"$COMMANDCODE_SCRATCHPAD/panel.exp\" <<'EXPECT' set timeout 25 log_user 0 log_file -a $env(COMMANDCODE_SCRATCHPAD)/panel.log spawn -noecho sh -c {cd \"$HOME\" && stty rows 40 columns 100 && exec cmd \"/usage\"} expect { -re {redits|Plan|plan} {} timeout { puts stderr \"TIMED OUT waiting for panel\"; exit 1 } eof { puts stderr \"CMD EXITED EARLY\"; exit 1 } } sleep 5 exit 0 EXPECT rm -f \"$COMMANDCODE_SCRATCHPAD/panel.log\"; /usr/bin/expect \"$COMMANDCODE_SCRATCHPAD/panel.exp\"; sed 's/\\x1b\\[[0-9;?]*[ -/]*[@-~]//g' \"$COMMANDCODE_SCRATCHPAD/panel.log\" | grep -v '^[[:space:]]*$' | tail -40)",
+      "Shell(pgrep:*)",
+      "Shell(LOG=\"$COMMANDCODE_SCRATCHPAD/panel.log\"; ls -la \"$LOG\" 2>/dev/null; esc=$'\\033'; bel=$'\\007'; csi_re=\"${esc}\\\\[[0-9;?]*[ -/]*[@-~]\"; osc_re=\"${esc}\\\\][^${esc}${bel}]*(${bel}|${esc}\\\\\\\\)\"; sed -E \"s/${osc_re}//g; s/${csi_re}//g; s/${esc}//g\" \"$LOG\" | tr -d '\\000\\r' | grep -a -v '^[[:space:]]*$' | cat -A | tail -14)",
+      "Shell(bash -n ~/.bash_functions)",
+      "Shell(bash -n ~/.bash_agents)",
+      "Shell(bash -c 'source ~/.bash_functions; __mup_installed_version command-code; __mup_latest_version command-code')",
+      "Shell(bash -c 'source ~/.bash_functions; usage' 2>&1 | tail -30)",
+      "Shell(bash -n ~/.bash_agents && echo OK; bash -c ' # verify pipefail preserves a failing expect status through the tr pipeline r=\"$(set -o pipefail; { /usr/bin/expect -c \"exit 3\"; } | tr -d \"\\000\")\"; echo \"fail-case status: $?\" r=\"$(set -o pipefail; { /usr/bin/expect -c \"puts hello; exit 0\"; } | tr -d \"\\000\")\"; echo \"ok-case status: $?\"; printf \"%s\\n\" \"$r\"')",
+      "Shell(bash -c 'source ~/.bash_functions; usage' 2>&1 | tail -10; echo \"---\"; pgrep -fl 'dist/index.mjs' | grep -v grep; echo \"strays exit: $?\")"
+    ],
+    "deny": [],
+    "defaultMode": "default"
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": ".*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if [ -f '@HOME@/.orca/agent-hooks/command-code-hook.sh' ] && [ -r '@HOME@/.orca/agent-hooks/command-code-hook.sh' ] && [ -x '@HOME@/.orca/agent-hooks/command-code-hook.sh' ]; then /bin/sh '@HOME@/.orca/agent-hooks/command-code-hook.sh'; else { command -p cat 2>/dev/null || cat; } >/dev/null 2>&1 || :; fi",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": ".*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if [ -f '@HOME@/.orca/agent-hooks/command-code-hook.sh' ] && [ -r '@HOME@/.orca/agent-hooks/command-code-hook.sh' ] && [ -x '@HOME@/.orca/agent-hooks/command-code-hook.sh' ]; then /bin/sh '@HOME@/.orca/agent-hooks/command-code-hook.sh'; else { command -p cat 2>/dev/null || cat; } >/dev/null 2>&1 || :; fi",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if [ -f '@HOME@/.orca/agent-hooks/command-code-hook.sh' ] && [ -r '@HOME@/.orca/agent-hooks/command-code-hook.sh' ] && [ -x '@HOME@/.orca/agent-hooks/command-code-hook.sh' ]; then /bin/sh '@HOME@/.orca/agent-hooks/command-code-hook.sh'; else { command -p cat 2>/dev/null || cat; } >/dev/null 2>&1 || :; fi",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}

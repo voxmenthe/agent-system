@@ -1,0 +1,6 @@
+interface:
+  display_name: "Learning Workspace"
+  short_description: "Keep long tasks resumable from local evidence"
+  default_prompt: "Use $learning-workspace to keep this long task resumable from task-local evidence across context loss."
+policy:
+  allow_implicit_invocation: true

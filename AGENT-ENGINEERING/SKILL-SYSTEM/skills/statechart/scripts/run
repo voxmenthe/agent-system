@@ -1,0 +1,41 @@
+#!/bin/sh
+# Runs scripts/statechart on the pinned tla2tools.jar that the formal-verification
+# runner caches, so upstream's mise install (and its network use) never happens.
+# It never downloads anything.
+set -eu
+
+here=$(cd "$(dirname "$0")" && pwd)
+pin=936a262061c914694dfd669a543be24573c45d5aa0ff20a8b96b23d01e050e88
+record="AGENT-ENGINEERING/SKILL-SYSTEM/verification/check, which fetches and pins the jar"
+
+fail() {
+  echo "statechart: $1" >&2
+  echo "See $record." >&2
+  exit 2
+}
+
+TLA2TOOLS=${TLA2TOOLS:-${XDG_CACHE_HOME:-$HOME/.cache}/tla2tools/1.7.4/tla2tools.jar}
+[ -f "$TLA2TOOLS" ] || fail "no tla2tools.jar at $TLA2TOOLS; run any verification/check once to fetch it."
+if command -v sha256sum >/dev/null; then
+  sum=$(sha256sum "$TLA2TOOLS" | cut -d' ' -f1)
+else
+  sum=$(shasum -a 256 "$TLA2TOOLS" | cut -d' ' -f1)
+fi
+[ "$sum" = "$pin" ] || fail "$TLA2TOOLS has sha256 $sum, not the pinned $pin."
+
+# Homebrew's openjdk is keg-only, and macOS's /usr/bin/java is a stub that fails without a JDK.
+if [ -z "${JAVA:-}" ]; then
+  for candidate in "$(command -v java || true)" /opt/homebrew/opt/openjdk*/bin/java /usr/local/opt/openjdk*/bin/java; do
+    if [ -x "$candidate" ] && "$candidate" -version >/dev/null 2>&1; then
+      JAVA=$candidate
+      break
+    fi
+  done
+fi
+[ -n "${JAVA:-}" ] || fail "no Java runtime (TLC needs Java 11+); install one, e.g. brew install openjdk@21."
+
+# Upstream starts Java from a temporary directory, so a relative path must become absolute.
+case $TLA2TOOLS in /*) ;; *) TLA2TOOLS=$PWD/$TLA2TOOLS ;; esac
+case $JAVA in /*) ;; */*) JAVA=$PWD/$JAVA ;; esac
+export TLA2TOOLS JAVA
+exec "$here/statechart" "$@"

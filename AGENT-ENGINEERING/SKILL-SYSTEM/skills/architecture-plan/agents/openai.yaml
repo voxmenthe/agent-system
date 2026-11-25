@@ -1,0 +1,7 @@
+interface:
+  display_name: "Architecture Plan"
+  short_description: "Design deep module boundaries before implementation"
+  default_prompt: "Use $architecture-plan to design this cross-module change outside-in before implementation."
+
+policy:
+  allow_implicit_invocation: true

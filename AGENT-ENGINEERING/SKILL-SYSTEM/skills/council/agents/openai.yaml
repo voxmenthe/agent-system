@@ -1,0 +1,7 @@
+interface:
+  display_name: "Council"
+  short_description: "Blind-judged panel of external models on one task"
+  default_prompt: "Use $council to have a panel of external models answer this task, judged blind, then merge and verify the result."
+
+policy:
+  allow_implicit_invocation: false

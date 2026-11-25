@@ -1,0 +1,7 @@
+interface:
+  display_name: "Evidence Loop Guided"
+  short_description: "Run a guided evidence-driven improvement loop"
+  default_prompt: "Use $evidence-driven-loop-guided to design and run an evidence-driven improvement loop for this task."
+
+policy:
+  allow_implicit_invocation: false

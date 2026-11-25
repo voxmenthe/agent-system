@@ -1,0 +1,8 @@
+{
+  "schema_version": 1,
+  "servers": {
+    "lovable": {
+      "url": "https://mcp.lovable.dev"
+    }
+  }
+}

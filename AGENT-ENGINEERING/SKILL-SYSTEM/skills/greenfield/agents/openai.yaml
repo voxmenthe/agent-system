@@ -1,0 +1,7 @@
+interface:
+  display_name: "Greenfield"
+  short_description: "Plan a parallel spike campaign to de-risk a greenfield project"
+  default_prompt: "Use $greenfield to plan parallel spike work streams that validate the key capabilities of this greenfield project plan."
+
+policy:
+  allow_implicit_invocation: false

@@ -1,0 +1,6 @@
+interface:
+  display_name: "Illustrate CN"
+  short_description: "为中文文章生成小黑怪诞手绘正文配图技能（中文原版）"
+  default_prompt: "Use $illustrate-cn to 为这篇中文文章设计并生成几张小黑怪诞正文配图。"
+policy:
+  allow_implicit_invocation: false

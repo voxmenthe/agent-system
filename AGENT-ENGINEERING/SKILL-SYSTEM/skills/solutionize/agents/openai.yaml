@@ -1,0 +1,7 @@
+interface:
+  display_name: "Solutionize"
+  short_description: "Hunt for a solution someone has already found"
+  default_prompt: "Use $solutionize to hunt for the solution to this problem, and call it solved only when a clean rerun of the check confirms it."
+
+policy:
+  allow_implicit_invocation: false

@@ -1,0 +1,9 @@
+{
+  "artifact": "ruff",
+  "artifact_sha256": "515c8e5e3c8c3cd9785f421e050c98748420aae9a02459b7232c89a46bbadba4",
+  "license": "MIT",
+  "platform": "darwin-arm64",
+  "source_distribution": "ruff-0.16.5 Python wheel installed in the repository validation environment",
+  "upstream": "https://github.com/astral-sh/ruff",
+  "version_output": "ruff 0.16.5"
+}

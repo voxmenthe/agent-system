@@ -1,0 +1,6 @@
+interface:
+  display_name: "Backwards"
+  short_description: "Work backwards from a completed project"
+  default_prompt: "Use $backwards to define an imagined project launch, its PR/FAQ, and the final experience."
+policy:
+  allow_implicit_invocation: false

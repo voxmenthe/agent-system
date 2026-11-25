@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "lovable": {
+      "disabled": false,
+      "serverUrl": "https://mcp.lovable.dev"
+    }
+  }
+}

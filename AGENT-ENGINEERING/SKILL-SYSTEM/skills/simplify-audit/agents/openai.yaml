@@ -1,0 +1,6 @@
+interface:
+  display_name: "Simplify Audit"
+  short_description: "Audit broad systems and plans for simpler paths"
+  default_prompt: "Use $simplify-audit to find the smallest safe operating model for this repository or repository-owned plan."
+policy:
+  allow_implicit_invocation: true

@@ -1,0 +1,6 @@
+interface:
+  display_name: "The New York Times Research"
+  short_description: "Research current and historical NYT coverage"
+  default_prompt: "Use $nyt to survey news or trace a topic across time in my authenticated Chrome session."
+policy:
+  allow_implicit_invocation: false

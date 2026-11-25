@@ -1,0 +1,958 @@
+{
+  "schema_version": 1,
+  "manager_id": "tracking-context-td/persistent-guidance/v1",
+  "state_dir": ".local/state/persistent-guidance",
+  "repository_root": "../..",
+  "edit_guard": "hooks/projection_edit_guard.py",
+  "required_hosts": [
+    "codex",
+    "codex2",
+    "claude",
+    "devin",
+    "cursor",
+    "antigravity",
+    "antigravity2",
+    "grok",
+    "grok2",
+    "grok3",
+    "command-code",
+    "pi",
+    "amp",
+    "kimi",
+    "hist",
+    "memory",
+    "shell"
+  ],
+  "protected_source_paths": [],
+  "projections": [
+    {
+      "id": "codex-kernel",
+      "source": "AGENTS.md",
+      "target": ".codex/AGENTS.md",
+      "hosts": [
+        "codex"
+      ]
+    },
+    {
+      "id": "codex-policy-tree",
+      "source_tree": "policy",
+      "target_tree": ".codex/policy",
+      "include": [
+        "manifest.json",
+        "generated/routing-table.md",
+        "packs/*.md"
+      ],
+      "hosts": [
+        "codex",
+        "codex2",
+        "claude",
+        "devin",
+        "grok",
+        "cursor",
+        "antigravity",
+        "antigravity2",
+        "command-code",
+        "pi",
+        "amp",
+        "kimi",
+        "grok2",
+        "grok3"
+      ]
+    },
+    {
+      "id": "codex2-kernel",
+      "source": "AGENTS.md",
+      "target": ".codex2/AGENTS.md",
+      "hosts": [
+        "codex2"
+      ],
+      "adopt_sha256": [
+        "2fcdb9a02f3b2897fd04cf03d124aa4958f516aa5e055f3ccd0b02f4563b9e3a"
+      ]
+    },
+    {
+      "id": "codex2-policy-tree",
+      "source_tree": "policy",
+      "target_tree": ".codex2/policy",
+      "include": [
+        "manifest.json",
+        "generated/routing-table.md",
+        "packs/*.md"
+      ],
+      "hosts": [
+        "codex2"
+      ],
+      "adopt_sha256": [
+        "146b4dfb2c5be79ed2b3f4bb306d4cf4bc4c72b5d63a42a214939997b01cfc85",
+        "7d410c7c941c1677ea63c2e70a6e5781e651c7b79f92d09dcfb6b48975cebde8",
+        "2dbb08f0ef2b85e7812be329fc1866d282e012a18684c4e35978dcf5af1178a5",
+        "2ed0d330450d55e84a5ff288dfbdd7ef40fe8e9c21dc8993ef6908d0a57a47ba"
+      ]
+    },
+    {
+      "id": "claude-kernel",
+      "source": "AGENTS.md",
+      "target": ".claude/CLAUDE.md",
+      "hosts": [
+        "claude",
+        "devin",
+        "grok",
+        "grok2",
+        "grok3"
+      ],
+      "adopt_sha256": [
+        "749331dcd6740330f453a60c7528dd2912fe7d48d8c66200a030af6b698e81ba"
+      ]
+    },
+    {
+      "id": "cursor-adapter",
+      "source": "adapters/cursor.mdc",
+      "target": ".cursor/rules/persistent-guidance.mdc",
+      "hosts": [
+        "cursor"
+      ]
+    },
+    {
+      "id": "antigravity-global",
+      "source": "AGENTS.md",
+      "target": ".gemini/GEMINI.md",
+      "hosts": [
+        "antigravity"
+      ],
+      "adopt_sha256": [
+        "63cc047dd4902ab0eab3debb5fc5da978965b065af2d289ad2c0b488f7b53187"
+      ]
+    },
+    {
+      "id": "antigravity-desktop",
+      "source": "AGENTS.md",
+      "target": ".gemini/antigravity/GEMINI.md",
+      "hosts": [
+        "antigravity"
+      ],
+      "adopt_sha256": [
+        "63cc047dd4902ab0eab3debb5fc5da978965b065af2d289ad2c0b488f7b53187"
+      ]
+    },
+    {
+      "id": "antigravity-ide",
+      "source": "AGENTS.md",
+      "target": ".gemini/antigravity-ide/GEMINI.md",
+      "hosts": [
+        "antigravity"
+      ],
+      "adopt_sha256": [
+        "63cc047dd4902ab0eab3debb5fc5da978965b065af2d289ad2c0b488f7b53187"
+      ]
+    },
+    {
+      "id": "antigravity2-global",
+      "source": "AGENTS.md",
+      "target": ".agy2/.gemini/GEMINI.md",
+      "hosts": [
+        "antigravity2"
+      ]
+    },
+    {
+      "id": "command-code-kernel",
+      "source": "AGENTS.md",
+      "target": ".commandcode/AGENTS.md",
+      "hosts": [
+        "command-code"
+      ]
+    },
+    {
+      "id": "pi-kernel",
+      "source": "AGENTS.md",
+      "target": ".pi/agent/AGENTS.md",
+      "hosts": [
+        "pi"
+      ]
+    },
+    {
+      "id": "amp-kernel",
+      "source": "AGENTS.md",
+      "target": ".config/amp/AGENTS.md",
+      "hosts": [
+        "amp"
+      ],
+      "adopt_sha256": [
+        "40686d20b7b370434150328b337ecf7392ac3554eaef6f4b86d4a051eb726e6c"
+      ]
+    },
+    {
+      "id": "kimi-kernel",
+      "source": "AGENTS.md",
+      "target": ".kimi-code/AGENTS.md",
+      "hosts": [
+        "kimi"
+      ],
+      "adopt_sha256": [
+        "0b4bf7f7b8281cd54d9d75d318782259df90f85204129e804ccadfb4f8d8ea14"
+      ]
+    },
+    {
+      "id": "claude-config",
+      "source": "config/claude/settings.json",
+      "target": ".claude/settings.json",
+      "hosts": [
+        "claude"
+      ],
+      "independent": true,
+      "host_owned_keys": [
+        [
+          "model"
+        ],
+        [
+          "effortLevel"
+        ],
+        [
+          "modelSettings"
+        ]
+      ]
+    },
+    {
+      "id": "claude-hooks",
+      "source_tree": "hooks",
+      "target_tree": ".claude/hooks/persistent-guidance",
+      "include": [
+        "projection_edit_guard.py",
+        "piped_status_warning.py"
+      ],
+      "hosts": [
+        "claude"
+      ],
+      "independent": true
+    },
+    {
+      "id": "claude-commands",
+      "source_tree": "config/claude/commands",
+      "target_tree": ".claude/commands",
+      "include": [
+        "*.md"
+      ],
+      "hosts": [
+        "claude"
+      ],
+      "independent": true
+    },
+    {
+      "id": "codex-config",
+      "source": "config/codex/config.toml",
+      "target": ".codex/config.toml",
+      "hosts": [
+        "codex"
+      ],
+      "independent": true,
+      "managed_keys": [
+        [
+          "model_context_window"
+        ],
+        [
+          "model_auto_compact_token_limit"
+        ],
+        [
+          "model_auto_compact_token_limit_scope"
+        ],
+        [
+          "tool_output_token_limit"
+        ],
+        [
+          "plan_mode_reasoning_effort"
+        ],
+        [
+          "model_reasoning_summary"
+        ],
+        [
+          "model_verbosity"
+        ],
+        [
+          "experimental_compact_prompt_file"
+        ],
+        [
+          "personality"
+        ],
+        [
+          "memories",
+          "extract_model"
+        ],
+        [
+          "memories",
+          "consolidation_model"
+        ],
+        [
+          "agents"
+        ],
+        [
+          "features",
+          "multi_agent"
+        ],
+        [
+          "features",
+          "multi_agent_v2"
+        ],
+        [
+          "features",
+          "context_management"
+        ],
+        [
+          "mcp_servers",
+          "claude_in_chrome"
+        ],
+        [
+          "mcp_servers",
+          "lovable"
+        ],
+        [
+          "hooks",
+          "UserPromptSubmit"
+        ],
+        [
+          "hooks",
+          "SessionStart"
+        ],
+        [
+          "hooks",
+          "SubagentStart"
+        ],
+        [
+          "shell_environment_policy",
+          "set",
+          "OMEM_HOST"
+        ]
+      ],
+      "shared_mcp": {
+        "format": "codex",
+        "servers": [
+          "lovable"
+        ]
+      }
+    },
+    {
+      "id": "codex-prompts",
+      "source_tree": "config/codex/prompts",
+      "target_tree": ".codex/prompts",
+      "include": [
+        "*.md"
+      ],
+      "hosts": [
+        "codex"
+      ]
+    },
+    {
+      "id": "codex2-config",
+      "source": "config/codex2/config.toml",
+      "target": ".codex2/config.toml",
+      "hosts": [
+        "codex2"
+      ],
+      "independent": true,
+      "managed_keys": [
+        [
+          "model_context_window"
+        ],
+        [
+          "model_auto_compact_token_limit"
+        ],
+        [
+          "model_auto_compact_token_limit_scope"
+        ],
+        [
+          "tool_output_token_limit"
+        ],
+        [
+          "plan_mode_reasoning_effort"
+        ],
+        [
+          "model_reasoning_summary"
+        ],
+        [
+          "model_verbosity"
+        ],
+        [
+          "experimental_compact_prompt_file"
+        ],
+        [
+          "personality"
+        ],
+        [
+          "memories",
+          "extract_model"
+        ],
+        [
+          "memories",
+          "consolidation_model"
+        ],
+        [
+          "agents"
+        ],
+        [
+          "features",
+          "multi_agent"
+        ],
+        [
+          "features",
+          "multi_agent_v2"
+        ],
+        [
+          "features",
+          "context_management"
+        ],
+        [
+          "mcp_servers",
+          "claude_in_chrome"
+        ],
+        [
+          "mcp_servers",
+          "lovable"
+        ],
+        [
+          "hooks",
+          "UserPromptSubmit"
+        ],
+        [
+          "hooks",
+          "SessionStart"
+        ],
+        [
+          "hooks",
+          "SubagentStart"
+        ]
+      ],
+      "shared_mcp": {
+        "format": "codex",
+        "servers": [
+          "lovable"
+        ]
+      }
+    },
+    {
+      "id": "codex2-prompts",
+      "source_tree": "config/codex/prompts",
+      "target_tree": ".codex2/prompts",
+      "include": [
+        "*.md"
+      ],
+      "hosts": [
+        "codex2"
+      ]
+    },
+    {
+      "id": "grok-config",
+      "source": "config/grok/config.toml",
+      "target": ".grok/config.toml",
+      "hosts": [
+        "grok"
+      ],
+      "independent": true,
+      "host_owned_keys": [
+        [
+          "privacy"
+        ]
+      ]
+    },
+    {
+      "id": "grok2-config",
+      "source": "config/grok2/config.toml",
+      "target": ".grok2/config.toml",
+      "hosts": [
+        "grok2"
+      ],
+      "independent": true,
+      "host_owned_keys": [
+        [
+          "privacy"
+        ]
+      ]
+    },
+    {
+      "id": "grok3-config",
+      "source": "config/grok3/config.toml",
+      "target": ".grok3/config.toml",
+      "hosts": [
+        "grok3"
+      ],
+      "independent": true,
+      "host_owned_keys": [
+        [
+          "privacy"
+        ]
+      ]
+    },
+    {
+      "id": "kimi-config",
+      "source": "config/kimi/config.toml",
+      "target": ".kimi-code/config.toml",
+      "hosts": [
+        "kimi"
+      ],
+      "independent": true,
+      "host_owned_keys": [
+        [
+          "models"
+        ],
+        [
+          "default_model"
+        ],
+        [
+          "secondary_model"
+        ]
+      ]
+    },
+    {
+      "id": "kimi-tui-config",
+      "source": "config/kimi/tui.toml",
+      "target": ".kimi-code/tui.toml",
+      "hosts": [
+        "kimi"
+      ],
+      "independent": true,
+      "host_owned_keys": []
+    },
+    {
+      "id": "kimi-mcp-config",
+      "source": "config/kimi/mcp.json",
+      "target": ".kimi-code/mcp.json",
+      "hosts": [
+        "kimi"
+      ],
+      "independent": true,
+      "host_owned_keys": [],
+      "shared_mcp": {
+        "format": "kimi",
+        "servers": [
+          "lovable"
+        ]
+      }
+    },
+    {
+      "id": "antigravity-config",
+      "source": "config/antigravity/settings.json",
+      "target": ".gemini/settings.json",
+      "hosts": [
+        "antigravity"
+      ],
+      "independent": true,
+      "host_owned_keys": [
+        [
+          "ide",
+          "hasSeenNudge"
+        ]
+      ]
+    },
+    {
+      "id": "antigravity-cli-config",
+      "source": "config/antigravity/antigravity-cli/settings.json",
+      "target": ".gemini/antigravity-cli/settings.json",
+      "hosts": [
+        "antigravity"
+      ],
+      "independent": true,
+      "host_owned_keys": [
+        [
+          "model"
+        ],
+        [
+          "trustedWorkspaces"
+        ],
+        [
+          "permissions",
+          "allow"
+        ]
+      ]
+    },
+    {
+      "id": "antigravity2-cli-config",
+      "source": "config/antigravity2/antigravity-cli/settings.json",
+      "target": ".agy2/.gemini/antigravity-cli/settings.json",
+      "hosts": [
+        "antigravity2"
+      ],
+      "independent": true,
+      "host_owned_keys": [
+        [
+          "model"
+        ],
+        [
+          "trustedWorkspaces"
+        ],
+        [
+          "permissions",
+          "allow"
+        ]
+      ]
+    },
+    {
+      "id": "amp-config",
+      "source": "config/amp/settings.json",
+      "target": ".config/amp/settings.json",
+      "hosts": [
+        "amp"
+      ],
+      "independent": true,
+      "host_owned_keys": []
+    },
+    {
+      "id": "cursor-config",
+      "source": "config/cursor/cli-config.json",
+      "target": ".cursor/cli-config.json",
+      "hosts": [
+        "cursor"
+      ],
+      "independent": true,
+      "host_owned_keys": []
+    },
+    {
+      "id": "cursor-hooks-config",
+      "source": "config/cursor/hooks.json",
+      "target": ".cursor/hooks.json",
+      "hosts": [
+        "cursor"
+      ],
+      "independent": true,
+      "host_owned_keys": []
+    },
+    {
+      "id": "command-code-config",
+      "source": "config/command-code/settings.json",
+      "target": ".commandcode/settings.json",
+      "hosts": [
+        "command-code"
+      ],
+      "independent": true,
+      "host_owned_keys": []
+    },
+    {
+      "id": "command-code-mcp-config",
+      "source": "config/command-code/mcp.json",
+      "target": ".commandcode/mcp.json",
+      "hosts": [
+        "command-code"
+      ],
+      "independent": true,
+      "managed_keys": [
+        [
+          "mcpServers",
+          "claude_in_chrome"
+        ]
+      ]
+    },
+    {
+      "id": "pi-models-config",
+      "source": "config/pi/models.json",
+      "target": ".pi/agent/models.json",
+      "hosts": [
+        "pi"
+      ],
+      "independent": true,
+      "host_owned_keys": []
+    },
+    {
+      "id": "devin-config",
+      "source": "config/devin/argv.json",
+      "target": ".devin/argv.json",
+      "hosts": [
+        "devin"
+      ],
+      "independent": true
+    },
+    {
+      "id": "hist-config",
+      "source": "config/hist/config.toml",
+      "target": ".hist/config.toml",
+      "hosts": [
+        "hist"
+      ],
+      "independent": true,
+      "host_owned_keys": [
+        [
+          "view",
+          "inject"
+        ]
+      ]
+    },
+    {
+      "id": "memory-config",
+      "source": "config/memory/config.toml",
+      "target": ".memory-v0/config.toml",
+      "hosts": [
+        "memory"
+      ],
+      "independent": true
+    },
+    {
+      "id": "claude-mcp-config",
+      "source": "config/claude/mcp.json",
+      "target": ".claude.json",
+      "hosts": [
+        "claude"
+      ],
+      "independent": true,
+      "managed_keys": [
+        [
+          "mcpServers",
+          "lovable"
+        ]
+      ],
+      "shared_mcp": {
+        "format": "claude",
+        "servers": [
+          "lovable"
+        ]
+      }
+    },
+    {
+      "id": "antigravity-mcp-config",
+      "source": "config/antigravity/mcp.json",
+      "target": ".gemini/config/mcp_config.json",
+      "hosts": [
+        "antigravity"
+      ],
+      "independent": true,
+      "managed_keys": [
+        [
+          "mcpServers",
+          "lovable"
+        ]
+      ],
+      "shared_mcp": {
+        "format": "antigravity",
+        "servers": [
+          "lovable"
+        ]
+      }
+    },
+    {
+      "id": "devin-mcp-config",
+      "source": "config/devin/mcp.json",
+      "target": ".config/devin/mcp_config.json",
+      "hosts": [
+        "devin"
+      ],
+      "independent": true,
+      "managed_keys": [
+        [
+          "mcpServers",
+          "claude_in_chrome"
+        ],
+        [
+          "mcpServers",
+          "lovable"
+        ]
+      ],
+      "shared_mcp": {
+        "format": "devin",
+        "servers": [
+          "lovable"
+        ]
+      }
+    },
+    {
+      "id": "shell-bash-profile",
+      "source": "../../SHELL/.bash_profile",
+      "target": ".bash_profile",
+      "hosts": [
+        "shell"
+      ],
+      "sync_group": "shell",
+      "adopt_sha256": [
+        "17fc256ec4938cba9da94eb06d7f369140efc1e57512573455dc0dfa04459f1c",
+        "fdbd91bcc97f391c77d04024f9dd9a542a2774f3f7d52d9e77de05a3df0e943d"
+      ]
+    },
+    {
+      "id": "shell-bashrc",
+      "source": "../../SHELL/.bashrc",
+      "target": ".bashrc",
+      "hosts": [
+        "shell"
+      ],
+      "sync_group": "shell",
+      "adopt_sha256": [
+        "33e3afa36a11294f856e662c655cf0c9500b9888dee5d0cf904275c519f87ba3",
+        "c9b01a02074beccb276e4c8ff548d39577c1efad0cd5a751b392444059794a7b"
+      ]
+    },
+    {
+      "id": "shell-bash-agents",
+      "source": "../../SHELL/.bash_agents",
+      "target": ".bash_agents",
+      "hosts": [
+        "shell"
+      ],
+      "sync_group": "shell",
+      "adopt_sha256": [
+        "71c3fbd0d2ff0f9fbe01a3874b8ebc121122bcf46850d3e34027e18b439a0b66"
+      ]
+    },
+    {
+      "id": "shell-bash-functions",
+      "source": "../../SHELL/.bash_functions",
+      "target": ".bash_functions",
+      "hosts": [
+        "shell"
+      ],
+      "sync_group": "shell"
+    },
+    {
+      "id": "shell-bash-aliases",
+      "source": "../../SHELL/.bash_aliases",
+      "target": ".bash_aliases",
+      "hosts": [
+        "shell"
+      ],
+      "sync_group": "shell"
+    },
+    {
+      "id": "shell-bash-git-helpers",
+      "source": "../../SHELL/.bash_git_helpers",
+      "target": ".bash_git_helpers",
+      "hosts": [
+        "shell"
+      ],
+      "sync_group": "shell"
+    },
+    {
+      "id": "shell-git-helpers",
+      "source_tree": "../../SHELL/git-helpers",
+      "target_tree": ".git-helpers",
+      "include": [
+        "*.bash",
+        "*.py",
+        "*.tsv"
+      ],
+      "hosts": [
+        "shell"
+      ],
+      "sync_group": "shell"
+    },
+    {
+      "id": "shell-agent-models",
+      "source": "../../SHELL/agent_models.py",
+      "target": ".local/bin/agent-models",
+      "hosts": [
+        "shell"
+      ],
+      "sync_group": "shell"
+    },
+    {
+      "id": "shell-agent-model-sources",
+      "source": "../../SHELL/agent_model_sources.py",
+      "target": ".local/bin/agent_model_sources.py",
+      "hosts": [
+        "shell"
+      ],
+      "sync_group": "shell"
+    },
+    {
+      "id": "shell-agent-model-picker",
+      "source": "../../SHELL/agent_model_picker.py",
+      "target": ".local/bin/agent_model_picker.py",
+      "hosts": [
+        "shell"
+      ],
+      "sync_group": "shell"
+    },
+    {
+      "id": "shell-agent-model-offers",
+      "source": "../../SHELL/agent_model_offers.json",
+      "target": ".local/bin/agent_model_offers.json",
+      "hosts": [
+        "shell"
+      ],
+      "sync_group": "shell"
+    },
+    {
+      "id": "shell-codex-sessions",
+      "source": "../../SHELL/codex_sessions.py",
+      "target": ".local/bin/codex-sessions",
+      "hosts": [
+        "shell"
+      ],
+      "sync_group": "shell"
+    }
+  ],
+  "retirements": [
+    {
+      "id": "devin-duplicate",
+      "target": ".devin/AGENTS.md",
+      "hosts": [
+        "devin"
+      ],
+      "adopt_sha256": [
+        "749331dcd6740330f453a60c7528dd2912fe7d48d8c66200a030af6b698e81ba"
+      ],
+      "reason": "Devin loads the managed Claude user rule as an always-on compatibility rule."
+    },
+    {
+      "id": "grok-duplicate",
+      "target": ".grok/AGENTS.md",
+      "hosts": [
+        "grok"
+      ],
+      "adopt_sha256": [
+        "749331dcd6740330f453a60c7528dd2912fe7d48d8c66200a030af6b698e81ba"
+      ],
+      "reason": "Grok loads the managed Claude user rule through its enabled Claude compatibility layer."
+    },
+    {
+      "id": "amp-generic-duplicate",
+      "target": ".config/AGENTS.md",
+      "hosts": [
+        "amp"
+      ],
+      "adopt_sha256": [
+        "40686d20b7b370434150328b337ecf7392ac3554eaef6f4b86d4a051eb726e6c"
+      ],
+      "reason": "Amp uses the managed file under its own configuration directory."
+    }
+  ],
+  "releases": [
+    {
+      "target": ".commandcode/config.json",
+      "reason": "Command Code rewrites this file with first-run flags and per-model effort picks; it is host state, not owner configuration."
+    },
+    {
+      "target": ".pi/agent/settings.json",
+      "reason": "Pi rewrites lastChangelogVersion on every upgrade; the pi launch wrappers pin model and thinking level per launch."
+    }
+  ],
+  "shared_consumers": [
+    {
+      "host": "devin",
+      "projection": "claude-kernel",
+      "mechanism": "Claude compatibility; verify with `devin rules list`.",
+      "verification": {
+        "command": [
+          "devin",
+          "rules",
+          "list"
+        ],
+        "stdout_regex": [
+          "(?m)^\\s*CLAUDE \\[Claude\\] always-on\\s*$"
+        ],
+        "stdout_not_regex": []
+      }
+    },
+    {
+      "host": "grok",
+      "projection": "claude-kernel",
+      "mechanism": "Claude compatibility; verify with `grok inspect --json`.",
+      "verification": {
+        "command": [
+          "grok",
+          "inspect",
+          "--json"
+        ],
+        "stdout_regex": [
+          "\\.claude/(?:Claude|CLAUDE)\\.md",
+          "\\\"vendor\\\"\\s*:\\s*\\\"claude\\\"",
+          "\\\"compatibilityStatus\\\"\\s*:\\s*\\\"enabled\\\""
+        ],
+        "stdout_not_regex": [
+          "\\.grok/(?:Agents|AGENTS)\\.md"
+        ]
+      }
+    }
+  ]
+}

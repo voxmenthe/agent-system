@@ -1,0 +1,355 @@
+#!/bin/bash
+# Install or refresh the agent system into $HOME from this checkout.
+# A sequencer: each stage runs an existing manager. Safe to rerun.
+# Runs under macOS /bin/bash 3.2 so it can check for a newer bash itself.
+set -euo pipefail
+
+ROOT=$(cd "$(dirname "$0")" && pwd -P)
+GUIDANCE=$ROOT/AGENT-ENGINEERING/PERSISTENT-GUIDANCE
+SKILLS=$ROOT/AGENT-ENGINEERING/SKILL-SYSTEM
+REVIEW=$ROOT/AGENT-ENGINEERING/REVIEW-HOOK
+DEPS=$ROOT/dependencies.json
+MACHINE_DIR=$HOME/.config/agent-system
+MACHINE=$MACHINE_DIR/machine.json
+SHELL_LOCAL=$MACHINE_DIR/shell.local.sh
+REVIEW_HOSTS="codex kimi antigravity"
+# The skill manager needs Python 3.11 or newer; macOS /usr/bin/python3 is 3.9.
+SKILL_PYTHON=(uv run --quiet --no-project --python ">=3.11" python -B)
+
+dry_run=0 assume_yes=0 hosts_arg="" omem_source=""
+ENABLED="" DESIRED_MACHINE="" MACHINE_PENDING=0
+
+usage() {
+  cat <<'EOF'
+usage: ./bootstrap [--dry-run] [--yes] [--hosts h1,h2,...] [--omem-source URL]
+
+Installs required tools, writes ~/.config/agent-system/machine.json, installs
+OMem (memory, hist), then runs guidance sync, the skill manager and the
+review-hook installer for the enabled hosts, and finishes with ./doctor.
+
+  --dry-run       preview every stage; install and write nothing
+  --yes           do not ask before writing; also accepts replacing files
+                  that guidance sync did not write (each is kept as a backup)
+  --hosts LIST    enable exactly these hosts (rewrites the machine file);
+                  default: keep the machine file, or detect installed CLIs
+  --omem-source   install OMem from this git URL instead of the pinned one
+                  (same pinned ref), e.g. git+file:///path/to/omem
+EOF
+}
+
+while (($#)); do
+  case $1 in
+    --dry-run) dry_run=1 ;;
+    --yes) assume_yes=1 ;;
+    --hosts) hosts_arg=${2:?--hosts needs a list}; shift ;;
+    --omem-source) omem_source=${2:?--omem-source needs a URL}; shift ;;
+    -h|--help) usage; exit 0 ;;
+    *) usage >&2; exit 2 ;;
+  esac
+  shift
+done
+
+stage() { printf '\n== %s\n' "$*"; }
+note() { printf '   %s\n' "$*"; }
+die() { printf 'bootstrap: %s\n' "$*" >&2; exit 1; }
+run() { # run a command, or show it under --dry-run
+  if ((dry_run)); then note "would run: $*"; else "$@"; fi
+}
+proceed() { # proceed "question": asks only at a terminal without --yes
+  { ((assume_yes)) || [[ ! -t 0 ]]; } && return 0
+  printf '   %s [y/N] ' "$1"
+  local answer
+  read -r answer
+  [[ $answer == [yY]* ]]
+}
+confirm() { # confirm "question": yes under --yes, no without a terminal
+  ((assume_yes)) && return 0
+  [[ -t 0 ]] || { note "(no terminal to ask; rerun with --yes to accept)"; return 1; }
+  printf '   %s [y/N] ' "$1"
+  local answer
+  read -r answer
+  [[ $answer == [yY]* ]]
+}
+
+# ---- 1. prerequisites ------------------------------------------------
+check_prerequisites() {
+  stage "1. prerequisites"
+  [[ $(uname -s) == Darwin ]] || die "macOS only for now"
+  local brew="" formula missing=""
+  for brew in /opt/homebrew/bin/brew /usr/local/bin/brew; do
+    [[ -x $brew ]] && break
+    brew=""
+  done
+  [[ -n $brew ]] || die 'Homebrew is missing; install it first:
+  /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"'
+  eval "$("$brew" shellenv)"
+  # Read without jq, which may be one of the missing formulas.
+  for formula in $(/usr/bin/plutil -extract brew_required json -o - "$DEPS" | tr '[],"' '    '); do
+    brew list --formula "$formula" >/dev/null 2>&1 || missing+=" $formula"
+  done
+  if [[ -z $missing ]]; then
+    note "brew formulas present: $(jq -r '.brew_required | join(" ")' "$DEPS")"
+  elif ((dry_run)); then
+    note "would run: brew install$missing"
+    note "the later stages run these tools; preview them after they are installed"
+    exit 0
+  else
+    proceed "Install with Homebrew:$missing?" || die "stopped before writing"
+    brew install $missing
+  fi
+  local bash_bin
+  bash_bin="$(brew --prefix)/bin/bash"
+  [[ -x $bash_bin ]] || die "Homebrew bash is missing after install"
+  "$bash_bin" -c '((BASH_VERSINFO[0] > 4 || (BASH_VERSINFO[0] == 4 && BASH_VERSINFO[1] >= 4)))' ||
+    die "$bash_bin is older than 4.4"
+  note "bash: $("$bash_bin" -c 'echo $BASH_VERSION')"
+}
+
+# ---- 2. machine file -------------------------------------------------
+detect_hosts() {
+  local host executable account home directory
+  for host in $(jq -r '.hosts | keys[]' "$DEPS"); do
+    if [[ $(jq -r --arg h "$host" '.hosts[$h].component // false' "$DEPS") == true ]]; then
+      echo "$host"; continue
+    fi
+    directory=$(jq -r --arg h "$host" '.hosts[$h].directory // empty' "$DEPS")
+    if [[ -n $directory ]]; then
+      [[ -d $HOME/$directory ]] && echo "$host"
+      continue
+    fi
+    executable=$(jq -r --arg h "$host" '.hosts[$h].executable' "$DEPS")
+    account=$(jq -r --arg h "$host" '.hosts[$h].account_of // empty' "$DEPS")
+    home=$(jq -r --arg h "$host" '.hosts[$h].home // empty' "$DEPS")
+    command -v "$executable" >/dev/null 2>&1 || continue
+    # A second account is enabled only when its home already exists.
+    if [[ -n $account ]]; then
+      [[ -n $home && -d $HOME/$home ]] && echo "$host"
+    else
+      echo "$host"
+    fi
+  done
+}
+
+# Decides the machine file; write_machine_files writes it after the prompt.
+plan_machine_file() {
+  stage "2. machine file ($MACHINE)"
+  local hosts_json
+  if [[ -n $hosts_arg ]]; then
+    hosts_json=$(jq -cn --arg list "$hosts_arg" '$list | split(",") | map(select(length > 0))')
+  elif [[ -f $MACHINE ]]; then
+    jq -e '.schema_version == 1 and (.hosts | type == "array")' "$MACHINE" >/dev/null ||
+      die "$MACHINE is not a valid machine file"
+    hosts_json=$(jq -c '.hosts' "$MACHINE")
+    note "keeping hosts: $(jq -r 'join(" ")' <<<"$hosts_json")"
+  else
+    hosts_json=$(detect_hosts | jq -Rsc 'split("\n") | map(select(length > 0))')
+    note "detected hosts: $(jq -r 'join(" ")' <<<"$hosts_json")"
+  fi
+  local unknown
+  unknown=$(jq -r --slurpfile deps "$DEPS" '. - ($deps[0].hosts | keys) | join(" ")' <<<"$hosts_json")
+  [[ -z $unknown ]] || die "unknown hosts: $unknown (known: $(jq -r '.hosts | keys | join(" ")' "$DEPS"))"
+  ENABLED=$(jq -r 'join(" ")' <<<"$hosts_json")
+  DESIRED_MACHINE=$(jq -n --arg checkout "$ROOT" --argjson hosts "$hosts_json" \
+    '{schema_version: 1, checkout: $checkout, hosts: $hosts}')
+  if [[ -f $MACHINE ]] && [[ $(jq -S . "$MACHINE") == $(jq -S . <<<"$DESIRED_MACHINE") ]]; then
+    MACHINE_PENDING=0
+    note "current"
+  else
+    MACHINE_PENDING=1
+    note "$( ((dry_run)) && echo would || echo will) write: $(jq -c . <<<"$DESIRED_MACHINE")"
+  fi
+  [[ -f $SHELL_LOCAL ]] ||
+    note "$( ((dry_run)) && echo would || echo will) create $SHELL_LOCAL from SHELL/shell.local.example.sh"
+}
+
+write_machine_files() {
+  ((dry_run)) && return 0
+  mkdir -p "$MACHINE_DIR" || die "cannot create $MACHINE_DIR"
+  if ((MACHINE_PENDING)); then
+    local tmp
+    tmp=$(mktemp "$MACHINE_DIR/.machine.json.XXXXXX") || die "cannot create a file in $MACHINE_DIR"
+    printf '%s\n' "$DESIRED_MACHINE" >"$tmp" || { rm -f "$tmp"; die "cannot write $tmp"; }
+    mv -f "$tmp" "$MACHINE" || { rm -f "$tmp"; die "cannot replace $MACHINE"; }
+    note "wrote $MACHINE"
+  fi
+  if [[ ! -f $SHELL_LOCAL ]]; then
+    cp "$ROOT/SHELL/shell.local.example.sh" "$SHELL_LOCAL" || die "cannot create $SHELL_LOCAL"
+    note "created $SHELL_LOCAL (machine-only shell settings)"
+  fi
+}
+
+enabled() { [[ " $ENABLED " == *" $1 "* ]]; }
+
+# ---- 3. OMem ---------------------------------------------------------
+install_omem() {
+  stage "3. OMem (memory, hist)"
+  local requirement source ref spec receipt
+  # uv puts tool executables here; a fresh shell may not have it on PATH yet.
+  PATH="$(uv tool dir --bin):$PATH"
+  requirement=$(jq -r '.omem.requirement' "$DEPS")
+  source=${omem_source:-$(jq -r '.omem.source' "$DEPS")}
+  ref=$(jq -r '.omem.ref' "$DEPS")
+  spec="$requirement @ $source@$ref"
+  receipt=$(uv tool dir)/$requirement/uv-receipt.toml
+  if [[ -f $receipt ]] && grep -q "$ref" "$receipt"; then
+    note "installed at pinned ref ${ref:0:12}"
+  else
+    run uv tool install --force "$spec"
+  fi
+  if ((!dry_run)); then
+    command -v memory >/dev/null 2>&1 || die "memory is not on PATH; add $(uv tool dir --bin) to PATH"
+    (cd "$HOME" && memory init >/dev/null)
+    note "memory init: done"
+  fi
+}
+
+# ---- 4. projections --------------------------------------------------
+guidance() { (cd "$GUIDANCE" && ./guidance --home "$HOME" "$@"); }
+
+# The targets a `sync --replace-unowned` plan would replace, one per line.
+unowned_targets() { awk '$1 == "replace-unowned" {print $3}' <<<"$1"; }
+
+sync_guidance() {
+  stage "4. guidance (kernel, policy, host configs, shell layer, hooks)"
+  local preview code=0 replace=() unowned again
+  # Building guidance embeds `memory` and `hist` output, and the machine file
+  # picks the hosts; a dry run on a new machine has neither in place.
+  if ((dry_run)) && ! { ((!MACHINE_PENDING)) && command -v memory >/dev/null && command -v hist >/dev/null; }; then
+    note "would sync guidance for: $ENABLED (a preview needs OMem and this machine file in place)"
+    return 0
+  fi
+  # Sync rebuilds generated policy files first; the preview below does not.
+  if ((!dry_run)); then
+    guidance build >/dev/null || die "guidance build failed"
+  fi
+  preview=$(guidance sync --dry-run --replace-unowned 2>&1) || code=$?
+  if [[ $preview != *"dry run: "* ]]; then
+    if ((dry_run)) && [[ $preview == *"generated policy files are stale"* ]]; then
+      note "would rebuild the generated policy files, then sync; no preview before that"
+      return 0
+    fi
+    printf '%s\n' "$preview" >&2
+    die "guidance cannot sync"
+  fi
+  unowned=$(unowned_targets "$preview")
+  if [[ -n $unowned ]]; then
+    note "these files exist but guidance sync did not write them:"
+    sed 's/^/     /' <<<"$unowned"
+    if ((dry_run)); then
+      note "would ask to replace them, keeping each old file in the sync backup"
+    elif confirm "Replace them? Each old file is kept; ./guidance rollback restores them."; then
+      # The answer covers the files listed, so stop if that list changed meanwhile.
+      again=$(guidance sync --dry-run --replace-unowned 2>&1) || true
+      [[ $(unowned_targets "$again") == "$unowned" ]] ||
+        die "the files to replace changed while asking; rerun ./bootstrap"
+      replace=(--replace-unowned)
+    fi
+  fi
+  if ((dry_run)); then
+    printf '%s\n' "$preview" | grep -Ev '^(current|disabled|shared|retired) ' | sed 's/^/   /'
+    return 0
+  fi
+  code=0
+  guidance sync "${replace[@]+"${replace[@]}"}" >"$TMPDIR_BOOT/guidance.out" 2>&1 || code=$?
+  grep -Ev '^(current|disabled|shared|retired) ' "$TMPDIR_BOOT/guidance.out" | sed 's/^/   /'
+  # Exit 2 also reports failures; only a completed sync that was not rolled
+  # back has installed everything outside the held-back groups.
+  if ((code == 2)) && grep -q '^sync complete' "$TMPDIR_BOOT/guidance.out" &&
+    grep -q 'conflicts held back their sync group' "$TMPDIR_BOOT/guidance.out" &&
+    ! grep -q 'rolled back' "$TMPDIR_BOOT/guidance.out"; then
+    note "conflicts held back their sync groups (above); the rest is installed"
+  elif ((code != 0)); then
+    die "guidance sync failed"
+  fi
+}
+
+# A Mac set up from another checkout (the old monorepo) has skill state that
+# names it. Prints that checkout's SKILL-SYSTEM directory, or nothing.
+previous_skill_checkout() {
+  local state=$HOME/.agents/.skill-system/install-state.json
+  [[ -r $state ]] || return 0
+  jq -r '.managed[].source' "$state" | sed 's#/skills/[^/]*$##' | sort -u |
+    grep -vxF "$SKILLS" || true
+}
+
+relocate_skills() {
+  local old
+  old=$(previous_skill_checkout)
+  [[ -n $old ]] || return 0
+  [[ $old != *$'\n'* ]] || die "skill state names several checkouts:
+$old"
+  note "skill state names another checkout: $old"
+  local command=(bin/skill-system --home "$HOME" relocate --from "$old")
+  if ((dry_run)); then
+    (cd "$SKILLS" && "${SKILL_PYTHON[@]}" "${command[@]}" --dry-run) >/dev/null ||
+      die "skill relocate preview failed"
+    note "would point it at this checkout (skill-system relocate), then sync"
+    return 1
+  fi
+  confirm "Point it at this checkout? The old checkout's skill-system then stops until it is relocated back." ||
+    die "skill state left alone; to move it later, rerun ./bootstrap or:
+  cd $SKILLS && $(printf '%q ' "${SKILL_PYTHON[@]}" "${command[@]}")--apply"
+  (cd "$SKILLS" && "${SKILL_PYTHON[@]}" "${command[@]}" --apply) >/dev/null || die "skill relocate failed"
+  note "relocated; the previous state is beside it as install-state.before-relocate-*.json"
+}
+
+sync_skills() {
+  stage "5. skills"
+  local mode=--apply report
+  ((dry_run)) && mode=--dry-run
+  relocate_skills || return 0
+  if ((dry_run && MACHINE_PENDING)); then
+    note "would sync skills for: $ENABLED (a preview reads the machine file this run would write)"
+    return 0
+  fi
+  report=$(mktemp)
+  (cd "$SKILLS" && "${SKILL_PYTHON[@]}" bin/skill-system --home "$HOME" sync "$mode") >"$report" 2>&1 ||
+    { cat "$report" >&2; die "skill sync failed"; }
+  note "$(jq -r '"\(.reason): \(.operations | length) skill operation(s)"' "$report")"
+  rm -f "$report"
+  if enabled antigravity; then
+    (cd "$SKILLS" && "${SKILL_PYTHON[@]}" bin/skill-system --home "$HOME" configure-antigravity "$mode") >/dev/null
+    note "antigravity skill discovery: configured"
+  fi
+}
+
+install_review_hook() {
+  stage "6. review hook"
+  local host apply=--apply any=0
+  ((dry_run)) && apply=""
+  for host in $REVIEW_HOSTS; do
+    enabled "$host" || continue
+    any=1
+    (cd "$REVIEW" && /usr/bin/python3 -B scripts/review_hook.py install --host "$host" $apply) >/dev/null
+    if ((dry_run)); then note "$host: would install"; else note "$host: installed"; fi
+  done
+  if enabled antigravity; then
+    if ((dry_run)); then
+      note "antigravity: would activate the review plugin after installing it"
+    else
+      (cd "$REVIEW" && /usr/bin/python3 -B scripts/review_hook.py activate-antigravity --apply) >/dev/null
+    fi
+  fi
+  ((any)) || note "no review-hook host enabled"
+}
+
+# ---- plan and run ----------------------------------------------------
+TMPDIR_BOOT=$(mktemp -d)
+trap 'rm -rf "$TMPDIR_BOOT"' EXIT
+check_prerequisites
+plan_machine_file
+if ((!dry_run)); then
+  proceed "Next: the machine file, OMem, guidance, skills and review hook for: $ENABLED. Proceed?" ||
+    die "stopped before writing"
+fi
+write_machine_files
+install_omem
+sync_guidance
+sync_skills
+install_review_hook
+stage "7. doctor"
+if ((dry_run)); then
+  note "would run ./doctor"
+  exit 0
+fi
+"$ROOT/doctor"

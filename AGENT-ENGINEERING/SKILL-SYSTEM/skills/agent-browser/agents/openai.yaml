@@ -1,0 +1,6 @@
+interface:
+  display_name: "Agent Browser"
+  short_description: "Drive scoped browser tasks with fresh refs"
+  default_prompt: "Use $agent-browser to inspect this page and complete the requested browser task."
+policy:
+  allow_implicit_invocation: true

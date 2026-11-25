@@ -1,0 +1,301 @@
+#!/usr/bin/env -S uv run --quiet --script
+# /// script
+# requires-python = ">=3.11"
+# ///
+"""Read-only report on this machine's agent-system install.
+
+Exit 0 when every check passes or only warns, 1 when any check fails.
+Ends with the manual steps that no command can do for you.
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import shutil
+import subprocess
+import sys
+import tomllib
+from dataclasses import dataclass
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent
+GUIDANCE = ROOT / "AGENT-ENGINEERING" / "PERSISTENT-GUIDANCE"
+SKILLS = ROOT / "AGENT-ENGINEERING" / "SKILL-SYSTEM"
+REVIEW = ROOT / "AGENT-ENGINEERING" / "REVIEW-HOOK"
+REVIEW_HOSTS = ("codex", "kimi", "antigravity")
+BREW_BASH = ("/opt/homebrew/bin/bash", "/usr/local/bin/bash")
+# Hosts whose prompt hooks should reach memory and hist, and where they live.
+MEMORY_HOOKS = {
+    "claude": (".claude/settings.json", ("memory hook claude", "hist hook claude")),
+    "codex": (".codex/config.toml", ("memory codex-hook", "hist hook codex")),
+    "codex2": (".codex2/config.toml", ("memory codex-hook", "hist hook codex")),
+    "kimi": (".kimi-code/config.toml", ("memory hook kimi", "hist hook kimi")),
+}
+
+
+@dataclass(frozen=True)
+class Check:
+    level: str  # ok | warn | FAIL
+    name: str
+    detail: str
+
+
+def run(
+    command: list[str], *, cwd: Path | None = None, timeout: float = 60, env: dict | None = None
+) -> tuple[int, str]:
+    try:
+        completed = subprocess.run(
+            command, cwd=cwd, capture_output=True, text=True, timeout=timeout, check=False, env=env
+        )
+    except FileNotFoundError:
+        return 127, f"not found: {command[0]}"
+    except subprocess.TimeoutExpired:
+        return 124, f"timed out after {timeout:g}s"
+    return completed.returncode, (completed.stdout + completed.stderr).strip()
+
+
+def load_machine(home: Path, deps: dict) -> tuple[dict | None, list[Check]]:
+    path = home / ".config" / "agent-system" / "machine.json"
+    if not path.is_file():
+        return None, [Check("FAIL", "machine file", f"{path} is missing; run ./bootstrap")]
+    try:
+        machine = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        return None, [Check("FAIL", "machine file", f"{path} does not parse: {exc}")]
+    if machine.get("schema_version") != 1 or not isinstance(machine.get("hosts"), list):
+        return None, [Check("FAIL", "machine file", f"{path} needs schema_version 1 and a hosts list")]
+    checks = [Check("ok", "machine file", f"hosts: {' '.join(machine['hosts'])}")]
+    unknown = sorted(set(machine["hosts"]) - set(deps["hosts"]))
+    if unknown:
+        checks.append(Check("FAIL", "machine file", f"unknown hosts: {' '.join(unknown)}"))
+    checkout = machine.get("checkout")
+    if checkout and Path(checkout).resolve() != ROOT:
+        checks.append(Check("warn", "machine file", f"checkout is {checkout}, this one is {ROOT}"))
+    return machine, checks
+
+
+def check_prerequisites() -> list[Check]:
+    checks = []
+    for tool in ("git", "jq", "rg", "uv"):
+        found = shutil.which(tool)
+        checks.append(Check("ok" if found else "FAIL", f"tool {tool}", found or "not on PATH"))
+    brew_bash = next((Path(p) for p in BREW_BASH if Path(p).is_file()), None)
+    if brew_bash is None:
+        checks.append(Check("FAIL", "bash 4.4+", "Homebrew bash is missing; brew install bash"))
+    else:
+        code, out = run([str(brew_bash), "-c", "echo ${BASH_VERSINFO[0]}.${BASH_VERSINFO[1]}"])
+        major, minor = (int(part) for part in out.split(".")[:2]) if code == 0 else (0, 0)
+        level = "ok" if (major, minor) >= (4, 4) else "FAIL"
+        checks.append(Check(level, "bash 4.4+", f"{brew_bash} {out}"))
+    return checks
+
+
+def check_optional_tools(deps: dict) -> tuple[list[Check], list[str]]:
+    """Tools skills and the policy kernel use when present; agents fall back without them."""
+    checks, manual = [], []
+    for tool, install in deps["optional_tools"].items():
+        found = shutil.which(tool)
+        checks.append(Check("ok" if found else "warn", f"tool {tool}", found or "not installed (optional)"))
+        if not found:
+            manual.append(f"optional: install {tool} with `{install}`")
+    return checks, manual
+
+
+def check_omem(home: Path, deps: dict) -> list[Check]:
+    checks = []
+    for tool in ("memory", "hist"):
+        found = shutil.which(tool)
+        checks.append(Check("ok" if found else "FAIL", f"tool {tool}", found or "not on PATH; ./bootstrap installs it"))
+    if shutil.which("memory"):
+        code, out = run(["memory", "status"], cwd=home, timeout=30)
+        checks.append(Check("ok" if code == 0 else "FAIL", "memory status", "responds" if code == 0 else out[-200:]))
+    if shutil.which("hist"):
+        code, out = run(["hist", "instructions"], timeout=30)
+        checks.append(Check("ok" if code == 0 else "FAIL", "hist", "responds" if code == 0 else out[-200:]))
+    code, tool_dir = run(["uv", "tool", "dir"])
+    receipt = Path(tool_dir) / deps["omem"]["requirement"] / "uv-receipt.toml"
+    if code == 0 and receipt.is_file():
+        text = receipt.read_text(encoding="utf-8")
+        if deps["omem"]["ref"] in text:
+            checks.append(Check("ok", "omem version", f"pinned ref {deps['omem']['ref'][:12]}"))
+        elif "editable" in text:
+            checks.append(Check("warn", "omem version", "editable development install, not the pinned ref"))
+        else:
+            checks.append(Check("FAIL", "omem version", f"not the pinned ref {deps['omem']['ref'][:12]}; rerun ./bootstrap"))
+    return checks
+
+
+def logged_in(home: Path, spec: dict) -> bool | None:
+    if "login_file" in spec:
+        return (home / spec["login_file"]).exists()
+    if "login_keychain" in spec and sys.platform == "darwin":
+        code, _ = run(["security", "find-generic-password", "-s", spec["login_keychain"]], timeout=10)
+        return code == 0
+    return None
+
+
+def check_hosts(home: Path, deps: dict, enabled: list[str]) -> tuple[list[Check], list[str]]:
+    checks, manual = [], []
+    for host in enabled:
+        spec = deps["hosts"].get(host, {})
+        executable = spec.get("executable")
+        if not executable:
+            continue
+        path = shutil.which(executable)
+        if path is None:
+            checks.append(Check("FAIL", f"host {host}", f"{executable} not on PATH; `mup` installs agent CLIs"))
+            continue
+        code, out = run([executable, "--version"], timeout=20)
+        version = out.splitlines()[0] if code == 0 and out else "version unknown"
+        state = logged_in(home, spec)
+        if state is False:
+            manual.append(f"log in to {host}: run `{executable}` and sign in")
+            checks.append(Check("warn", f"host {host}", f"{version}; not logged in"))
+        else:
+            checks.append(Check("ok", f"host {host}", version + ("" if state else "; login not checkable")))
+    return checks, manual
+
+
+def check_guidance(home: Path) -> list[Check]:
+    code, out = run(["./guidance", "--home", str(home), "status"], cwd=GUIDANCE, timeout=120)
+    if code == 0:
+        return [Check("ok", "guidance", "every enabled projection is current")]
+    rows = [line.split(maxsplit=2) for line in out.splitlines() if line.strip()]
+    conflicts = [row[2] for row in rows if row[0] == "conflict" and len(row) == 3]
+    pending = [
+        row[2] for row in rows
+        if len(row) == 3 and row[0] in ("missing", "legacy", "managed-stale", "retirement-needed")
+    ]
+    if code == 2 and conflicts:
+        hint = (
+            "; ./guidance sync --replace-unowned replaces files it never wrote, with a backup"
+            if any("not owned by this manager" in item for item in conflicts) else ""
+        )
+        return [Check("FAIL", "guidance", f"{len(conflicts)} conflict(s): {'; '.join(conflicts[:4])}{hint}")]
+    if code == 1:
+        return [Check("warn", "guidance", f"{len(pending)} pending; run ./bootstrap or ./guidance sync")]
+    return [Check("FAIL", "guidance", f"exit {code}: {out[-300:]}")]
+
+
+def check_skills(home: Path) -> list[Check]:
+    code, out = run(
+        ["uv", "run", "--quiet", "--no-project", "--python", ">=3.11", "python", "-B",
+         "bin/skill-system", "--home", str(home), "status"],
+        cwd=SKILLS, timeout=180,
+    )
+    if code != 0:
+        return [Check("FAIL", "skills", out[-300:])]
+    report = json.loads(out)
+    counts: dict[str, int] = {}
+    for item in report["skills"].values():
+        if item["ownership"] == "custom" and item["lifecycle"] not in ("reference", "retired"):
+            counts[item["state"]] = counts.get(item["state"], 0) + 1
+    other = {state: n for state, n in counts.items() if state != "current"}
+    if report["incomplete_operations"]:
+        return [Check("FAIL", "skills", f"incomplete operations: {report['incomplete_operations']}")]
+    if other:
+        return [Check("warn", "skills", f"{counts.get('current', 0)} current; " + ", ".join(f"{n} {s}" for s, n in sorted(other.items())))]
+    return [Check("ok", "skills", f"{counts.get('current', 0)} current")]
+
+
+def check_review_hook(home: Path, enabled: list[str]) -> list[Check]:
+    checks = []
+    for host in REVIEW_HOSTS:
+        if host not in enabled:
+            continue
+        # The review hook finds each host's home under $HOME.
+        code, out = run(
+            ["/usr/bin/python3", "-B", "scripts/review_hook.py", "status", "--host", host],
+            cwd=REVIEW, env={**os.environ, "HOME": str(home)},
+        )
+        try:
+            label = json.loads(out)["statuses"][0]["status"]
+        except (json.JSONDecodeError, KeyError, IndexError):
+            label = out[-120:]
+        level = "ok" if code == 0 and label in ("current", "installed-disabled") else "FAIL"
+        checks.append(Check(level, f"review hook {host}", label))
+    return checks
+
+
+def check_memory_hooks(home: Path, enabled: list[str]) -> list[Check]:
+    checks = []
+    for host, (relative, commands) in MEMORY_HOOKS.items():
+        if host not in enabled:
+            continue
+        path = home / relative
+        text = path.read_text(encoding="utf-8") if path.is_file() else ""
+        missing = [command for command in commands if command not in text]
+        checks.append(Check("FAIL" if missing else "ok", f"hooks {host}", f"missing in ~/{relative}: {missing}" if missing else "memory and hist hooks registered"))
+    return checks
+
+
+def codex_hook_steps(home: Path, enabled: list[str]) -> list[str]:
+    """Codex runs config-file hooks only after you trust them in /hooks, once per account."""
+    steps = []
+    for host, directory in (("codex", ".codex"), ("codex2", ".codex2")):
+        path = home / directory / "config.toml"
+        if host not in enabled or not path.is_file():
+            continue
+        try:
+            state = tomllib.loads(path.read_text(encoding="utf-8")).get("hooks", {}).get("state", {})
+        except tomllib.TOMLDecodeError:
+            continue
+        if not any(key.startswith(f"{path}:") for key in state):
+            prefix = "" if host == "codex" else f"CODEX_HOME=~/{directory} "
+            steps.append(f"Codex ({host}): run `{prefix}codex`, open /hooks and trust the memory and hist hooks")
+    return steps
+
+
+def shell_steps(enabled: list[str]) -> list[str]:
+    if "shell" not in enabled:
+        return []
+    steps = ["open a new terminal so the projected ~/.bash_profile and ~/.bashrc load"]
+    # macOS /bin/bash is 3.2, which cannot run the projected dotfiles.
+    if os.environ.get("SHELL", "") not in BREW_BASH:
+        steps.append(
+            "make Homebrew bash your login shell: add $(brew --prefix)/bin/bash to /etc/shells, "
+            "then chsh -s $(brew --prefix)/bin/bash"
+        )
+    return steps
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser.add_argument("--home", type=Path, default=Path.home())
+    home = parser.parse_args().home.expanduser().resolve()
+    # uv installs memory and hist here; a shell opened before the install may lack it.
+    code, tool_bin = run(["uv", "tool", "dir", "--bin"])
+    if code == 0 and tool_bin not in os.environ.get("PATH", "").split(os.pathsep):
+        os.environ["PATH"] = tool_bin + os.pathsep + os.environ.get("PATH", "")
+    deps = json.loads((ROOT / "dependencies.json").read_text(encoding="utf-8"))
+    machine, checks = load_machine(home, deps)
+    enabled = machine["hosts"] if machine else []
+    checks += check_prerequisites()
+    checks += check_omem(home, deps)
+    host_checks, manual = check_hosts(home, deps, enabled)
+    checks += host_checks
+    optional_checks, optional_steps = check_optional_tools(deps)
+    checks += optional_checks
+    checks += check_guidance(home)
+    checks += check_skills(home)
+    checks += check_review_hook(home, enabled)
+    checks += check_memory_hooks(home, enabled)
+
+    for check in checks:
+        print(f"{check.level:5} {check.name:22} {check.detail}")
+    manual += codex_hook_steps(home, enabled)
+    manual += shell_steps(enabled)
+    manual += optional_steps
+    if not (home / ".api_keys").exists():
+        manual.append("API keys: create ~/.api_keys (sourced by ~/.bash_profile) with the keys you use")
+    manual.append("Chrome: sign in the profiles the browser-driven skills use (gpt, notebooklm, wsj, ...)")
+    manual.append("macOS: allow Terminal automation of Chrome when first asked (System Settings > Privacy)")
+    print("\nManual steps that remain:")
+    for step in manual:
+        print(f"  - {step}")
+    return 1 if any(check.level == "FAIL" for check in checks) else 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

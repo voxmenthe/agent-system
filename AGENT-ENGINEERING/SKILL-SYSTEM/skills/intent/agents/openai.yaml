@@ -1,0 +1,6 @@
+interface:
+  display_name: "Intent"
+  short_description: "Clarify intent before consequential decisions"
+  default_prompt: "Use $intent to uncover my underlying intent and final vision before we make consequential decisions."
+policy:
+  allow_implicit_invocation: false

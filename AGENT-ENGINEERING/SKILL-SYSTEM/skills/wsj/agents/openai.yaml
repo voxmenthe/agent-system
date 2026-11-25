@@ -1,0 +1,7 @@
+interface:
+  display_name: "WSJ Research"
+  short_description: "Research current and historical WSJ coverage"
+  default_prompt: "Use $wsj to survey current WSJ news or trace a topic across time in my authenticated Chrome profile."
+
+policy:
+  allow_implicit_invocation: false

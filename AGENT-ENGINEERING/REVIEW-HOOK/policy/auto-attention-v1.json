@@ -1,0 +1,14 @@
+{
+  "automatic_delivery": true,
+  "candidate_predicate": {
+    "correctness_exclusions": [
+      "B023",
+      "PLE1205"
+    ],
+    "structural": "material-new-crossed-or-worsened-c901-with-same-function-corroborator"
+  },
+  "name": "auto-attention-v1",
+  "schema": "review-scan-policy/v1",
+  "status": "dogfood-active",
+  "version": "v1"
+}

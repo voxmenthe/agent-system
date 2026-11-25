@@ -1,0 +1,31 @@
+{
+  "description": "Deliver read-only exact-range reviews for commits created by Bash tool calls.",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "^Bash$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "exec /usr/bin/env CODEX_HOOK_STATE_DIR=\"$PLUGIN_DATA/state\" CODEX_HOOK_REVIEW_AFTER_COMMIT_BRANCH_EVERY=5 REVIEW_AFTER_COMMIT_MODE=cadence /usr/bin/python3 -B \"$PLUGIN_ROOT/hosts/codex/adapter.py\"",
+            "timeout": 30,
+            "statusMessage": "Recording the pre-command Git state"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "^Bash$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "exec /usr/bin/env CODEX_HOOK_STATE_DIR=\"$PLUGIN_DATA/state\" CODEX_HOOK_REVIEW_AFTER_COMMIT_BRANCH_EVERY=5 REVIEW_AFTER_COMMIT_MODE=cadence /usr/bin/python3 -B \"$PLUGIN_ROOT/hosts/codex/adapter.py\"",
+            "timeout": 30,
+            "statusMessage": "Checking for an exact commit event"
+          }
+        ]
+      }
+    ]
+  }
+}

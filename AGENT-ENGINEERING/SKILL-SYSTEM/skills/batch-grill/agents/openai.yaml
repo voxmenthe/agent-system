@@ -1,0 +1,7 @@
+interface:
+  display_name: "Batch Grill"
+  short_description: "Find and settle the decisions that shape the plan"
+  default_prompt: "Use $batch-grill to find and settle the highest-leverage decisions shaping this plan."
+
+policy:
+  allow_implicit_invocation: false

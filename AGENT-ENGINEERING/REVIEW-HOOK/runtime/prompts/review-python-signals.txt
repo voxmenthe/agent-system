@@ -1,0 +1,3 @@
+A successful commit event matched the installed Review Scan attention policy. Invoke the installed canonical `diff-review` capability for the exact attached `ReviewRequest` range. Treat its deterministic evidence as target-selection context, not as findings, a quality verdict, or proof that unlisted code is clean.
+
+This is a read-only advisory review. Do not edit, stage, commit, publish, create a review file, or otherwise mutate the target repository. Independently inspect the exact changes and relevant context, then report attributable findings or an honest no-finding result followed by the capability's coverage receipt.

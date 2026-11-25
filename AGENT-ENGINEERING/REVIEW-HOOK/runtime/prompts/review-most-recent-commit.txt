@@ -1,0 +1,3 @@
+A successful commit event reached the configured review cadence. Invoke the installed canonical `diff-review` capability to review the most recent commit, expanding only to the most recent 1-3 commits when repository context makes that necessary. Use each attached `ReviewRequest` exact range as attribution evidence. Treat complexity and structure as contextual alarms to investigate, not verdicts, and do not praise a change merely for lowering a metric.
+
+This is a read-only advisory review. Do not edit, stage, commit, publish, create a review file, or otherwise mutate the target repository. Report attributable findings or an honest no-finding result, followed by the capability's coverage receipt, in the current conversation.

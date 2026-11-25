@@ -1,0 +1,23 @@
+{
+  "review-after-commit": {
+    "PostToolUse": [
+      {
+        "hooks": [
+          {
+            "command": "exec /usr/bin/python3 -B ./adapter.py post-tool-use",
+            "timeout": 45,
+            "type": "command"
+          }
+        ],
+        "matcher": "run_command"
+      }
+    ],
+    "PreInvocation": [
+      {
+        "command": "exec /usr/bin/python3 -B ./adapter.py pre-invocation",
+        "timeout": 45,
+        "type": "command"
+      }
+    ]
+  }
+}

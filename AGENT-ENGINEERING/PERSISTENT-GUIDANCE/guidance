@@ -1,0 +1,299 @@
+#!/usr/bin/env -S uv run --quiet --script
+# /// script
+# requires-python = ">=3.13"
+# dependencies = ["tomlkit==0.13.3"]
+# ///
+from __future__ import annotations
+
+import argparse
+import os
+import sys
+import tempfile
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent
+SCRIPT_DIR = ROOT / "policy" / "scripts"
+if str(SCRIPT_DIR) not in sys.path:
+    sys.path.insert(0, str(SCRIPT_DIR))
+
+from build_policy import expected_outputs
+from hostlib import (
+    UNOWNED_CONFLICT,
+    GuidanceError,
+    adopt,
+    format_plan,
+    load_host_manifest,
+    plan_sync,
+    rollback,
+    summarize_plan,
+    sync,
+    verify_shared_consumers,
+)
+from mcpconfig import expected_mcp_outputs
+from policylib import PolicyError, load_manifest
+from validate_policy import validate_pack_files
+
+
+def _atomic_text_write(path: Path, text: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    descriptor, temporary_name = tempfile.mkstemp(
+        prefix=f".{path.name}.", dir=path.parent
+    )
+    temporary = Path(temporary_name)
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8", newline="") as handle:
+            descriptor = -1
+            handle.write(text)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary, path)
+    finally:
+        if descriptor >= 0:
+            os.close(descriptor)
+        temporary.unlink(missing_ok=True)
+
+
+def build(*, write: bool) -> list[Path]:
+    outputs = expected_outputs(ROOT)
+    outputs.update(expected_mcp_outputs(ROOT))
+    stale: list[Path] = []
+    for path, expected in outputs.items():
+        actual = path.read_text(encoding="utf-8") if path.exists() else None
+        if actual == expected:
+            continue
+        stale.append(path)
+        if write:
+            _atomic_text_write(path, expected)
+            print(f"wrote {path.relative_to(ROOT)}")
+    return stale
+
+
+def validation_errors() -> list[str]:
+    errors: list[str] = []
+    try:
+        manifest = load_manifest(ROOT)
+        errors.extend(validate_pack_files(ROOT, manifest))
+        load_host_manifest(ROOT)
+    except (GuidanceError, PolicyError, OSError) as exc:
+        errors.append(str(exc))
+    try:
+        stale = build(write=False)
+    except (PolicyError, OSError) as exc:
+        errors.append(str(exc))
+    else:
+        if stale:
+            rendered = ", ".join(str(path.relative_to(ROOT)) for path in stale)
+            errors.append(f"generated policy files are stale: {rendered}")
+    return errors
+
+
+def print_errors(errors: list[str]) -> None:
+    print("guidance validation failed:", file=sys.stderr)
+    for error in errors:
+        print(f"- {error}", file=sys.stderr)
+
+
+def status_exit_code(plan) -> int:
+    if plan.conflicts:
+        return 2
+    return 1 if plan.changes else 0
+
+
+def print_adoptions(adoptions, verb: str, *, evidence: bool) -> None:
+    for adoption in adoptions:
+        print(
+            f"{verb:12} {adoption.operation_id:28} "
+            f"~/{adoption.target_relative.as_posix()} -> "
+            f"{adoption.source_relative.as_posix()}"
+        )
+        if evidence:
+            for line in adoption.evidence.splitlines():
+                print(f"    {line}")
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(
+        description="Build, validate, and project owner-controlled persistent guidance."
+    )
+    parser.add_argument(
+        "--home",
+        type=Path,
+        default=Path.home(),
+        help="target home directory (default: current user home)",
+    )
+    subparsers = parser.add_subparsers(dest="command", required=True)
+    subparsers.add_parser("build", help="rebuild generated repository artifacts")
+    subparsers.add_parser("validate", help="validate canonical and generated artifacts")
+    status_parser = subparsers.add_parser(
+        "status", help="show projection and compatibility status"
+    )
+    status_parser.add_argument(
+        "--brief",
+        action="store_true",
+        help="print one line only when something needs attention; skips validation",
+    )
+    subparsers.add_parser(
+        "verify", help="verify shared-consumer discovery without inference"
+    )
+    sync_parser = subparsers.add_parser(
+        "sync", help="project guidance to every managed host"
+    )
+    sync_parser.add_argument(
+        "--dry-run", action="store_true", help="preflight without writing"
+    )
+    sync_parser.add_argument(
+        "--replace-unowned",
+        action="store_true",
+        help="replace files this manager never wrote, keeping each in the sync backup",
+    )
+    subparsers.add_parser("rollback", help="restore the most recent file-changing sync")
+    adopt_parser = subparsers.add_parser(
+        "adopt", help="pull host-written drift back into the canonical sources"
+    )
+    adopt_parser.add_argument(
+        "--only",
+        action="append",
+        default=[],
+        metavar="OPERATION_ID",
+        help="adopt just this projection; repeatable",
+    )
+    adopt_parser.add_argument(
+        "--dry-run", action="store_true", help="report adoptions without writing"
+    )
+    args = parser.parse_args()
+
+    try:
+        if args.command == "build":
+            stale = build(write=True)
+            if not stale:
+                print("generated policy files already current")
+            return 0
+
+        if args.command == "validate":
+            errors = validation_errors()
+            if errors:
+                print_errors(errors)
+                return 1
+            print("guidance validation passed")
+            return 0
+
+        if args.command == "status" and args.brief:
+            plan = plan_sync(ROOT, args.home)
+            summary = summarize_plan(plan)
+            if summary:
+                print(summary)
+            return status_exit_code(plan)
+
+        if args.command == "status":
+            errors = validation_errors()
+            if errors:
+                print_errors(errors)
+                return 2
+            plan = plan_sync(ROOT, args.home)
+            print(format_plan(plan))
+            return status_exit_code(plan)
+
+        if args.command == "verify":
+            errors = validation_errors()
+            if errors:
+                print_errors(errors)
+                return 2
+            results = verify_shared_consumers(ROOT, args.home)
+            for result in results:
+                label = "verified" if result.ok else "failed"
+                print(f"{label:8} {result.host:20} {result.detail}")
+            return 0 if all(result.ok for result in results) else 2
+
+        if args.command == "sync":
+            if not args.dry_run:
+                build(write=True)
+            errors = validation_errors()
+            if errors:
+                print_errors(errors)
+                return 2
+            outcome = sync(
+                ROOT,
+                args.home,
+                dry_run=args.dry_run,
+                replace_unowned=args.replace_unowned,
+            )
+            plan, transaction_id = outcome.plan, outcome.transaction_id
+            print(format_plan(plan))
+            if plan.conflicts:
+                blocked = ", ".join(
+                    status.operation.operation_id for status in plan.conflicts
+                )
+                print(
+                    f"conflicts held back their sync group: {blocked}; "
+                    "inspect with ./guidance adopt --dry-run",
+                    file=sys.stderr,
+                )
+                if any(
+                    status.detail.startswith(UNOWNED_CONFLICT)
+                    for status in plan.conflicts
+                ):
+                    print(
+                        "files this manager never wrote can be replaced, with a backup, "
+                        "by ./guidance sync --replace-unowned",
+                        file=sys.stderr,
+                    )
+            if args.dry_run:
+                applicable = [s for s in plan.applicable if s.needs_change]
+                print(
+                    f"dry run: {len(applicable)} host file change(s) would be applied"
+                )
+                return 2 if plan.conflicts else 0
+            if transaction_id:
+                print(f"sync complete; recovery transaction: {transaction_id}")
+            else:
+                print("sync complete; no host file needed changing")
+            results = verify_shared_consumers(ROOT, args.home)
+            for result in results:
+                label = "verified" if result.ok else "failed"
+                print(f"{label:8} {result.host:20} {result.detail}")
+            if all(result.ok for result in results):
+                return 2 if plan.conflicts else 0
+            if transaction_id:
+                rolled_back = rollback(ROOT, args.home)
+                print(
+                    f"sync verification failed; rolled back guidance transaction: {rolled_back}",
+                    file=sys.stderr,
+                )
+            return 2
+
+        if args.command == "adopt":
+            errors = validation_errors()
+            if errors:
+                print_errors(errors)
+                return 2
+            selected = frozenset(args.only) if args.only else None
+            adoptions = adopt(
+                ROOT, args.home, operation_ids=selected, dry_run=args.dry_run
+            )
+            if not adoptions:
+                print("no host-written drift to adopt")
+                return 0
+            print_adoptions(
+                adoptions,
+                "would adopt" if args.dry_run else "adopted",
+                evidence=args.dry_run,
+            )
+            if args.dry_run:
+                return 0
+            print(
+                f"{len(adoptions)} canonical source(s) updated; "
+                "review with git diff, then run ./guidance sync"
+            )
+            return 0
+
+        transaction_id = rollback(ROOT, args.home)
+        print(f"rolled back guidance transaction: {transaction_id}")
+        print(format_plan(plan_sync(ROOT, args.home)))
+        return 0
+    except (GuidanceError, PolicyError, OSError) as exc:
+        print(f"guidance error: {exc}", file=sys.stderr)
+        return 2
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

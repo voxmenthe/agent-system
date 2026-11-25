@@ -1,0 +1,47 @@
+{
+  "correctness_codes": [
+    "F601",
+    "F634",
+    "PLE0101",
+    "PLE0704",
+    "PLE1205",
+    "PLE1206",
+    "B006",
+    "B012",
+    "B023",
+    "B029",
+    "B030",
+    "B031"
+  ],
+  "design_context_codes": [
+    "LOW_USAGE_INTERFACE_GROWTH"
+  ],
+  "design_review_codes": [
+    "CLASS_SURFACE_GROWTH",
+    "DEAD_CODE_GROWTH",
+    "DISJOINT_RESPONSIBILITY_GROWTH",
+    "INTERFACE_SURFACE_GROWTH",
+    "NEW_CYCLIC_IMPORT",
+    "PARAMETER_CLUMP_GROWTH",
+    "PARAMETER_PROPAGATION_GROWTH",
+    "REPEATED_CROSS_FILE_CHANGE",
+    "REPEATED_INTERFACE_STUB_GROWTH",
+    "SCATTERED_SMALL_EDIT",
+    "THIN_DELEGATION_LAYER_GROWTH"
+  ],
+  "name": "review-scan-suite",
+  "purpose": "manual-full-scan-and-automatic-review-context",
+  "report_only_correctness_codes": [
+    "B023",
+    "PLE1205"
+  ],
+  "schema": "review-scan-policy/v1",
+  "structural_codes": [
+    "C901",
+    "PLR0912",
+    "PLR0915",
+    "PLR1702",
+    "PLR0916"
+  ],
+  "version": "v1"
+}

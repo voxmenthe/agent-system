@@ -1,0 +1,236 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/personal-skill-system/registry.schema.json",
+  "title": "Personal skill-system registry",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "skills"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "skills": {
+      "type": "object",
+      "propertyNames": {
+        "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/skill"
+      }
+    }
+  },
+  "$defs": {
+    "hash": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "origin",
+        "revision",
+        "license"
+      ],
+      "properties": {
+        "origin": {
+          "type": "string",
+          "minLength": 1
+        },
+        "revision": {
+          "type": "string",
+          "minLength": 1
+        },
+        "license": {
+          "type": "string",
+          "minLength": 1
+        },
+        "observed_hash": {
+          "$ref": "#/$defs/hash"
+        },
+        "disposition": {
+          "type": "string",
+          "minLength": 1
+        },
+        "exit_phase": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "manager": {
+          "type": "string",
+          "minLength": 1
+        },
+        "notes": {
+          "type": "string",
+          "minLength": 1
+        },
+        "local_modifications": {
+          "type": "string",
+          "minLength": 1
+        },
+        "reference_revision": {
+          "type": "string",
+          "minLength": 1
+        },
+        "snapshot": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "skill": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "ownership",
+        "install_targets",
+        "dependencies",
+        "effect_ceiling",
+        "provenance",
+        "evaluation_profile"
+      ],
+      "properties": {
+        "lifecycle": {
+          "enum": [
+            "reference",
+            "experimental",
+            "stable",
+            "deprecated",
+            "retired"
+          ]
+        },
+        "ownership": {
+          "enum": [
+            "custom",
+            "legacy-unmanaged",
+            "external"
+          ]
+        },
+        "source": {
+          "type": "string",
+          "minLength": 1
+        },
+        "install_targets": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^~/\\.agents/skills/[a-z0-9]+(?:-[a-z0-9]+)*$"
+          }
+        },
+        "dependencies": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+          }
+        },
+        "effect_ceiling": {
+          "enum": [
+            "read-only",
+            "local-write",
+            "git-mutation",
+            "external-write",
+            "destructive"
+          ]
+        },
+        "provenance": {
+          "$ref": "#/$defs/provenance"
+        },
+        "evaluation_profile": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "ownership": {
+                "const": "custom"
+              }
+            },
+            "required": [
+              "ownership"
+            ]
+          },
+          "then": {
+            "required": [
+              "lifecycle",
+              "source"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "ownership": {
+                "const": "legacy-unmanaged"
+              }
+            },
+            "required": [
+              "ownership"
+            ]
+          },
+          "then": {
+            "required": [
+              "lifecycle"
+            ],
+            "properties": {
+              "provenance": {
+                "required": [
+                  "origin",
+                  "revision",
+                  "license",
+                  "observed_hash",
+                  "disposition",
+                  "exit_phase"
+                ]
+              }
+            },
+            "not": {
+              "required": [
+                "source"
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "ownership": {
+                "const": "external"
+              }
+            },
+            "required": [
+              "ownership"
+            ]
+          },
+          "then": {
+            "properties": {
+              "provenance": {
+                "required": [
+                  "origin",
+                  "revision",
+                  "license",
+                  "manager"
+                ]
+              }
+            },
+            "not": {
+              "required": [
+                "source"
+              ]
+            }
+          }
+        }
+      ]
+    }
+  }
+}

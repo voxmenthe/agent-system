@@ -1,0 +1,11 @@
+# Source the repository copy in place, or the installed HOME projection.
+_gh_source_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+if [ -f "$_gh_source_dir/git-helpers/dispatch.bash" ]; then
+  _GH_DIR="$_gh_source_dir/git-helpers"
+else
+  _GH_DIR="$HOME/.git-helpers"
+fi
+unset _GH_REGISTRY _GH_IMPL
+# shellcheck source=/dev/null
+. "$_GH_DIR/dispatch.bash"
+unset _gh_source_dir
