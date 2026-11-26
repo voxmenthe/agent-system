@@ -61,7 +61,7 @@ class AgentsTests(unittest.TestCase):
             "cdxX", "cdmM", "cdxX2", "cdmM2", "kimbs",
             "aghh", "aghhb", "aghx", "aghxb", "agcm", "agcmb", "agch", "agchb",
             "agnm", "agnmb", "agnh", "agnhb", "agnx", "agnxb", "agk",
-            "dfusx", "cmm26p", "ocargh", "ochy", "ocbp", "pqx",
+            "dfusx", "dsweo", "cmm26p", "ocargh", "ochy", "ocbp", "pqx",
             "ocs62x", "ocopmm", "ocnx", "occh", "dnx",
             "cmdglyph", "cmdflint", "ochy4flash", "oclongcat", "ociceman",
             "pihy4flash", "pilongcat", "piiceman",
@@ -85,6 +85,12 @@ class AgentsTests(unittest.TestCase):
             )
         self.assertRegex(
             text, r"(?m)^  dnh\s+gemini-4-neon-high\s+high in id\s+bypass permissions$"
+        )
+        self.assertRegex(
+            text, r"(?m)^  dswe\s+swe-2-1-max\s+-\s+bypass permissions$"
+        )
+        self.assertRegex(
+            text, r"(?m)^  dsweo\s+swe-2-max\s+-\s+bypass permissions$"
         )
         # Key-auth Claude wrappers track the opus/fable aliases, never pins.
         self.assertNotIn("claude-opus-4-8", text)
@@ -251,6 +257,55 @@ class AgentsTests(unittest.TestCase):
                         self.assertEqual("agy-bare", argv[agent_idx + 1])
                     else:
                         self.assertNotIn("--agent", argv)
+
+    def test_swe_wrappers_pin_current_and_legacy_devin_models(self) -> None:
+        cases = (
+            ("dswe", "swe-2-1-max"),
+            ("dsweo", "swe-2-max"),
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            bin_dir = root / "bin"
+            bin_dir.mkdir()
+            args_file = root / "args.json"
+            stub = bin_dir / "devin"
+            stub.write_text(
+                f"#!{sys.executable}\n"
+                "import json, os, pathlib, sys\n"
+                "pathlib.Path(os.environ['ARGS_FILE']).write_text(json.dumps(sys.argv[1:]))\n"
+            )
+            stub.chmod(0o755)
+            env = dict(
+                os.environ,
+                PATH=f"{bin_dir}:{os.environ['PATH']}",
+                ARGS_FILE=str(args_file),
+            )
+            for wrapper, model in cases:
+                with self.subTest(wrapper=wrapper):
+                    if args_file.exists():
+                        args_file.unlink()
+                    res = subprocess.run(
+                        [
+                            BASH,
+                            "--noprofile",
+                            "--norc",
+                            "-c",
+                            'source "$1"; shift; "$@" "hello"',
+                            "devin-test",
+                            str(WRAPPERS),
+                            wrapper,
+                        ],
+                        stdin=subprocess.DEVNULL,
+                        capture_output=True,
+                        text=True,
+                        timeout=20,
+                        env=env,
+                    )
+                    self.assertEqual(0, res.returncode, res.stderr)
+                    argv = json.loads(args_file.read_text())
+                    self.assertEqual(model, argv[argv.index("--model") + 1])
+                    self.assertEqual("bypass", argv[argv.index("--permission-mode") + 1])
+                    self.assertEqual("hello", argv[-1])
 
     def test_filter_command_code_lists_current_models(self) -> None:
         process = self.run_agents("--cmd")

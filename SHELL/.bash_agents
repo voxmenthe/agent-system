@@ -78,9 +78,10 @@
 #                  project-defined MCP servers to start without an extra prompt.
 #                  kimb uses a repository-scoped minimal home, while kimbs adds
 #                  only ~/.agents/skills to that minimal profile.
-#   * Devin:       dglm, dswe, dargm, dargh, dnh, dnx, dfabx, dfabh, dfabmm,
-#                  dfusx, dfush, dopmm, doph, dopx, dopm, dfuoh, dfuox, dfuom
-#                  (plus the _devin helper)
+#   * Devin:       dglm, dswe, dsweo, dargm, dargh, dnh, dnx, dfabx, dfabh,
+#                  dfabmm, dfusx, dfush, dopmm, doph, dopx, dopm, dfuoh, dfuox,
+#                  dfuom (plus the _devin helper)
+#                  dswe = SWE-2.1 max; dsweo = legacy SWE-2 max;
 #                  dargm/dargh = Gemini 4 Argon medium/high;
 #                  dnh/dnx = Gemini 4 Neon high/xhigh;
 #                  dfab* = Claude Fable 5.1 (x/h/mm = xhigh/high/medium);
@@ -2978,7 +2979,8 @@ kimi|kiml|(kimi default)|low|normal home, never-ask
 kimi|kimb|(kimi default)|max|bare minimal home, never-ask
 kimi|kimbs|(kimi default)|max|bare home + ~/.agents/skills, never-ask
 devin|dglm|glm-5.2|-|bypass permissions
-devin|dswe|swe-2-max|-|bypass permissions
+devin|dswe|swe-2-1-max|-|bypass permissions
+devin|dsweo|swe-2-max|-|bypass permissions
 devin|dargm|gemini-4-argon-medium|medium in id|bypass permissions
 devin|dargh|gemini-4-argon-high|high in id|bypass permissions
 devin|dnh|gemini-4-neon-high|high in id|bypass permissions
@@ -5830,6 +5832,12 @@ dglm() {
 }
 
 dswe() {
+  local devin_bin
+  devin_bin="$(_devin)" || return
+  "$devin_bin" --model swe-2-1-max --permission-mode bypass "$@"
+}
+
+dsweo() {
   local devin_bin
   devin_bin="$(_devin)" || return
   "$devin_bin" --model swe-2-max --permission-mode bypass "$@"
