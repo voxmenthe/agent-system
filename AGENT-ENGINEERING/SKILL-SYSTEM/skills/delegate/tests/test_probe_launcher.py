@@ -247,6 +247,12 @@ class ProbeLauncherTests(unittest.TestCase):
         self.assertEqual(("codex", "key"), module.route("cdxk:cdx"))
         self.assertIsNone(module.route("cdxk:cdx2"))
         self.assertIsNone(module.route("cdxk:agg"))
+        self.assertEqual(("antigravity", "key"), module.route("agk"))
+        self.assertEqual(("antigravity", "key"), module.route("agk:agnh"))
+        self.assertEqual(("antigravity", "key"), module.route("agk:agcm"))
+        self.assertIsNone(module.route("agk:agnh2"))
+        self.assertIsNone(module.route("agk:agoh"))
+        self.assertIsNone(module.route("agk:cdx"))
 
     def test_model_names_come_only_from_json_output(self) -> None:
         loader = importlib.machinery.SourceFileLoader("probe_launcher", str(PROBE))
