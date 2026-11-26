@@ -235,8 +235,8 @@ class WaveUsageTests(unittest.TestCase):
             ("kimb kimbs", "Kimi", "kimi"),
             ("dglm dopmm doph dopx dopm", "Devin", "devin"),
             ("clm clmbe ctx ctxb ctm ctmb cdmbe cammb cdmM cdxX camM caxX", "Codex", "codex"),
-            ("ocs ommp ocargh ochy4flash oclongcat ociceman pihy4flash pilongcat piiceman", "OpenCode Go", "opencode"),
-            ("cmds cmm26p cms cmdglyph cmdflint", "Command Code", "cmd"),
+            ("ocs ommp ocargh ochy ocq4h ocq4x ochy4flash oclongcat ociceman pihy4flash pilongcat piiceman", "OpenCode Go", "opencode"),
+            ("cmds cmm26p cmqh cmqx cms cmhy cmdglyph cmdflint", "Command Code", "cmd"),
             ("csm csu csx cshh csmm csbm chm chbh ccx ccbfh ccmM ccxX", "Claude", "claude"),
         ]
         for launchers, section, harness in cases:

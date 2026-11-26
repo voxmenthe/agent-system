@@ -36,7 +36,7 @@ ocargh()  ( _oc_launch "opencode-go/gemini-4-argon" "high" "$@" )
 ocmf()    ( _oc_launch "opencode/mimo-v2.6-flash-free" "" "$@" )
 ocnx()    ( _oc_launch "google/gemini-4-neon" "xhigh" "$@" )
 pihy4flash() ( _pi_launch "opencode-go/hy4-flash-free" "high" "$@" )
-pilongcat()  ( _pi_launch "opencode-go/longcat-2.5-free" "" "$@" )
+pilongcat()  ( _pi_launch "opencode-go/longcat-2.5" "" "$@" )
 kimm() { KIMI_MODEL_THINKING_EFFORT=max _kimi_launch "normal" "$@"; }
 mixed() { _cmd_launch x; _devin; }
 usage() { printf '%s\n' "$*" >> "$PICK_TEST_CALLS"; cat "$PICK_TEST_RECORDS"; }

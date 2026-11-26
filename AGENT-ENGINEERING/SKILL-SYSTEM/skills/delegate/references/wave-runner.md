@@ -110,8 +110,8 @@ not certify scope independence.
   clm clmb clme clmbe clm2 clmb2 clme2 clmbe2 ctx ctxb ctx2 ctxb2 ctm ctmb ctm2 ctmb2
   cdx cdxb cdxe cdxbe cdx2 cdxb2 cdxe2 cdxbe2 cdm cdmb cdme cdmbe cdm2 cdmb2 cdme2 cdmbe2
   cam camb cax caxb camm cammb cah cahb cam2 camb2 cax2 caxb2 camm2 cammb2 cah2 cahb2
-  cdmM cdxX camM caxX cdmM2 cdxX2 camM2 caxX2 ocs ommp ocargh ocmm26 ochy4flash oclongcat ociceman
-  cmg cmds cmm26p cms cmdglyph cmdflint pihy4flash pilongcat piiceman
+  cdmM cdxX camM caxX cdmM2 cdxX2 camM2 caxX2 ocs ommp ocargh ochy ocq4h ocq4x ocmm26 ochy4flash oclongcat ociceman
+  cmg cmds cmm26p cmqh cmqx cms cmhy cmdglyph cmdflint pihy4flash pilongcat piiceman
   csm csu csx cshh csmm csbm csbu csbx csbh csbmm chm chu chx chh chmm
   chbm chbu chbx chbh chbmm ccx ccbx ccm ccbm ccmm ccfh ccbfh ccfx ccbfx ccmM ccxX
   cck cckm ccku cckx cckh cckmm cckbm cckbu cckbx cckbh cckbmm
@@ -209,9 +209,10 @@ OpenCode Go's "Go usage limit exceeded", each opening a line as the CLI's own
 error record. A bare 429 or one model's limit stays `rate limit or quota`,
 which bars only the launcher. The adapter names the failed launcher
 (`refusals.py --launcher`), so a record only one harness writes (those three
-quota messages, OpenCode's no-route error, Command Code's sign-out, the second
-Antigravity account's sign-in line) counts only from that harness's launchers:
-another harness's transcript may print it verbatim.
+quota messages, OpenCode's no-route error, Command Code's sign-out, Codex's
+startup `Error loading config.toml`, the second Antigravity account's sign-in
+line) counts only from that harness's launchers: another harness's transcript
+may print it verbatim.
 
 The parent alone writes the summary. Byte counts measure `.out` bytes, not
 characters; absent output counts as 0. Launcher is the **requested alias**, not

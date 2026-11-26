@@ -119,11 +119,12 @@ fallbacks. Their presence in an allowlist is not a routing recommendation.
 | OpenCode — Muse Spark 1.3 Contributor `xhigh` | `ocs` (`opencode-go/muse-spark-1.3-contributor`, paid) | JSON final-message extraction; no automatic fallback to this model. |
 | OpenCode | `ommp` (`opencode-go/mimo-v2.6-pro`) | JSON final-message extraction; no automatic fallback to this model. |
 | OpenCode — Gemini 4 Argon `high` | `ocargh` (`opencode-go/gemini-4-argon`) | JSON final-message extraction; no automatic fallback to or from this model. |
+| OpenCode — Go paid models | `ochy` (`opencode-go/hy4`, `high`), `ocq4h`/`ocq4x` (`opencode-go/qwen4-max`, `high`/`xhigh`) | JSON final-message extraction; spends OpenCode Go quota. No automatic fallback. |
 | OpenCode — MiMo-V2.6-Flash Free | `ocmm26` (`opencode/mimo-v2.6-flash-free`, Zen) | JSON final-message extraction; the catalog exposes no adjustable reasoning level, so no effort variant is passed. No automatic fallback. |
-| OpenCode — Go free models | `ochy4flash` (`opencode-go/hy4-flash-free`, `high`, its highest effort), `oclongcat` (`opencode-go/longcat-2.5-free`), `ociceman` (`opencode-go/iceman-contributor-free`) | JSON final-message extraction; LongCat and Iceman expose no selectable variant, so none is passed. No automatic fallback. |
-| Pi — Go free models | `pihy4flash` (`opencode-go/hy4-flash-free`, `high`), `pilongcat` (`opencode-go/longcat-2.5-free`), `piiceman` (`opencode-go/iceman-contributor-free`) | Pi's text print mode returns only the final assistant text; no permission prompts by design. LongCat and Iceman pin no thinking level. They spend the OpenCode Go quota. No automatic fallback. |
-| Command Code | `cmg` (GLM-5.3, max effort), `cmds` (DeepSeek V4.1 Flash, max effort), `cmm26p` (MiMo-V2.6-Pro, `xiaomi/mimo-v2.6-pro`, no adjustable effort), `cms` (Muse Spark 1.3 Contributor, `meta/muse-spark-1.3-contributor`, no adjustable effort) | JSON terminal-result extraction; YOLO wrappers with no permission prompts, for bounded tasks only. |
-| Command Code — free models | `cmdglyph` (Glyph Cluster, `stealth/glyph-cluster:free`, `xhigh`, its highest effort), `cmdflint` (Flint v1.0, `recursive/flint-v1.0:free`, no adjustable effort) | Same terminal-result extraction and YOLO boundary as the other Command Code wrappers. |
+| OpenCode — Go free / low-cost models | `ochy4flash` (`opencode-go/hy4-flash-free`, `high`, its highest effort; candidate cheap backup for `dswe` in market workflows), `oclongcat` (`opencode-go/longcat-2.5`; OpenCode Go deprecated `-free`), `ociceman` (`opencode-go/iceman-contributor-free`) | JSON final-message extraction; LongCat and Iceman expose no selectable variant, so none is passed. No automatic fallback. |
+| Pi — Go free / low-cost models | `pihy4flash` (`opencode-go/hy4-flash-free`, `high`), `pilongcat` (`opencode-go/longcat-2.5`), `piiceman` (`opencode-go/iceman-contributor-free`) | Pi's text print mode returns only the final assistant text; no permission prompts by design. LongCat and Iceman pin no thinking level. They spend the OpenCode Go quota. No automatic fallback. |
+| Command Code | `cmg` (GLM-5.3, max effort), `cmds` (DeepSeek V4.1 Flash, max effort), `cmm26p` (MiMo-V2.6-Pro, `xiaomi/mimo-v2.6-pro`, no adjustable effort), `cmqh`/`cmqx` (Qwen4 Max, `Qwen/Qwen4-Max`, `high`/`xhigh`), `cms` (Muse Spark 1.3 Contributor, `meta/muse-spark-1.3-contributor`, no adjustable effort), `cmhy` (Tencent Hy4, `tencent/hy4`, `high`) | JSON terminal-result extraction; YOLO wrappers with no permission prompts, for bounded tasks only. |
+| Command Code — free models | `cmdglyph` (Glyph Cluster, `stealth/glyph-cluster:free`, `xhigh`, its highest effort — **reasoning-only, no web access**), `cmdflint` (Flint v1.0, `recursive/flint-v1.0:free`, no adjustable effort) | Same terminal-result extraction and YOLO boundary as the other Command Code wrappers. Do not route web-lookup tasks to `cmdglyph`. |
 | Command Code — an exact model | `cmd:<native-id>`, for a model the user named that `am cmd` lists (for example `cmd:deepseek/deepseek-v4.1-flash`) | `am` resolves and revalidates it before launch, at the model's default effort; a model no longer listed fails with `am: no matching live models` and never becomes another model. Same terminal-result extraction; prefer a named wrapper when one exists. |
 
 `cmm26p`, `cms`, and `cmdflint` omit `--effort`: their models expose no selectable reasoning levels.
@@ -232,14 +233,14 @@ prints only the worker's final response:
   hints.
 - Grok runs in JSON mode and returns only its `text` field, excluding `thought`
   and usage metadata.
-- OpenCode (`ocs`, `ommp`, `ocargh`, `ocmm26`, `ochy4flash`, `oclongcat`, `ociceman`) runs in JSON
+- OpenCode (`ocs`, `ommp`, `ocargh`, `ochy`, `ocq4h`, `ocq4x`, `ocmm26`, `ochy4flash`, `oclongcat`, `ociceman`) runs in JSON
   mode (`run --format json`) and returns the final assistant message content,
   excluding intermediate tool calls and step commentary. Missing wrappers and
   failed runs fail without switching models or providers.
 - Pi (`pihy4flash`, `pilongcat`, `piiceman`) runs with `-p`; its text print mode
   writes only the last assistant message's text, which the adapter passes
   through after an empty-response check. Pi has no permission prompts by design.
-- Command Code (`cmg`, `cmds`, `cmm26p`, `cms`, `cmdglyph`, `cmdflint`, and `cmd:<native-id>` through `am`) runs with `--no-auto-update --output-format json -p`.
+- Command Code (`cmg`, `cmds`, `cmm26p`, `cmqh`, `cmqx`, `cms`, `cmhy`, `cmdglyph`, `cmdflint`, and `cmd:<native-id>` through `am`) runs with `--no-auto-update --output-format json -p`.
   Only a terminal `type: result`, `subtype: success` record with nonempty
   `finalText` is returned; event commentary, tool output, errors, turn-limit
   results and malformed streams cannot become successful stdout. The installed

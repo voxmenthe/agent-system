@@ -49,6 +49,12 @@ EMPTY_ANSWER = (
 # 10-31, ocargh (council panel E.stderr): OpenCode Go no longer routed the launcher's model id.
 NO_ROUTE = ('{"type":"error","timestamp":1793434987246,"sessionID":"ses_e6ef1d546ffen60kAdDFo71EAS","error":'
             '{"type":"provider.no-route","message":"Model unavailable: opencode-go/gemini-4-argon-contributor"}}\n')
+# 11-14, cdm (stance-tagger.err): stale codex binary rejected ~/.codex/config.toml before any model call.
+CODEX_CONFIG_ERROR = """delegate worker: cdme failed with status 1
+cdme(): codex exec failed with status 1
+Error loading config.toml: invalid type: map, expected a boolean
+in `features`
+"""
 
 
 class RefusalTests(unittest.TestCase):
@@ -166,11 +172,28 @@ class RefusalTests(unittest.TestCase):
                          self.classify(signed_out))
         self.assertEqual("unclassified\n", self.classify("  echo \"Antigravity account 2 is not signed in\"\n"))
 
+    def test_a_startup_config_load_failure_is_quarantined_but_a_quoted_one_is_not(self) -> None:
+        reason = "startup configuration load failed (a local CLI/config error; not repaired here)"
+        for launcher in (None, "cdm", "cdx", "cdxk:cdx"):
+            with self.subTest(launcher=launcher):
+                self.assertEqual(f"quarantined: {reason}\n", self.classify(CODEX_CONFIG_ERROR, launcher=launcher))
+        for text in ('  Error loading config.toml: invalid type: map, expected a boolean\n',
+                     'exec rg "Error loading config.toml" scripts/refusals.py\n'):
+            with self.subTest(quoted=text):
+                self.assertEqual("unclassified\n", self.classify(text, launcher="cdm"))
+        # Another harness printing Codex's error file verbatim is not its own startup failure.
+        self.assertEqual("unclassified\n", self.classify("exec cat stance-tagger.err\n" + CODEX_CONFIG_ERROR, launcher="cmds"))
+        self.assertEqual("unclassified\n", self.classify("exec cat stance-tagger.err\n" + CODEX_CONFIG_ERROR, launcher="ccfx"))
+
     def test_codex_api_key_launchers_keep_their_own_harness(self) -> None:
         self.assertEqual("rate-limited: account quota exhausted on codex\n",
                          self.classify(CODEX_QUOTA, launcher="cdxk:cdx"))
         self.assertEqual('rate-limited: rate limit or quota (limit "weekly")\n',
                          self.classify(GO_QUOTA, launcher="cdxk:cdx"))
+        self.assertEqual("quarantined: signed out: Antigravity account 2 (a user action; not repaired here)\n",
+                         self.classify("Antigravity account 2 is not signed in\n", launcher="agk:agnh"))
+        self.assertEqual("rate-limited: rate limit or quota\n",
+                         self.classify(CODEX_QUOTA, launcher="agk:agnh"))
 
     def test_an_unseen_message_is_unclassified(self) -> None:
         self.assertEqual("unclassified\n", self.classify("Error: context window exceeded\n"))

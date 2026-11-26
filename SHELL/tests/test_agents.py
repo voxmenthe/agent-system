@@ -77,7 +77,7 @@ class AgentsTests(unittest.TestCase):
         )
         for wrapper, model, effort in (
             ("pihy4flash", r"opencode-go/hy4-flash-free", "high"),
-            ("pilongcat", r"opencode-go/longcat-2\.5-free", "-"),
+            ("pilongcat", r"opencode-go/longcat-2\.5", "-"),
             ("piiceman", r"opencode-go/iceman-contributor-free", "-"),
         ):
             self.assertRegex(
@@ -118,7 +118,7 @@ class AgentsTests(unittest.TestCase):
         self.assertRegex(text, r"ocq4h\s+opencode-go/qwen4-max\s+high\s+auto-approve")
         self.assertRegex(text, r"ocq4x\s+opencode-go/qwen4-max\s+xhigh\s+auto-approve")
         self.assertRegex(text, r"ochy4flash\s+opencode-go/hy4-flash-free\s+high\s+auto-approve")
-        self.assertRegex(text, r"oclongcat\s+opencode-go/longcat-2\.5-free\s+-\s+auto-approve")
+        self.assertRegex(text, r"oclongcat\s+opencode-go/longcat-2\.5\s+-\s+auto-approve")
         self.assertRegex(text, r"ociceman\s+opencode-go/iceman-contributor-free\s+-\s+auto-approve")
         self.assertRegex(text, r"ocs62mm\s+openai/gpt-6\.2-sol\s+max\s+auto-approve")
         self.assertRegex(text, r"oca62x\s+openai/gpt-6\.2-astra\s+xhigh\s+auto-approve")

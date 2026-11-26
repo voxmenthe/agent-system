@@ -23,8 +23,8 @@ clm clmb clme clmbe clm2 clmb2 clme2 clmbe2 ctx ctxb ctx2 ctxb2 ctm ctmb ctm2 ct
 cdx cdxb cdxe cdxbe cdx2 cdxb2 cdxe2 cdxbe2 cdm cdmb cdme cdmbe
 cdm2 cdmb2 cdme2 cdmbe2 cam camb cax caxb camm cammb cah cahb
 cam2 camb2 cax2 caxb2 camm2 cammb2 cah2 cahb2
-cdmM cdxX camM caxX cdmM2 cdxX2 camM2 caxX2 ocs ommp ocargh ocmm26 ochy4flash oclongcat ociceman
-cmg cmds cmm26p cms cmdglyph cmdflint pihy4flash pilongcat piiceman
+cdmM cdxX camM caxX cdmM2 cdxX2 camM2 caxX2 ocs ommp ocargh ochy ocq4h ocq4x ocmm26 ochy4flash oclongcat ociceman
+cmg cmds cmm26p cmqh cmqx cms cmhy cmdglyph cmdflint pihy4flash pilongcat piiceman
 csm csu csx cshh csmm csbm csbu csbx csbh csbmm chm chu chx chh chmm
 chbm chbu chbx chbh chbmm ccx ccbx ccm ccbm ccmm ccfh ccbfh ccfx ccbfx ccmM ccxX
 cck cckm ccku cckx cckh cckmm cckbm cckbu cckbx cckbh cckbmm
@@ -674,9 +674,9 @@ class WaveTests(unittest.TestCase):
                 output = '{"role":"assistant","content":"FINAL"}'
             elif launcher.startswith("gr"):
                 output = '{"text":"FINAL","thought":"PRIVATE"}'
-            elif launcher in ("ocs", "ommp", "ocargh", "ocmm26", "ochy4flash", "oclongcat", "ociceman"):
+            elif launcher in ("ocs", "ommp", "ocargh", "ochy", "ocq4h", "ocq4x", "ocmm26", "ochy4flash", "oclongcat", "ociceman"):
                 output = '{"type":"text","part":{"messageID":"m","text":"FINAL"}}'
-            elif launcher in ("cmg", "cmds", "cmm26p", "cms", "cmdglyph", "cmdflint"):
+            elif launcher in ("cmg", "cmds", "cmm26p", "cmqh", "cmqx", "cms", "cmhy", "cmdglyph", "cmdflint"):
                 output = '{"type":"event","event":{"type":"text_delta","text":"PRIVATE"}}\n{"type":"result","subtype":"success","finalText":"FINAL"}'
             elif launcher.startswith(("cs", "cc", "ch")):
                 output = '[{"type":"assistant","text":"PRIVATE"},{"type":"result","is_error":false,"result":"FINAL"}]'

@@ -87,6 +87,10 @@ QUARANTINES = (
     # ~/.bash_agents refuses a headless run on a signed-out second account rather than open a browser login.
     (re.compile(r"^Antigravity account 2 is not signed in", re.MULTILINE),
      "signed out: Antigravity account 2 (a user action; not repaired here)", "antigravity"),
+    # 11-14: cdm (stance-tagger.err): stale codex binary rejected ~/.codex/config.toml before any model call.
+    # Anchored to column zero so a worker transcript quoting the message does not bar the launcher.
+    (re.compile(r"^Error loading config\.toml\b", re.MULTILINE),
+     "startup configuration load failed (a local CLI/config error; not repaired here)", "codex"),
 )
 
 

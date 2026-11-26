@@ -124,10 +124,10 @@
 #                  opencode Go at high effort; ochy = Hy4 via opencode Go
 #                  (opencode-go/hy4), also at high effort. ocq4h/ocq4x select
 #                  Qwen4 Max via OpenCode Go at high/xhigh effort respectively.
-#                  Go free models: ochy4flash = Hy4 Flash Free
+#                  Go free / low-cost models: ochy4flash = Hy4 Flash Free
 #                  (opencode-go/hy4-flash-free) at high, its highest effort;
-#                  oclongcat = LongCat 2.5 Free (opencode-go/longcat-2.5-free)
-#                  and ociceman = Iceman Contributor Free
+#                  oclongcat = LongCat 2.5 (opencode-go/longcat-2.5; Go
+#                  deprecated -free) and ociceman = Iceman Contributor Free
 #                  (opencode-go/iceman-contributor-free) advertise no
 #                  selectable variant, so they pin none.
 #                  The Zen free wrappers pin no effort.
@@ -159,7 +159,7 @@
 #                  pqh/pqx = Qwen4 Max high/xhigh, pmm = MiMo-V2.6-Pro with no
 #                  thinking level pinned (all via opencode Go).
 #                  pihy4flash/pilongcat/piiceman mirror ochy4flash/oclongcat/
-#                  ociceman (oc -> pi): Hy4 Flash Free/high, LongCat 2.5 Free
+#                  ociceman (oc -> pi): Hy4 Flash Free/high, LongCat 2.5
 #                  and Iceman Contributor Free with no thinking level pinned.
 #                  POLICY: whenever an opencode Go wrapper is added or its
 #                  model/effort changes, port the same model/effort to the pi
@@ -3022,7 +3022,7 @@ opencode|ochy|opencode-go/hy4|high|auto-approve
 opencode|ocq4h|opencode-go/qwen4-max|high|auto-approve
 opencode|ocq4x|opencode-go/qwen4-max|xhigh|auto-approve
 opencode|ochy4flash|opencode-go/hy4-flash-free|high|auto-approve
-opencode|oclongcat|opencode-go/longcat-2.5-free|-|auto-approve
+opencode|oclongcat|opencode-go/longcat-2.5|-|auto-approve
 opencode|ociceman|opencode-go/iceman-contributor-free|-|auto-approve
 opencode|oclc|opencode/longcat-2.5-preview-free|-|auto-approve
 opencode|ocmf|opencode/mimo-v2.6-flash-free|-|auto-approve
@@ -3055,7 +3055,7 @@ pi|pqh|opencode-go/qwen4-max|high|no prompts by design
 pi|pqx|opencode-go/qwen4-max|xhigh|no prompts by design
 pi|pmm|opencode-go/mimo-v2.6-pro|-|no prompts by design
 pi|pihy4flash|opencode-go/hy4-flash-free|high|no prompts by design
-pi|pilongcat|opencode-go/longcat-2.5-free|-|no prompts by design
+pi|pilongcat|opencode-go/longcat-2.5|-|no prompts by design
 pi|piiceman|opencode-go/iceman-contributor-free|-|no prompts by design
 EOF
 )"
@@ -6228,10 +6228,10 @@ ocnh()   ( _oc_launch "google/gemini-4-neon"      "high" "$@" )
 ochy()   ( _oc_launch "opencode-go/hy4"             "high" "$@" )
 ocq4h()  ( _oc_launch "opencode-go/qwen4-max"       "high" "$@" )
 ocq4x()  ( _oc_launch "opencode-go/qwen4-max"       "xhigh" "$@" )
-# Go free models: Hy4 Flash Free's highest effort is high; LongCat 2.5 Free
-# and Iceman Contributor Free advertise no selectable variant.
+# Go free / low-cost models: Hy4 Flash Free's highest effort is high;
+# LongCat 2.5 (Go deprecated -free) and Iceman Contributor Free advertise no selectable variant.
 ochy4flash() ( _oc_launch "opencode-go/hy4-flash-free"          "high" "$@" )
-oclongcat()  ( _oc_launch "opencode-go/longcat-2.5-free"        ""     "$@" )
+oclongcat()  ( _oc_launch "opencode-go/longcat-2.5"             ""     "$@" )
 ociceman()   ( _oc_launch "opencode-go/iceman-contributor-free" ""     "$@" )
 # Zen free models (provider `opencode`); no effort variant is pinned.
 oclc()  ( _oc_launch "opencode/longcat-2.5-preview-free"    ""     "$@" )
@@ -6298,7 +6298,7 @@ pqh() ( _pi_launch "opencode-go/qwen4-max"                  "high"  "$@" )
 pqx() ( _pi_launch "opencode-go/qwen4-max"                  "xhigh" "$@" )
 pmm() ( _pi_launch "opencode-go/mimo-v2.6-pro"              ""      "$@" )
 pihy4flash() ( _pi_launch "opencode-go/hy4-flash-free"          "high" "$@" )
-pilongcat()  ( _pi_launch "opencode-go/longcat-2.5-free"        ""     "$@" )
+pilongcat()  ( _pi_launch "opencode-go/longcat-2.5"             ""     "$@" )
 piiceman()   ( _pi_launch "opencode-go/iceman-contributor-free" ""     "$@" )
 # --------------------------------------------------------------------
 

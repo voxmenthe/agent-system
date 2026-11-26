@@ -38,7 +38,7 @@ class CommandWorkerTests(unittest.TestCase):
             {"type": "event", "event": {"type": "tool_completed", "result": "PRIVATE"}},
             {"type": "result", "subtype": "success", "finalText": "FINAL\n  exact formatting"},
         ))
-        for launcher in ("cmg", "cmds", "cmm26p", "cms", "cmdglyph", "cmdflint"):
+        for launcher in ("cmg", "cmds", "cmm26p", "cmqh", "cmqx", "cms", "cmhy", "cmdglyph", "cmdflint"):
             with self.subTest(launcher=launcher):
                 result = self.run_worker(output, launcher=launcher)
                 self.assertEqual(0, result.returncode, result.stderr)

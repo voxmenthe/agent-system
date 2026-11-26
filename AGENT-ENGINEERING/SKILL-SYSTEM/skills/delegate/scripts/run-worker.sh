@@ -23,8 +23,8 @@ delegate_worker_usage() {
     '  cam2 camb2 cax2 caxb2 camm2 cammb2 cah2 cahb2 (Astra secondary account; -p final-only; user-requested only)' \
     '  cdmM cdxX camM caxX cdmM2 cdxX2 camM2 caxX2 (Codex boost; user-requested only)' \
     '  cdxk [c*] cdxk:<primary-codex-launcher> (OpenAI API-key account; user-requested only)' \
-    '  ocs ommp ocargh ocmm26 ochy4flash oclongcat ociceman (OpenCode; JSON final message; user-requested only)' \
-    '  cmg cmds cmm26p cms cmdglyph cmdflint (Command Code; terminal JSON result; user-requested only)' \
+    '  ocs ommp ocargh ochy ocq4h ocq4x ocmm26 ochy4flash oclongcat ociceman (OpenCode; JSON final message; user-requested only)' \
+    '  cmg cmds cmm26p cmqh cmqx cms cmhy cmdglyph cmdflint (Command Code; terminal JSON result; user-requested only)' \
     '  cmd:<native-id> (an exact Command Code model through am; user-requested only)' \
     '  pihy4flash pilongcat piiceman (Pi; final assistant text; user-requested only)' \
     '  csm csu csx cshh csmm csbm csbu csbx csbh csbmm (Claude Sonnet; JSON result)' \
@@ -223,10 +223,10 @@ case "$launcher" in
     # Keep model, account and boost options while selecting final-only output.
     mode="codex-final-print"
     ;;
-  ocs|ommp|ocargh|ocmm26|ochy4flash|oclongcat|ociceman)
+  ocs|ommp|ocargh|ochy|ocq4h|ocq4x|ocmm26|ochy4flash|oclongcat|ociceman)
     mode="opencode-json"
     ;;
-  cmg|cmds|cmm26p|cms|cmdglyph|cmdflint)
+  cmg|cmds|cmm26p|cmqh|cmqx|cms|cmhy|cmdglyph|cmdflint)
     mode="command-json"
     ;;
   pihy4flash|pilongcat|piiceman)
