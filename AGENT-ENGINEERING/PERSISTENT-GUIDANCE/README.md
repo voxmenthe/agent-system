@@ -82,7 +82,7 @@ Lovable is configured for Claude Code, both Codex accounts, Antigravity, Kimi Co
 |---|---|---|---|
 | Claude Code | `config/claude/mcp.json` | `~/.claude.json` | Only `mcpServers.lovable` |
 | Codex | `config/{codex,codex2}/config.toml` | `~/.{codex,codex2}/config.toml` | `mcp_servers.lovable`, alongside the existing selected settings |
-| Antigravity | `config/antigravity/mcp.json` | `~/.gemini/config/mcp_config.json` | Only `mcpServers.lovable`; the second account already shares this config directory |
+| Antigravity | `config/antigravity/mcp.json` | `~/.gemini/config/mcp_config.json` | `mcpServers.lovable` and `mcpServers.claude_in_chrome`; the second account already shares this config directory |
 | Kimi Code | `config/kimi/mcp.json` | `~/.kimi-code/mcp.json` | Existing whole-file projection; other servers are retained in its source |
 | Devin | `config/devin/mcp.json` | `~/.config/devin/mcp_config.json` | `mcpServers.lovable` and `mcpServers.claude_in_chrome`; other entries remain host-owned |
 
@@ -90,7 +90,7 @@ Selected JSON sync preserves all unowned parsed values, including other MCP serv
 
 The registry currently supports HTTP URLs only, with entries shaped as `"lovable": {"url": "https://mcp.lovable.dev"}`. To add another shared server, add its registry entry and opt each desired projection into its name; selected-settings projections also need that server's exact key path in `managed_keys`. To remove a server, set its registry value to `null`, keep its projection references and ownership paths, then sync: the managed entry is removed without touching siblings. Do not simply delete a referenced registry key; that fails validation.
 
-Claude in Chrome is a machine-local stdio exception to the shared HTTP registry. The native entries in Codex, Kimi Code, Devin and Command Code launch `claude --claude-in-chrome-mcp`; Devin and Command Code manage only `mcpServers.claude_in_chrome`, while Kimi Code retains its whole-file projection. These entries require a local Claude Code installation and a connected local browser; they cannot give cloud Devin sessions access to the Mac's browser.
+Claude in Chrome is a machine-local stdio exception to the shared HTTP registry. The native entries in Codex, Kimi Code, Devin, Command Code and Antigravity launch `claude --claude-in-chrome-mcp`; Devin, Command Code and Antigravity manage only `mcpServers.claude_in_chrome` alongside any shared entries, while Kimi Code retains its whole-file projection. These entries require a local Claude Code installation and a connected local browser; they cannot give cloud Devin sessions access to the Mac's browser. The server reaches the extension with Claude Code's own login, so the Antigravity entry pins `env.HOME` to the real home: the second account runs `agy` with `HOME=~/.agy2`, where the server finds no login and reports the extension as not connected.
 
 OAuth tokens and client-generated credentials stay local and are never rendered from the registry. Sync installs configuration, not an OAuth grant. Client-native login and a read-only connection check are separate steps.
 
@@ -100,7 +100,7 @@ The prompt directories are projected as whole directories: every `*.md` in `conf
 
 The three Grok homes run identical settings. Each has its own source because sync copies a host's `[privacy]` stamp back into the source, and a shared source would spread one account's stamp to the others. Edit all three files together; `tests/test_hostlib.py` fails when they differ outside `[privacy]`.
 
-`config/claude/settings.json` turns on Code Mode (`CLAUDE_CODE_EXPERIMENTAL_CODE_MODE`) and deliberately leaves `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` unset: Code Mode refuses to start while agent teams is on. Record a setting that is off on purpose here, never as a `//` line in the JSON. JSON has no comments, so the source stops parsing, `./guidance status` fails, and sync refuses to touch the unparseable installed copy.
+`config/claude/settings.json` enables `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` and deliberately leaves `CLAUDE_CODE_EXPERIMENTAL_CODE_MODE` and `advisorModel` unset: Code Mode disables Chrome (`claudeInChromeDefaultEnabled`) and computer use and refuses to start with agent teams, so Code Mode is opted into per session with the `--code-mode` launcher flag instead of globally. `advisorModel` is owned here (off by default; pass `--advisor <model>` per launch, since `/advisor` writes to `~/.claude/settings.json` and causes sync drift). Record a setting that is off on purpose here, never as a `//` line in the JSON. JSON has no comments, so the source stops parsing, `./guidance status` fails, and sync refuses to touch the unparseable installed copy.
 
 ### Projection edit guard (Claude Code)
 

@@ -1,5 +1,15 @@
 {
   "mcpServers": {
+    "claude_in_chrome": {
+      "command": "@HOME@/.local/bin/claude",
+      "args": [
+        "--claude-in-chrome-mcp"
+      ],
+      "env": {
+        "HOME": "@HOME@"
+      },
+      "disabled": false
+    },
     "lovable": {
       "disabled": false,
       "serverUrl": "https://mcp.lovable.dev"

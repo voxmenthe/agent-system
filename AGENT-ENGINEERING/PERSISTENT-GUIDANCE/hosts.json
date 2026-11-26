@@ -712,6 +712,10 @@
       "managed_keys": [
         [
           "mcpServers",
+          "claude_in_chrome"
+        ],
+        [
+          "mcpServers",
           "lovable"
         ]
       ],
