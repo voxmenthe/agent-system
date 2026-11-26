@@ -331,6 +331,12 @@ OpenCode Go. Codex selections include both configured accounts; Grok selections
 include `~/.grok` plus `~/.grok2` and `~/.grok3` once each holds a login;
 Antigravity selections add `~/.agy2` once it holds a login, both queried at once.
 
+`usage --records [-a ...]` prints the windows the summary ranks instead of the
+report, one tab-separated line each: `window`, provider, reset epoch, label,
+period, used %, remaining %, window seconds. Gaps the summary notes print as
+`unranked`, provider, label, reason. The delegate skill's `pick-launcher`
+reads these lines to choose among launchers by quota.
+
 For Command Code, `cmd whoami` checks the key online; `cmd status` can report a
 saved key as authenticated even when the API rejects it. After an HTTP 401,
 run `cmd logout` then `cmd login`, and verify `cmd whoami` and `usage -a cmd`.

@@ -134,7 +134,8 @@ class UsageTests(unittest.TestCase):
                      ("-a", "claude,,codex"), ("-a", "claude,"),
                      ("-a", "claude,unknown"), ("-a", "claude codex"),
                      ("-a", "claude\ncodex"), ("-a", "mimo"),
-                     ("--unknown",), ("claude",)):
+                     ("--unknown",), ("claude",),
+                     ("--records", "-a"), ("--records", "claude"), ("-a", "claude", "--records")):
             with self.subTest(args=args):
                 process = self.start(*args)
                 output, errors = process.communicate(timeout=5)
@@ -412,6 +413,27 @@ for line in sys.stdin:
                         text.index("Codex 2 · Codex (weekly)"))
         self.assertNotIn("Spark", five_hour)
         self.assertNotIn("Spark", summary)
+        self.assertEqual(b"", errors)
+
+    def test_records_print_each_ranked_window_and_gap_instead_of_the_report(self) -> None:
+        # pick-launcher (delegate skill) parses these lines: kind, provider, then the summary's fields.
+        self.codex_responses(self.codex_quota(), self.codex_quota(used=56))
+        self.grok_accounts(".grok")
+        output, errors = self.start("--records", "-a", "claude,codex,grok").communicate(timeout=10)
+        rows = [line.split("\t") for line in output.decode().splitlines()]
+        windows = {(row[1], row[3], row[4]): row[6] for row in rows if row[0] == "window" and len(row) == 8}
+        self.assertEqual({
+            ("codex", "Codex · Codex", "5h"): "88",
+            ("codex", "Codex · Codex (weekly)", "weekly"): "66",
+            ("codex", "Codex 2 · Codex", "5h"): "44",
+            ("codex", "Codex 2 · Codex (weekly)", "weekly"): "66",
+            ("grok", "Grok · Tier .grok", "weekly"): "75",
+        }, windows)
+        for row in rows:
+            if row[0] == "window":
+                self.assertGreater(int(row[2]), time.time(), row)
+        self.assertIn(["unranked", "claude", "Claude", "no subscription login; run claude auth login"], rows)
+        self.assertEqual(len(rows), len(windows) + 1, rows)
         self.assertEqual(b"", errors)
 
     def test_codex_summary_shows_soonest_available_banked_expiry_per_account(self) -> None:
