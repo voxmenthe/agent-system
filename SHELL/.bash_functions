@@ -1153,6 +1153,7 @@ __mup_installed_version() {
     codex) executable="codex" ;;
     antigravity) executable="agy" ;;
     devin) executable="devin" ;;
+    factory) executable="droid" ;;
     amp) executable="amp" ;;
     grok) executable="grok" ;;
     kimi) executable="kimi" ;;
@@ -1175,7 +1176,7 @@ __mup_installed_version() {
   esac
 
   case "$cli" in
-    claude|antigravity|amp|kimi|pi|cursor)
+    claude|antigravity|amp|kimi|pi|cursor|factory)
       awk 'NR == 1 { print $1; exit }' <<<"$output"
       ;;
     command-code)
@@ -1219,6 +1220,10 @@ __mup_latest_version() {
     devin)
       payload=$(curl -fsSL https://static.devin.ai/cli/current/manifest.json) || return 1
       jq -er '.version | select(type == "string" and length > 0)' <<<"$payload"
+      ;;
+    factory)
+      payload=$(curl -fsSL https://app.factory.ai/cli) || return 1
+      sed -nE 's/^VER="([^"]+)"$/\1/p' <<<"$payload" | head -n 1
       ;;
     amp)
       curl -fsSL https://static.ampcode.com/cli/cli-version.txt
@@ -1305,6 +1310,13 @@ __mup_apply_update() {
         devin update
       else
         (set -o pipefail; curl -fsSL https://cli.devin.ai/install.sh | bash)
+      fi
+      ;;
+    factory)
+      if command -v droid >/dev/null 2>&1; then
+        droid update
+      else
+        (set -o pipefail; curl -fsSL https://app.factory.ai/cli | sh)
       fi
       ;;
     amp)
@@ -1400,7 +1412,7 @@ __mup_cleanup_hermes() {
 }
 
 mup() {
-  local -a clis=(claude codex antigravity devin amp grok kimi command-code pi cursor opencode)
+  local -a clis=(claude codex antigravity devin factory amp grok kimi command-code pi cursor opencode)
   local cli="" label="" current="" latest=""
   local current_status=0 comparison_status=0 status=0
   local hermes_out="" hermes_pid="" hermes_status=0
@@ -1438,6 +1450,7 @@ mup() {
       codex) label="Codex" ;;
       antigravity) label="Antigravity" ;;
       devin) label="Devin" ;;
+      factory) label="Factory" ;;
       amp) label="Amp" ;;
       grok) label="Grok" ;;
       kimi) label="Kimi Code" ;;
