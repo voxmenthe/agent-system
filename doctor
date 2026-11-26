@@ -218,6 +218,21 @@ def check_review_hook(home: Path, enabled: list[str]) -> list[Check]:
     return checks
 
 
+def check_git_hooks() -> list[Check]:
+    if not ((ROOT / ".git").exists() and (ROOT / ".githooks").is_dir()):
+        return []
+    code, out = run(["git", "-C", str(ROOT), "config", "--get", "core.hooksPath"])
+    if code == 0 and out == ".githooks":
+        return [Check("ok", "git hooks", "core.hooksPath=.githooks")]
+    return [
+        Check(
+            "warn",
+            "git hooks",
+            "core.hooksPath is not .githooks; run `git config core.hooksPath .githooks` or ./bootstrap",
+        )
+    ]
+
+
 def check_memory_hooks(home: Path, enabled: list[str]) -> list[Check]:
     checks = []
     for host, (relative, commands) in MEMORY_HOOKS.items():
@@ -281,6 +296,7 @@ def main() -> int:
     checks += check_skills(home)
     checks += check_review_hook(home, enabled)
     checks += check_memory_hooks(home, enabled)
+    checks += check_git_hooks()
 
     for check in checks:
         print(f"{check.level:5} {check.name:22} {check.detail}")

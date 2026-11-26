@@ -32,3 +32,10 @@
 #
 # Installer-added PATH entries that belong to this machine only:
 #   export PATH="$HOME/.antigravity-ide/antigravity-ide/bin:$PATH"
+#
+# Public-repo hygiene gate (scripts/check_public_hygiene.py, invoked by .githooks):
+# Optionally put personal emails, usernames, or private repo names — one literal
+# or `re:<regex>` per line — in ~/.config/agent-system/hygiene-denylist.txt
+# (outside git) so they can never be committed or pushed. Set this to fail loudly
+# if that file is missing:
+#   export AGENT_SYSTEM_REQUIRE_DENYLIST=1

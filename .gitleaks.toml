@@ -1,0 +1,42 @@
+title = "agent-system gitleaks config"
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Gitignored local directories and bytecode caches"
+paths = [
+  '''^PLANS/''',
+  '''^AGENT-ENGINEERING/SKILL-SYSTEM/evaluations/''',
+  '''__pycache__/''',
+  '''\.pyc$''',
+]
+
+[[allowlists]]
+description = "Claude Code public OAuth client ID in usage helper"
+paths = [
+  '''^SHELL/\.bash_agents$''',
+]
+regexes = [
+  '''9d1c250a-e61b-44d9-88ed-5944d1962f5e''',
+]
+
+[[allowlists]]
+description = "Synthetic fake JWT and truncated JWT documentation examples"
+paths = [
+  '''^AGENT-ENGINEERING/SKILL-SYSTEM/tests/test_colab_jobs_skill\.py$''',
+  '''^AGENT-ENGINEERING/SKILL-SYSTEM/skills/gpt/ADVANCED\.md$''',
+]
+regexes = [
+  '''eyJhbGciOiJFUzI1NiJ9\.eyJhdWQiOiJ4In0\.SIGNATUREabc''',
+  '''eyJhbGciOiJSUzI1NiI[A-Za-z0-9_-]*\.\.\.''',
+]
+
+[[allowlists]]
+description = "Non-secret keyword argument matched by generic-api-key entropy heuristic"
+paths = [
+  '''^SHELL/git-helpers/tests/test_navigation\.py$''',
+]
+regexes = [
+  '''cwd=self\.root''',
+]
