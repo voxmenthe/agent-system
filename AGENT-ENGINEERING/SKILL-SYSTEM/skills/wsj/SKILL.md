@@ -198,8 +198,13 @@ If `body` / `flattenedBody` looks empty, walk the JSON `blocks` array
 - For every material claim, record article title, canonical URL, published or
   updated date, and whether the claim is reported fact, attributed view, or
   inference.
+- When saving local WSJ extracts (including from Chrome), save the headline,
+  dek, publication/update clock, canonical URL, and every cited figure verbatim
+  (never paraphrase-only), while staying within the no-full-article rule below.
 - Prefer synthesis and paraphrase. Do not reproduce full articles or long
   passages; quote only short language essential to the analysis.
+- Write task and extract files with the file-write tool or a quoted heredoc
+  (`<<'EOF'`) so dollar figures are never shell-expanded.
 - Preserve disagreement and chronology. A newer article may update an older
   claim rather than merely corroborate it.
 - Label Opinion separately from reported news.
