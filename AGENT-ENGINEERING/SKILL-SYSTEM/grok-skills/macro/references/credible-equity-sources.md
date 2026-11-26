@@ -188,6 +188,7 @@ variant perception in free text, not PDF-link-only teasers.
 | citrini | Citrini Research. Thematic cross-asset research; Mag 7 / AI allocation theses free on X. Can be punchy; keep market theses, drop pure vibes. | Research brand |
 | RichLightShed | Rich Greenfield, LightShed Partners. Named TMT analyst; free market structure on media deals, streaming leverage, distributor power ($PSKY/$WBD etc.). Drop pure podcast promo. | TMT sell-side craft |
 
+
 ### EQ-A research - estimate abstracts / sell-side craft on X
 
 Tech estimate and math signal (short abstracts count).
@@ -202,6 +203,7 @@ Tech estimate and math signal (short abstracts count).
 | TechFundies | TechStockFundamentals. Prospectus- and earnings-driven work on CoreWeave and hyperscaler capex/FCF; explicitly surfaces uncertainty and revises modeling assumptions. Strong for RPO, ROIC, depreciation, interest, and cash-conversion questions. | AI-infra fundamentals / cash flow |
 | RHouseResearch | Rittenhouse Research. Neocloud, data-center lease, power/MW, SPV, and credit-structure specialist. Useful on secured versus unsecured pricing and operational delivery; disclose its Substack/ticker lean and verify terminal screenshots or second-hand CDS marks. | AI-infra credit / leases / operations |
 | EricJhonsa | Eric Jhonsa. Company-level estimates and risk/reward across power-for-compute, semis, neoclouds, and software: named multiples, bookings, backlog, financing needs, and revisions. Strong free-text analytical replies complement the mega-cap core. Preserve parent/quote context, separate his valuation work from relayed technical claims, verify transcript inputs, and label PM/book incentives. | AI stack / power / company estimates |
+| PrefShares | interesting perspectives on topical things in tech |
 
 ### EQ-A estimate wire (Asia / print vs consensus)
 
