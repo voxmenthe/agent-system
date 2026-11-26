@@ -6,6 +6,11 @@ GROK_HOME (default ~/.grok), performs the initialize handshake, issues the
 _x.ai/billing RPC, and prints one summary line: fetched timestamp, used and
 remaining credit percentage, time until reset, and the Pacific reset time.
 It makes no model or X calls.
+
+`xgrok --pick-account` runs it with --pick: it reads every account the launcher
+routes to and prints only the home whose quota resets next among those with at
+least PICK_MIN_REMAINING_PERCENT remaining (each reading and verdict goes to
+stderr), or prints nothing and exits 1 when none qualifies.
 """
 
 from __future__ import annotations
@@ -29,6 +34,8 @@ READ_CHUNK_BYTES = 65536
 MAX_LINE_BYTES = 4 * 1024 * 1024
 PACIFIC_TZ = ZoneInfo("America/Los_Angeles")
 DEFAULT_GROK_HOME = str(Path.home() / ".grok")
+# Shows only that an account is not exhausted, not that it can finish a wave: percentages differ across tiers.
+PICK_MIN_REMAINING_PERCENT = 0.3
 
 INITIALIZE_REQUEST: dict[str, Any] = {
     "jsonrpc": "2.0",
@@ -280,6 +287,71 @@ def format_report(quota: Quota, grok_home: str, now: datetime | None = None) -> 
     )
 
 
+def account_homes() -> list[str]:
+    """The launcher's accounts in its order: ~/.grok, then the --grok2 and --grok3 homes."""
+    return [
+        DEFAULT_GROK_HOME,
+        os.environ.get("GROK2_HOME") or str(Path.home() / ".grok2"),
+        os.environ.get("GROK3_HOME") or str(Path.home() / ".grok3"),
+    ]
+
+
+def pick_account(readings: list[tuple[str, Quota | UsageError]], now_epoch: float) -> tuple[str | None, list[str]]:
+    """Choose the home whose quota resets next, so credits that would expire at a reset are spent first.
+
+    Eligible: a successful reading whose reset is after NOW_EPOCH and whose unrounded remaining percentage is at
+    least PICK_MIN_REMAINING_PERCENT. Ties go to more remaining, then to reading order. Returns the chosen home, or
+    None when nothing is eligible, and one reason per reading in reading order.
+    """
+    reasons: list[str] = []
+    eligible: list[tuple[float, float, int]] = []
+    for index, (_, reading) in enumerate(readings):
+        if isinstance(reading, UsageError):
+            reasons.append(f"skipped: reading failed: {reading}")
+        elif reading.reset_epoch <= now_epoch:
+            reasons.append("skipped: its reset time has passed")
+        # Compared as used, not 100 - used: 100 - 99.7 is 0.29999999999999716 in floating point.
+        elif reading.used_percent > 100.0 - PICK_MIN_REMAINING_PERCENT:
+            reasons.append(f"skipped: {100.0 - reading.used_percent:.2f}% remaining is under the "
+                           f"{PICK_MIN_REMAINING_PERCENT}% floor")
+        else:
+            reasons.append("")
+            eligible.append((reading.reset_epoch, reading.used_percent, index))
+    if not eligible:
+        return None, reasons
+    chosen_reset, chosen_used, chosen = min(eligible)
+    for reset, used, index in eligible:
+        if index == chosen:
+            reasons[index] = "chosen: earliest reset among eligible accounts"
+        elif reset > chosen_reset:
+            reasons[index] = "eligible; resets later"
+        elif used > chosen_used:
+            reasons[index] = "eligible; same reset, less remaining"
+        else:
+            reasons[index] = "eligible; same reset and remaining, later in launcher order"
+    return readings[chosen][0], reasons
+
+
+def _print_pick(grok_bin: str, timeout_s: float) -> int:
+    readings: list[tuple[str, Quota | UsageError]] = []
+    for home in account_homes():
+        try:
+            readings.append((home, parse_quota(fetch_billing_response(grok_bin, home, timeout_s))))
+        except UsageError as exc:
+            readings.append((home, exc))
+    now = datetime.now(timezone.utc)
+    chosen, reasons = pick_account(readings, now.timestamp())
+    for (home, reading), reason in zip(readings, reasons):
+        line = format_report(reading, home, now) if isinstance(reading, Quota) else home
+        sys.stderr.write(f"xgrok: {line}; {reason}\n")
+    if chosen is None:
+        sys.stderr.write(f"xgrok: no account has a future reset and at least {PICK_MIN_REMAINING_PERCENT}% "
+                         "remaining\n")
+        return 1
+    print(chosen)
+    return 0
+
+
 def _timeout_seconds() -> float:
     override = os.environ.get("XGROK_USAGE_TIMEOUT_S")
     if not override:
@@ -293,13 +365,18 @@ def _timeout_seconds() -> float:
     return value
 
 
-def main() -> int:
+def main(argv: list[str]) -> int:
+    if argv not in ([], ["--pick"]):
+        sys.stderr.write("usage: xgrok_usage.py [--pick]\n")
+        return 2
     grok_home = os.environ.get("GROK_HOME") or DEFAULT_GROK_HOME
     grok_bin = shutil.which("grok")
     if grok_bin is None:
         sys.stderr.write("xgrok: grok is not on PATH\n")
         return 127
     try:
+        if argv:
+            return _print_pick(grok_bin, _timeout_seconds())
         response = fetch_billing_response(grok_bin, grok_home, _timeout_seconds())
         quota = parse_quota(response)
     except UsageError as exc:
@@ -313,4 +390,4 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(main(sys.argv[1:]))

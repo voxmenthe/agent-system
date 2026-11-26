@@ -71,6 +71,10 @@ weeks before its `since:` bound; single-handle, `conversation_id:`,
 
 - Keep each query to one keyword group plus at most one `from:` group of four
   handles, or split roster from keywords.
+- Parenthesize every OR group, as in `(from:a OR from:b) since:{bound}`. After
+  an unparenthesized OR, X applies bounds, filters, floors and `lang:` to the
+  last OR term only; the runner records such executed queries as
+  `or-scope-unbounded`.
 - If any returned post is outside the bound, the query is bound-failed: report
   it as such in the Search log, drop the leaked posts, do not count the page
   as coverage, and split the query. The wave runner lints literal queries in

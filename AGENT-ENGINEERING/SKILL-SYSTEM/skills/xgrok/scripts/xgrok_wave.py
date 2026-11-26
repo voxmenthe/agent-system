@@ -33,7 +33,7 @@ from __future__ import annotations
 
 import argparse
 from collections.abc import Iterator
-from concurrent.futures import CancelledError, ThreadPoolExecutor, as_completed
+from concurrent.futures import CancelledError, FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 import hashlib
@@ -84,7 +84,7 @@ DELEGATED_BUDGET_PATTERN = re.compile(r"^\s*(?:[-*]\s*)?\**\s*delegated budget\s
 MAX_FROM_HANDLES_WITH_KEYWORDS = 4
 FROM_HANDLE_PATTERN = re.compile(r"\bfrom:([A-Za-z0-9_]{1,15})\b")
 QUERY_OPERATOR_PATTERN = re.compile(
-    r"-?\b(?:from|to|since|until|within_time|min_faves|min_retweets|min_replies|filter"
+    r"-?\b(?:from|to|since|until|since_time|until_time|within_time|min_faves|min_retweets|min_replies|filter"
     r"|conversation_id|quoted_tweet_id|in_reply_to_tweet_id|list|lang|url):\S+",
     re.IGNORECASE,
 )
@@ -110,6 +110,23 @@ SCOPE_PATTERN = re.compile(r"\b(?:from|list):\S", re.IGNORECASE)
 BROAD_TOPIC_WORDS = {"rates", "yields", "oil"}
 CASHTAG_PATTERN = re.compile(r"\$[A-Za-z]{1,6}\b")
 NEGATED_TERM_PATTERN = re.compile(r"(?<!\S)-\S+")
+# X applies these to the last term of an OR outside parentheses only (2026-11-19, DLR v7: "from:a OR ... OR from:d
+# -filter:replies since:... until:..." returned the first handle's posts back to 2025).
+OR_SCOPED_OPERATOR_PATTERN = re.compile(
+    r"\b(?:since|until|since_time|until_time|within_time|filter|min_faves|min_retweets|min_replies|lang):\S",
+    re.IGNORECASE,
+)
+QUOTED_PHRASE_PATTERN = re.compile(r'"[^"]*"')
+TWITTER_EPOCH_MS = 1288834974657
+NEAR_PRESENT_WARNING = timedelta(minutes=60)
+LATE_SLICE_MAX_SPAN = timedelta(minutes=60)
+LATE_SLICE_CONTROL_MAX_AGE = timedelta(minutes=30)
+BOUND_TOKEN_PATTERN = re.compile(r"\b(since_time|until_time|since|until|within_time):([^\s`'\"),;/]+)", re.IGNORECASE)
+PST_PDT_BOUND_PATTERN = re.compile(
+    r"\b(since|until):(\d{4}-\d{2}-\d{2}_\d{2}:\d{2}(?::\d{2})?_(?:PST|PDT))\b", re.IGNORECASE
+)
+CANARY_FALLBACK_ORDER = "since_time:/until_time: epoch -> _UTC -> unbounded Latest post-filtered"
+WINDOW_KEYS = ("fresh_since", "fresh_until", "context_since")
 
 
 @dataclass(frozen=True)
@@ -121,6 +138,7 @@ class BriefJob:
     effort: str | None = None
     model: str | None = None
     system_prompt: str | None = None
+    raw_text: str | None = None
 
 
 @dataclass(frozen=True)
@@ -588,6 +606,32 @@ def lint_broad_topic_words(brief_text: str) -> list[str]:
     return warnings
 
 
+def has_unscoped_or(query: str) -> bool:
+    """True when QUERY has an OR outside every parenthesis and quoted phrase plus a bound or filter operator, which X
+    then applies to the last OR term alone."""
+    text = QUOTED_PHRASE_PATTERN.sub(" ", query)
+    if not OR_SCOPED_OPERATOR_PATTERN.search(text):
+        return False
+    depth, top_level = 0, []
+    for char in text:
+        if char in "()":
+            depth = depth + 1 if char == "(" else max(0, depth - 1)
+            top_level.append(" ")
+        else:
+            top_level.append(char if depth == 0 else " ")
+    return "OR" in "".join(top_level).split()
+
+
+def lint_unscoped_or(brief_text: str) -> list[str]:
+    """Warn on each literal query (code span or fenced line) for which has_unscoped_or holds."""
+    return [
+        f"line {line_no}: top-level OR with bounds or filters; X applies them to the last OR term only, so "
+        f"parenthesize the OR group, as in (from:a OR from:b) since:...: {query.strip()[:160]}"
+        for line_no, query, literal in brief_queries(brief_text)
+        if literal and has_unscoped_or(query)
+    ]
+
+
 def compose_brief(brief_text: str, tail_text: str, roles: str = "") -> str:
     """The brief, then its roster roles block when it has one, then the common tail, a blank line between each."""
     parts = [brief_text.rstrip("\n"), roles.strip("\n"), tail_text.strip("\n")]
@@ -609,20 +653,209 @@ def roster_roles(brief_text: str, roster: dict) -> str:
                      + [f"- @{e.handle}: {e.registries}" + (f"; {e.note}" if e.note else "") for e in entries]) + "\n"
 
 
-def validate_jobs(jobs: list[BriefJob], lint_queries: bool) -> tuple[list[str], list[str]]:
+def snowflake_time(post_id: Any) -> datetime | None:
+    """UTC timestamp decoded from a Twitter/X snowflake post ID, or None if malformed."""
+    if not isinstance(post_id, str) or not re.fullmatch(r"\d{15,20}", post_id.strip()):
+        return None
+    ms = (int(post_id.strip()) >> 22) + TWITTER_EPOCH_MS
+    try:
+        return datetime.fromtimestamp(ms / 1000.0, tz=timezone.utc)
+    except (OverflowError, OSError, ValueError):
+        return None
+
+
+def _is_placeholder_bound(token: str) -> bool:
+    val = token.rstrip(").,;")
+    if not val or any(ch in val for ch in ("{", "}", "<", ">", "…")) or "..." in val:
+        return True
+    if val.upper() in {"EPOCH", "UTC", "PT", "PST", "PDT", "DATE", "TIME", "START", "END", "BOUND", "TIMESTAMP"}:
+        return True
+    return len(val) <= 2 and val.isalpha()
+
+
+def _classify_single_bound(op: str, value: str) -> str:
+    op_l = op.lower()
+    val = value.rstrip(").,;")
+    if op_l in ("since_time", "until_time"):
+        return "epoch" if re.fullmatch(r"\d{9,11}", val) else "other"
+    if op_l == "within_time":
+        return "within-time"
+    if re.fullmatch(r"\d{4}-\d{2}-\d{2}_\d{2}:\d{2}(?::\d{2})?_(?:UTC|GMT)", val):
+        return "utc"
+    if re.fullmatch(r"\d{4}-\d{2}-\d{2}_\d{2}:\d{2}(?::\d{2})?_(?:PST|PDT|PT)", val):
+        return "pt"
+    if re.fullmatch(r"\d{4}-\d{2}-\d{2}", val):
+        return "date-only"
+    try:
+        _aware_clock(val)
+        return "iso"
+    except ValueError:
+        return "other"
+
+
+def classify_bound_form(
+    query: str | None, args: dict[str, Any] | None = None, *, ignore_placeholders: bool = False
+) -> str:
+    """Classify the time-bound syntax used by QUERY/ARGS: epoch, utc, pt, date-only, within-time, iso, mixed, other, unbounded, or unavailable."""
+    if query is None and args is None:
+        return "unavailable"
+    forms: set[str] = set()
+    for op, value in BOUND_TOKEN_PATTERN.findall(query or ""):
+        if ignore_placeholders and _is_placeholder_bound(value):
+            continue
+        forms.add(_classify_single_bound(op, value))
+    if isinstance(args, dict):
+        for key in ("since", "from_date", "until", "to_date"):
+            val = args.get(key)
+            if isinstance(val, str) and val.strip():
+                if ignore_placeholders and _is_placeholder_bound(val.strip()):
+                    continue
+                forms.add(_classify_single_bound("since", val.strip()))
+    if not forms:
+        return "unbounded"
+    if len(forms) == 1:
+        return next(iter(forms))
+    return "mixed"
+
+
+def pst_pdt_bounds(text: str) -> list[str]:
+    """Distinct literal _PST/_PDT query bounds in TEXT (e.g. 'since:2026-11-22_00:00:00_PST')."""
+    return list(dict.fromkeys(f"{op}:{val}" for op, val in PST_PDT_BOUND_PATTERN.findall(text)))
+
+
+def _split_brief_and_tail(job: BriefJob) -> tuple[str, str]:
+    """Return (brief_text, tail_text) for JOB, detecting appended common-tail blocks even if raw_text was omitted."""
+    if job.raw_text is not None:
+        prefix = job.raw_text.rstrip("\n")
+        if job.text.startswith(prefix):
+            return job.raw_text, job.text[len(prefix):]
+        return job.raw_text, ""
+    lines = job.text.splitlines(keepends=True)
+    seen_window: set[str] = set()
+    split_idx: int | None = None
+    for idx, line in enumerate(lines):
+        match = COMMENT_SETTING_PATTERN.match(line)
+        if not match:
+            continue
+        key = _normalize_setting_key(match.group(1))
+        if key in WINDOW_KEYS:
+            if key in seen_window:
+                split_idx = idx
+                break
+            seen_window.add(key)
+    if split_idx is not None:
+        # Walk back past a leading "Output orientation:" line that opens templates/common-tail.md.
+        if split_idx > 0 and lines[split_idx - 1].strip().startswith("Output orientation:"):
+            split_idx -= 1
+        return "".join(lines[:split_idx]), "".join(lines[split_idx:])
+    return job.text, ""
+
+
+def brief_bound_forms(job: BriefJob) -> dict[str, Any]:
+    """Per-call and tail bound forms for JOB so preflight can print them and detect mixed forms."""
+    brief_part, tail_part = _split_brief_and_tail(job)
+    calls: list[str] = []
+    seen_spans: set[tuple[int, str]] = set()
+    for line_no, query, literal in brief_queries(brief_part):
+        if not literal and not QUERY_OPERATOR_PATTERN.search(query):
+            continue
+        if not BOUND_TOKEN_PATTERN.search(query) and not literal:
+            continue
+        norm = " ".join(query.split())
+        if not norm or (line_no, norm) in seen_spans:
+            continue
+        seen_spans.add((line_no, norm))
+        form = classify_bound_form(query, ignore_placeholders=True)
+        if form != "unbounded" or FROM_HANDLE_PATTERN.search(query) or CASHTAG_PATTERN.search(query):
+            calls.append(form)
+    tail_line = next((line for line in tail_part.splitlines() if line.startswith("Exact query bounds:")), "")
+    tail_form = classify_bound_form(tail_line, ignore_placeholders=True) if tail_line else None
+    if tail_form == "unbounded":
+        tail_form = None
+    bounded = sorted({f for f in (*calls, tail_form) if f and f not in ("unbounded", "unavailable")})
+    concrete = set()
+    for f in bounded:
+        if f == "mixed":
+            # Recover individual forms present in the text for canary/summary visibility.
+            for op, val in BOUND_TOKEN_PATTERN.findall(job.text):
+                if not _is_placeholder_bound(val):
+                    concrete.add(_classify_single_bound(op, val))
+        else:
+            concrete.add(f)
+    return {
+        "name": job.name,
+        "calls": calls,
+        "tail": tail_form,
+        "forms": sorted(concrete),
+        "mixed": len(concrete) > 1 or "mixed" in bounded,
+    }
+
+
+def format_bound_form_summary(jobs: list[BriefJob]) -> list[str]:
+    """Human-readable per-brief bound-form lines for preflight/dry-run output."""
+    lines: list[str] = []
+    wave_forms: set[str] = set()
+    for job in jobs:
+        info = brief_bound_forms(job)
+        wave_forms.update(info["forms"])
+        if info["calls"]:
+            calls_desc = ", ".join(f"call {i}={form}" for i, form in enumerate(info["calls"], 1))
+        else:
+            calls_desc = "no literal calls"
+        tail_desc = f"; tail={info['tail']}" if info["tail"] else ""
+        mixed_tag = " [MIXED]" if info["mixed"] else ""
+        lines.append(f"  - {job.name}: {calls_desc}{tail_desc}{mixed_tag}")
+    header = "Bound forms per brief" + (
+        f" (WAVE MIXED: {', '.join(sorted(wave_forms))})" if len(wave_forms) > 1 else
+        f" ({next(iter(wave_forms))})" if wave_forms else " (unbounded)"
+    ) + ":"
+    return [header, *lines]
+
+
+def validate_jobs(
+    jobs: list[BriefJob], lint_queries: bool, *, launch: datetime | None = None
+) -> tuple[list[str], list[str]]:
     """Return (errors, warnings) for pre-launch brief checks."""
     errors: list[str] = []
     warnings: list[str] = []
+    now = launch or datetime.now(timezone.utc)
     for job in jobs:
+        brief_part, tail_part = _split_brief_and_tail(job)
+        brief_meta = {**parse_comment_settings(brief_part), **parse_frontmatter(brief_part)}
+        brief_declares_until = "fresh_until" in brief_meta
+        for bad_bound in pst_pdt_bounds(job.text):
+            errors.append(
+                f"{job.name}: _PST/_PDT query bound refused (broken on X native search; use _UTC or "
+                f"since_time:/until_time: epoch): {bad_bound}"
+            )
         try:
-            launch = datetime.now(timezone.utc)
-            window = approved_window(job.text, launch)
-            for token in re.findall(r"\buntil:([^\s`]+)", job.text):
-                clock = _query_clock(token.rstrip(").,;"))
-                if clock and clock > launch:
-                    errors.append(f"{job.name}: literal query upper bound is in the future: {token}")
-                elif clock and window and clock > _aware_clock(window["until"]):
-                    errors.append(f"{job.name}: literal query widens the approved fresh cutoff: {token}")
+            window = approved_window(job.text, now, brief_text=brief_part if tail_part else job.raw_text)
+            seen_near: set[str] = set()
+            for segment, check_window in ((brief_part, True), (tail_part, not brief_declares_until)):
+                if not segment:
+                    continue
+                for op, raw_token in re.findall(r"\b(until_time|until):([^\s`]+)", segment, re.IGNORECASE):
+                    token = raw_token.rstrip(").,;")
+                    is_epoch = op.lower() == "until_time"
+                    clock = _query_clock(token, epoch=is_epoch)
+                    if clock and clock > now:
+                        errors.append(f"{job.name}: literal query upper bound is in the future: {token}")
+                    elif check_window and clock and window and clock > _aware_clock(window["until"]):
+                        errors.append(f"{job.name}: literal query widens the approved fresh cutoff: {token}")
+                    elif (
+                        check_window
+                        and clock
+                        and not is_epoch
+                        and now - NEAR_PRESENT_WARNING <= clock <= now
+                        and f"{op}:{token}" not in seen_near
+                    ):
+                        seen_near.add(f"{op}:{token}")
+                        mins = int((now - clock).total_seconds() // 60)
+                        warnings.append(
+                            f"{job.name}: string upper bound {op}:{token} is within 60 min of launch ({mins}m ago; "
+                            "near-present string bounds risk false empties — verify with bound canary or use "
+                            "since_time:/until_time: epoch)"
+                        )
         except ValueError as error:
             errors.append(f"{job.name}: {error}")
         if job.effort is not None and job.effort not in VALID_EFFORTS:
@@ -650,6 +883,7 @@ def validate_jobs(jobs: list[BriefJob], lint_queries: bool) -> tuple[list[str], 
             (errors if finding.is_error else warnings).append(message)
         warnings.extend(f"{job.name}: {warning}" for warning in lint_floored_or_lists(job.text))
         warnings.extend(f"{job.name}: {warning}" for warning in lint_broad_topic_words(job.text))
+        warnings.extend(f"{job.name}: {warning}" for warning in lint_unscoped_or(job.text))
     return errors, warnings
 
 
@@ -856,15 +1090,84 @@ def _aware_clock(value: str) -> datetime:
     return moment
 
 
-def approved_window(text: str, launch: datetime) -> dict[str, str | None] | None:
-    settings = {**parse_comment_settings(text), **parse_frontmatter(text)}
-    if not any(k in settings for k in ("fresh_since", "fresh_until", "context_since")):
+def _window_meta_from_text(text: str) -> dict[str, str]:
+    merged = {**parse_comment_settings(text), **parse_frontmatter(text)}
+    return {k: merged[k] for k in WINDOW_KEYS if k in merged}
+
+
+def approved_window(
+    text: str, launch: datetime, *, brief_text: str | None = None
+) -> dict[str, str | None] | None:
+    if brief_text is not None:
+        brief_meta = _window_meta_from_text(brief_text)
+        prefix = brief_text.rstrip("\n")
+        tail_part = text[len(prefix):] if text.startswith(prefix) else ""
+        tail_meta = _window_meta_from_text(tail_part)
+    else:
+        lines = text.splitlines(keepends=True)
+        fm_keys = set(parse_frontmatter(text).keys()) & set(WINDOW_KEYS)
+        seen_window: set[str] = set(fm_keys)
+        split_idx: int | None = None
+        start_idx = 0
+        if fm_keys:
+            non_empty = next((i for i, l in enumerate(lines) if l.strip()), 0)
+            if non_empty < len(lines) and FRONTMATTER_DELIM_PATTERN.match(lines[non_empty].lstrip("\ufeff").strip()):
+                for j in range(non_empty + 1, len(lines)):
+                    if FRONTMATTER_DELIM_PATTERN.match(lines[j].strip()):
+                        start_idx = j + 1
+                        break
+        for idx in range(start_idx, len(lines)):
+            match = COMMENT_SETTING_PATTERN.match(lines[idx])
+            if not match:
+                continue
+            key = _normalize_setting_key(match.group(1))
+            if key in WINDOW_KEYS:
+                if key in seen_window:
+                    split_idx = idx
+                    break
+                seen_window.add(key)
+        if split_idx is not None:
+            brief_meta = _window_meta_from_text("".join(lines[:split_idx]))
+            tail_meta = _window_meta_from_text("".join(lines[split_idx:]))
+        else:
+            brief_meta = _window_meta_from_text(text)
+            tail_meta = {}
+
+    if not brief_meta and not tail_meta:
         return None
-    if "fresh_since" not in settings:
-        raise ValueError("fresh_since is required with fresh_until or context_since")
-    since = _aware_clock(settings["fresh_since"])
-    until = _aware_clock(settings["fresh_until"]) if "fresh_until" in settings else launch
-    context = _aware_clock(settings["context_since"]) if "context_since" in settings else None
+
+    if not tail_meta:
+        settings = brief_meta
+        if "fresh_since" not in settings:
+            raise ValueError("fresh_since is required with fresh_until or context_since")
+        since = _aware_clock(settings["fresh_since"])
+        until = _aware_clock(settings["fresh_until"]) if "fresh_until" in settings else launch
+        context = _aware_clock(settings["context_since"]) if "context_since" in settings else None
+    elif not brief_meta:
+        settings = tail_meta
+        if "fresh_since" not in settings:
+            raise ValueError("fresh_since is required with fresh_until or context_since")
+        since = _aware_clock(settings["fresh_since"])
+        until = _aware_clock(settings["fresh_until"]) if "fresh_until" in settings else launch
+        context = _aware_clock(settings["context_since"]) if "context_since" in settings else None
+    else:
+        # Brief-declared harvest cutoffs deterministically override the common tail's window metadata.
+        since_raw = brief_meta.get("fresh_since") or tail_meta.get("fresh_since")
+        if not since_raw:
+            raise ValueError("fresh_since is required with fresh_until or context_since")
+        since = _aware_clock(since_raw)
+        until_raw = brief_meta.get("fresh_until") or tail_meta.get("fresh_until")
+        until = _aware_clock(until_raw) if until_raw else launch
+        if "context_since" in brief_meta:
+            context = _aware_clock(brief_meta["context_since"])
+        elif "fresh_since" in brief_meta and "fresh_until" in brief_meta:
+            context = None
+        elif "context_since" in tail_meta:
+            tail_context = _aware_clock(tail_meta["context_since"])
+            context = tail_context if tail_context <= since else None
+        else:
+            context = None
+
     if since > until or (context and context > since):
         raise ValueError("reversed fresh/context window")
     if until > launch:
@@ -873,7 +1176,14 @@ def approved_window(text: str, launch: datetime) -> dict[str, str | None] | None
             "context_since": context.isoformat() if context else None}
 
 
-def _query_clock(value: str) -> datetime | None:
+def _query_clock(value: str, *, epoch: bool | None = None) -> datetime | None:
+    if epoch is not False and re.fullmatch(r"\d{9,11}", value):
+        sec = int(value)
+        if 1_000_000_000 <= sec <= 9_999_999_999:
+            return datetime.fromtimestamp(sec, timezone.utc)
+        return None
+    if epoch is True:
+        return None
     match = re.fullmatch(r"(\d{4}-\d{2}-\d{2})_(\d{2}:\d{2}(?::\d{2})?)_(UTC|GMT|PDT|PST)", value)
     try:
         if match:
@@ -890,12 +1200,31 @@ def audit_query_clocks(calls: list[dict] | None, window: dict | None, launch: da
     audited = []
     for call in calls:
         args = call["arguments"]
-        bounds = dict(re.findall(r"\b(since|until):([^\s)]+)", str((args or {}).get("query", ""))))
-        lower = (args or {}).get("since") or (args or {}).get("from_date") or bounds.get("since")
-        upper = (args or {}).get("until") or (args or {}).get("to_date") or bounds.get("until")
-        since, until = _query_clock(str(lower)) if lower else None, _query_clock(str(upper)) if upper else None
+        query_str = str((args or {}).get("query", ""))
+        bound_form = "unavailable" if args is None else classify_bound_form(query_str, args)
+        raw_bounds = re.findall(r"\b(since_time|until_time|since|until):([^\s)]+)", query_str, re.IGNORECASE)
+        bounds = {op.lower(): val for op, val in raw_bounds}
+
+        lower_val = (args or {}).get("since") or (args or {}).get("from_date")
+        lower_epoch = False
+        if lower_val is None:
+            if "since" in bounds:
+                lower_val, lower_epoch = bounds["since"], False
+            elif "since_time" in bounds:
+                lower_val, lower_epoch = bounds["since_time"], True
+
+        upper_val = (args or {}).get("until") or (args or {}).get("to_date")
+        upper_epoch = False
+        if upper_val is None:
+            if "until" in bounds:
+                upper_val, upper_epoch = bounds["until"], False
+            elif "until_time" in bounds:
+                upper_val, upper_epoch = bounds["until_time"], True
+
+        since = _query_clock(str(lower_val), epoch=lower_epoch) if lower_val else None
+        until = _query_clock(str(upper_val), epoch=upper_epoch) if upper_val else None
         status = "unavailable" if args is None or window is None else "unbounded"
-        if window and ((lower and not since) or (upper and not until)):
+        if window and ((lower_val and not since) or (upper_val and not until)):
             status = "unavailable-bound-clock"
         if window and since and until:
             fresh = _aware_clock(window["since"])
@@ -911,8 +1240,16 @@ def audit_query_clocks(calls: list[dict] | None, window: dict | None, launch: da
                 status = "context-lookback"
             else:
                 status = "within-approved-query-bounds"
-        audited.append({**call, "sent_since": str(lower) if lower else None, "sent_until": str(upper) if upper else None,
-                        "window_status": status, "silence_support": "not-established"})
+        if args is not None and has_unscoped_or(query_str):
+            status = "or-scope-unbounded"
+        audited.append({
+            **call,
+            "sent_since": str(lower_val) if lower_val else None,
+            "sent_until": str(upper_val) if upper_val else None,
+            "bound_form": bound_form,
+            "window_status": status,
+            "silence_support": "not-established",
+        })
     return audited
 
 
@@ -1175,7 +1512,7 @@ def run_single_worker(job: BriefJob, xgrok_bin: Path, output_dir: Path, timeout_
                       grok_home: str | None = None, launch_path: Path | None = None,
                       stop_requested: threading.Event | None = None) -> dict[str, Any]:
     launch = datetime.now(timezone.utc)
-    window = approved_window(job.text, launch)
+    window = approved_window(job.text, launch, brief_text=job.raw_text)
     result = _execute_worker(job, xgrok_bin, output_dir, timeout_seconds, grok_home, launch_path, stop_requested)
     calls = None
     if result.get("raw_json_path"):
@@ -1205,21 +1542,67 @@ def run_single_worker(job: BriefJob, xgrok_bin: Path, output_dir: Path, timeout_
 
 
 NATIVE_PROBE_ATTEMPTS = 3  # attempts whose transcript shows no X call, before the probe refuses
+PROBE_CONTAINER_KEYS = frozenset({"accounts", "bound_canaries", "bound_canary", "canary_failed"})
+
+
+def _account_name(grok_home: str | None) -> str:
+    return Path(grok_home or os.environ.get("GROK_HOME") or Path.home() / ".grok").expanduser().name
+
+
+def _load_probe_doc(path: Path) -> dict[str, Any] | None:
+    """Load native-probe.json, normalizing legacy single-record files into per-account shape."""
+    if not path.is_file():
+        return None
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(raw, dict):
+        return None
+    doc = dict(raw)
+    if "accounts" not in doc or not isinstance(doc["accounts"], dict):
+        accounts: dict[str, dict[str, Any]] = {}
+        if isinstance(doc.get("account"), str) and doc["account"]:
+            accounts[doc["account"]] = {k: v for k, v in doc.items() if k not in PROBE_CONTAINER_KEYS}
+        doc["accounts"] = accounts
+    if "bound_canaries" not in doc or not isinstance(doc["bound_canaries"], dict):
+        doc["bound_canaries"] = {}
+    return doc
+
+
+def _write_probe_doc(path: Path, doc: dict[str, Any]) -> None:
+    staging = path.with_name(f".native-probe-{os.getpid()}.tmp")
+    staging.write_text(json.dumps(doc, indent=2) + "\n", encoding="utf-8")
+    os.replace(staging, path)
+
+
+def _extract_json_object(text: str) -> dict[str, Any]:
+    content = re.sub(r"^```(?:json)?\s*|\s*```$", "", text.strip())
+    for candidate in reversed(re.findall(r"\{[^{}]*\}", content)):
+        try:
+            parsed = json.loads(candidate)
+        except ValueError:
+            continue
+        if isinstance(parsed, dict):
+            return parsed
+    return {}
 
 
 def native_probe(workdir: Path, xgrok_bin: Path, grok_home: str | None) -> tuple[bool, str]:
     path = workdir / "native-probe.json"
-    account = Path(grok_home or os.environ.get("GROK_HOME") or Path.home() / ".grok").expanduser().name
-    record = {"timestamp": datetime.now(timezone.utc).isoformat(), "account": account,
-              "launcher": os.environ.get("MKT_LAUNCHER") or "unknown/manual", "outcome": "unknown"}
-    try:
-        with path.open("x") as output:
-            json.dump(record, output)
-    except FileExistsError:
-        prior = json.loads(path.read_text())
-        ok = prior["account"] == account and prior["outcome"] == "returned"
-        return ok, f"recorded native probe: {prior['outcome']} on {prior['account']} ({path})"
-    directory = workdir / "native-probe"
+    account = _account_name(grok_home)
+    existing_doc = _load_probe_doc(path)
+    if existing_doc is not None and account in existing_doc["accounts"]:
+        prior = existing_doc["accounts"][account]
+        ok = prior.get("outcome") == "returned"
+        return ok, f"recorded native probe: {prior.get('outcome')} on {account} ({path})"
+
+    record: dict[str, Any] = {
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "account": account,
+        "launcher": os.environ.get("MKT_LAUNCHER") or "unknown/manual",
+        "outcome": "unknown",
+    }
+    base_dir = workdir / "native-probe"
+    base_dir.mkdir(exist_ok=True)
+    directory = base_dir if not (base_dir / "transport.md").exists() else base_dir / (account.lstrip(".") or "account")
     directory.mkdir(exist_ok=True)
     brief = directory / "transport.md"
     # It asks for a post ID only the tool can supply; a bare status template was often answered without a search.
@@ -1229,7 +1612,7 @@ def native_probe(workdir: Path, xgrok_bin: Path, grok_home: str | None) -> tuple
             '{"outcome":"returned|error|unknown","count":N,"post_id":"newest post ID or null","error":null}. '
             'returned: the tool responded, zero rows included. error: the tool reported an error; give its exact '
             'code/message. unknown: no tool response came back. A post ID can only come from the tool response.')
-    brief.write_text(text)
+    brief.write_text(text, encoding="utf-8")
     # High, not the lanes' medium: at medium the probe's one search was skipped in 5 of 22 attempts, at high in 0 of 30.
     # Only a zero-call attempt (its transcript proves it) runs again: an outage never searches.
     cost = 0.0
@@ -1249,13 +1632,7 @@ def native_probe(workdir: Path, xgrok_bin: Path, grok_home: str | None) -> tuple
     if result.get("raw_json_path"):
         env = json.loads(Path(result["raw_json_path"]).read_text())
         record["cost_usd"] = cost
-        content = re.sub(r"^```(?:json)?\s*|\s*```$", "", env.get("text", "").strip())
-        # The answer object ends the text; workers often write a sentence before it.
-        match = re.search(r"\{[^{}]*\}$", content)
-        try:
-            answer = json.loads(match[0]) if match else {}
-        except ValueError:
-            answer = {}
+        answer = _extract_json_object(env.get("text", ""))
         calls = result.get("x_queries") or []
         searched = (len(calls) == 1 and calls[0]["tool"] == "x_keyword_search"
                     and (calls[0].get("arguments") or {}).get("query") == "from:Reuters")
@@ -1272,17 +1649,739 @@ def native_probe(workdir: Path, xgrok_bin: Path, grok_home: str | None) -> tuple
             record["outcome"] = answer["outcome"]
             record["error"] = str(answer.get("error") or "")[:300]
             record["count"] = answer.get("count")
+            raw_pid = answer.get("post_id")
+            pid_str = str(raw_pid).strip() if isinstance(raw_pid, (str, int)) and not isinstance(raw_pid, bool) else ""
+            if pid_str and snowflake_time(pid_str) is not None:
+                record["post_id"] = pid_str
+                record["post_created_at"] = snowflake_time(pid_str).isoformat()
             if record["outcome"] == "returned" and (type(record["count"]) is not int or record["count"] < 0):
                 record["outcome"] = "unknown"
             if record["error"] or calls[0]["outcome"] == "error":
                 record["outcome"] = "error"
-    staging = path.with_suffix(".json.tmp")
-    staging.write_text(json.dumps(record, indent=2) + "\n")
+
+    doc = _load_probe_doc(path)
+    if doc is None:
+        doc = {**record, "accounts": {account: record}, "bound_canaries": {}}
+    else:
+        doc["accounts"][account] = record
+    _write_probe_doc(path, doc)
+    return record["outcome"] == "returned", (
+        f"native probe {record['outcome']} on {account}: {record.get('error', '')} ({path})"
+    )
+
+
+def _is_late_slice_wave(jobs: list[BriefJob], launch: datetime) -> bool:
+    """True when every windowed job in JOBS declares a short (<=60m) near-present slice."""
+    windows = []
+    for job in jobs:
+        brief_part, tail_part = _split_brief_and_tail(job)
+        try:
+            win = approved_window(job.text, launch, brief_text=brief_part if tail_part else job.raw_text)
+        except ValueError:
+            win = None
+        if win:
+            windows.append(win)
+    if not windows:
+        return False
+    for win in windows:
+        since = _aware_clock(win["since"])
+        until = _aware_clock(win["until"])
+        if until - since > LATE_SLICE_MAX_SPAN or launch - until > NEAR_PRESENT_WARNING:
+            return False
+    return True
+
+
+def _find_canary_control(
+    workdir: Path,
+    doc: dict[str, Any] | None,
+    account: str,
+    launch: datetime,
+    max_age: timedelta | None = None,
+) -> tuple[str, str, datetime] | None:
+    """Find (author, post_id, created_at) for the bound canary: transport probe's Reuters post first, then hydrated/*.json."""
+    if doc:
+        accounts_map = doc.get("accounts") if isinstance(doc.get("accounts"), dict) else {}
+        candidates = []
+        if account in accounts_map:
+            candidates.append(accounts_map[account])
+        elif doc.get("account") == account:
+            candidates.append(doc)
+        for other_acct, rec in accounts_map.items():
+            if other_acct != account:
+                candidates.append(rec)
+        for acct in candidates:
+            if not isinstance(acct, dict):
+                continue
+            raw_pid = acct.get("post_id")
+            pid_str = str(raw_pid).strip() if isinstance(raw_pid, (str, int)) and not isinstance(raw_pid, bool) else ""
+            created = snowflake_time(pid_str) if pid_str else None
+            if created is not None and created <= launch and (max_age is None or launch - created <= max_age):
+                return ("Reuters", pid_str, created)
+    hydrated_dir = workdir / "hydrated"
+    best: tuple[datetime, str, str] | None = None
+    if hydrated_dir.is_dir():
+        for path in sorted(hydrated_dir.glob("*.json")):
+            try:
+                item = json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                continue
+            if not isinstance(item, dict):
+                continue
+            pid = str(item.get("id_str") or item.get("id") or path.stem).strip()
+            created = snowflake_time(pid)
+            if created is None or created > launch:
+                continue
+            if max_age is not None and launch - created > max_age:
+                continue
+            user = item.get("user") if isinstance(item.get("user"), dict) else {}
+            author = str(user.get("screen_name") or item.get("author") or item.get("handle") or "").lstrip("@").strip()
+            if not author or not re.fullmatch(r"[A-Za-z0-9_]{1,15}", author):
+                continue
+            if best is None or created > best[0]:
+                best = (created, author, pid)
+    if best is not None:
+        return (best[1], best[2], best[0])
+    return None
+
+
+def _format_canary_query(author: str, created_at: datetime, launch: datetime, bound_form: str, is_late: bool) -> str:
+    lo = created_at - timedelta(minutes=5)
+    hi = launch if is_late else min(launch, created_at + timedelta(minutes=5))
+    if hi < created_at:
+        hi = created_at
+    if bound_form == "epoch":
+        return f"from:{author} since_time:{int(lo.timestamp())} until_time:{int(hi.timestamp())}"
+    if bound_form == "date-only":
+        return f"from:{author} since:{lo:%Y-%m-%d} until:{(hi + timedelta(days=1)):%Y-%m-%d}"
+    return f"from:{author} since:{lo:%Y-%m-%d_%H:%M:%S}_UTC until:{hi:%Y-%m-%d_%H:%M:%S}_UTC"
+
+
+def bound_canary(
+    workdir: Path,
+    xgrok_bin: Path,
+    grok_home: str | None,
+    jobs: list[BriefJob],
+    *,
+    late_slice: bool = False,
+    now: datetime | None = None,
+) -> tuple[bool, str, dict[str, Any] | None]:
+    """Run a 1-call bound canary per wave bound form against a known-positive post before lane fan-out.
+
+    Returns (ok, message, summary_dict_or_None). Unbounded waves skip the canary and return (True, '', None).
+    """
+    forms_to_test: list[str] = []
+    for job in jobs:
+        for form in brief_bound_forms(job)["forms"]:
+            if form not in ("unbounded", "unavailable") and form not in forms_to_test:
+                forms_to_test.append(form)
+    if not forms_to_test:
+        return True, "", None
+
+    launch = now or datetime.now(timezone.utc)
+    is_late = late_slice or _is_late_slice_wave(jobs, launch)
+    slice_kind = "late-slice" if is_late else "normal"
+    account = _account_name(grok_home)
+    path = workdir / "native-probe.json"
+    doc = _load_probe_doc(path) or {"accounts": {}, "bound_canaries": {}}
+    last_entry: dict[str, Any] | None = None
+
+    for form in forms_to_test:
+        key = f"{account}|{form}|{slice_kind}"
+        if slice_kind == "normal" and key in doc["bound_canaries"]:
+            prior = doc["bound_canaries"][key]
+            last_entry = prior
+            if prior.get("outcome") == "passed":
+                continue
+            return False, (
+                f"recorded bound canary failed ({form}, {slice_kind}) on {account}: {prior.get('error', '')}; "
+                f"fallback order: {CANARY_FALLBACK_ORDER} ({path})"
+            ), prior
+
+        control = _find_canary_control(
+            workdir, doc, account, launch, max_age=LATE_SLICE_CONTROL_MAX_AGE if is_late else None
+        )
+        if control is None:
+            reason = (
+                "late-slice bound canary requires a <30m known-positive control post (transport probe or hydrated/)"
+                if is_late
+                else "no known-positive in-window control post available for bound canary"
+            )
+            entry: dict[str, Any] = {
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "account": account,
+                "bound_form": form,
+                "slice_kind": slice_kind,
+                "outcome": "canary_failed",
+                "canary_failed": True,
+                "control_post_id": None,
+                "control_author": None,
+                "control_created_at": None,
+                "query": None,
+                "matched_post_id": False,
+                "count": None,
+                "attempts": 0,
+                "calls": 0,
+                "cost_usd": 0.0,
+                "error": reason,
+            }
+            doc["bound_canaries"][key] = entry
+            doc["bound_canary"] = entry
+            doc["canary_failed"] = True
+            _write_probe_doc(path, doc)
+            return False, (
+                f"bound canary failed ({form}, {slice_kind}) on {account}: {reason}; "
+                f"fallback order: {CANARY_FALLBACK_ORDER} ({path})"
+            ), entry
+
+        author, control_pid, control_created = control
+        canary_query = _format_canary_query(author, control_created, launch, form, is_late)
+        directory = workdir / "native-probe" / f"canary-{account.lstrip('.') or 'account'}-{form}-{slice_kind}"
+        directory.mkdir(parents=True, exist_ok=True)
+        brief = directory / "bound-canary.md"
+        text = (
+            f'Run one x_keyword_search call now with this exact query: "{canary_query}", mode Latest, limit 10. '
+            f'This verifies that the wave\'s {form} time-bound syntax returns known in-window post {control_pid} '
+            f'by @{author}. Make only that call, with no retry, and do not alter the bound syntax. '
+            'Then reply with only this JSON filled from the tool response: '
+            '{"outcome":"returned|error|unknown","count":N,"matched_post_id":true|false,"post_ids":["..."],"error":null}.'
+        )
+        brief.write_text(text, encoding="utf-8")
+        cost = 0.0
+        for attempt in range(1, NATIVE_PROBE_ATTEMPTS + 1):
+            attempt_dir = directory if attempt == 1 else directory / f"retry-{attempt - 1}"
+            attempt_dir.mkdir(exist_ok=True)
+            result = run_single_worker(
+                BriefJob("bound-canary", brief, "harvest", text, effort="high"),
+                xgrok_bin, attempt_dir, 90, grok_home,
+            )
+            if result.get("raw_json_path"):
+                cost += json.loads(Path(result["raw_json_path"]).read_text()).get("total_cost_usd") or 0.0
+            if result.get("x_tool_calls") != 0:
+                break
+
+        answer: dict[str, Any] = {}
+        if result.get("raw_json_path"):
+            env = json.loads(Path(result["raw_json_path"]).read_text())
+            answer = _extract_json_object(env.get("text", ""))
+        calls = result.get("x_queries") or []
+        searched = (
+            len(calls) == 1
+            and calls[0]["tool"] == "x_keyword_search"
+            and " ".join(str((calls[0].get("arguments") or {}).get("query", "")).split()) == " ".join(canary_query.split())
+        )
+        returned_ids = [str(x).strip() for x in (answer.get("post_ids") or []) if isinstance(x, (str, int))]
+        count = answer.get("count") if type(answer.get("count")) is int and answer.get("count") >= 0 else None
+        matched = (
+            result["status"] == "success"
+            and searched
+            and answer.get("outcome") == "returned"
+            and not answer.get("error")
+            and calls[0]["outcome"] != "error"
+            and (answer.get("matched_post_id") is True or control_pid in returned_ids)
+            and (count is None or count > 0)
+        )
+        err = ""
+        if not matched:
+            if answer.get("error"):
+                err = str(answer["error"])[:300]
+            elif not searched:
+                err = f"unmatched: worker did not execute the exact {form} canary query"
+            else:
+                err = f"control post {control_pid} (@{author}) missed under {form} bound (count={count})"
+        entry = {
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "account": account,
+            "bound_form": form,
+            "slice_kind": slice_kind,
+            "outcome": "passed" if matched else "canary_failed",
+            "canary_failed": not matched,
+            "control_post_id": control_pid,
+            "control_author": author,
+            "control_created_at": control_created.isoformat(),
+            "query": canary_query,
+            "matched_post_id": bool(matched),
+            "count": count,
+            "attempts": attempt,
+            "calls": result.get("x_tool_calls"),
+            "cost_usd": cost,
+            "error": err,
+        }
+        doc = _load_probe_doc(path) or doc
+        doc["bound_canaries"][key] = entry
+        doc["bound_canary"] = entry
+        doc["canary_failed"] = not matched
+        _write_probe_doc(path, doc)
+        last_entry = entry
+        if not matched:
+            return False, (
+                f"bound canary failed ({form}, {slice_kind}) on {account}: {err}; "
+                f"fallback order: {CANARY_FALLBACK_ORDER} ({path})"
+            ), entry
+
+    return True, f"bound canary passed ({', '.join(forms_to_test)}, {slice_kind}) on {account} ({path})", last_entry
+
+
+def _process_start(pid: int) -> str:
+    found = subprocess.run(["ps", "-o", "lstart=", "-p", str(pid)], capture_output=True, text=True, check=False)
+    return " ".join(found.stdout.split())
+
+
+def _pid_alive(pid: int, expected_lstart: str = "") -> bool:
+    if pid <= 0:
+        return False
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        pass
+    if expected_lstart:
+        actual = _process_start(pid)
+        return bool(actual) and actual == expected_lstart
+    return True
+
+
+def _write_json_atomic(path: Path, payload: dict[str, Any]) -> None:
+    staging = path.with_name(f".{path.name}-{os.getpid()}.tmp")
+    staging.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
     os.replace(staging, path)
-    return record["outcome"] == "returned", f"native probe {record['outcome']}: {record.get('error', '')} ({path})"
 
 
-def parse_args() -> argparse.Namespace:
+def _extract_session_assistant(session: Path) -> tuple[str, bool, str | None]:
+    """Extract (assistant_text, turn_completed, completed_at_iso) from a Grok session directory."""
+    turn_completed = False
+    completed_at: str | None = None
+    updates_path = session / "updates.jsonl"
+    if updates_path.is_file():
+        for line in updates_path.read_text(encoding="utf-8", errors="replace").splitlines():
+            try:
+                event = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if not isinstance(event, dict):
+                continue
+            params = event.get("params")
+            update = (params.get("update") if isinstance(params, dict) else None) or {}
+            if update.get("sessionUpdate") == "turn_completed":
+                turn_completed = True
+                completed_at = _utc(event.get("timestamp")) or completed_at
+    assistant_texts: list[str] = []
+    history_path = session / "chat_history.jsonl"
+    if history_path.is_file():
+        for line in history_path.read_text(encoding="utf-8", errors="replace").splitlines():
+            try:
+                entry = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if not isinstance(entry, dict) or entry.get("type") != "assistant":
+                continue
+            content = entry.get("content")
+            if isinstance(content, str) and content.strip():
+                assistant_texts.append(content)
+            elif isinstance(content, list):
+                joined = "".join(part.get("text", "") for part in content if isinstance(part, dict))
+                if joined.strip():
+                    assistant_texts.append(joined)
+    return (assistant_texts[-1] if assistant_texts else ""), turn_completed, completed_at
+
+
+def _find_session_dir(session_id: str, homes: list[Path]) -> Path | None:
+    if not isinstance(session_id, str) or not SESSION_ID_PATTERN.match(session_id):
+        return None
+    for home in homes:
+        for path in (home / "sessions").glob(f"*/{session_id}"):
+            if path.is_dir():
+                return path
+    return None
+
+
+def status_wave(wave_dir: Path) -> dict[str, Any]:
+    """Inspect a wave directory and report its runner liveness, progress, and outcome."""
+    wave_dir = wave_dir.resolve()
+    if not wave_dir.is_dir():
+        raise FileNotFoundError(f"Wave directory not found: {wave_dir}")
+    refusal_path = wave_dir / "NOT-LAUNCHED.txt"
+    manifest_path = wave_dir / "manifest.json"
+    runner_path = wave_dir / "runner.json"
+    launched_path = wave_dir / "launched.json"
+
+    runner = json.loads(runner_path.read_text(encoding="utf-8")) if runner_path.is_file() else {}
+    launched = json.loads(launched_path.read_text(encoding="utf-8")) if launched_path.is_file() else {}
+    finished_results = sorted(wave_dir.glob("*-result.json"))
+    composed = sorted((wave_dir / "composed").glob("*.md")) if (wave_dir / "composed").is_dir() else []
+    total = (
+        len(launched.get("briefs") or [])
+        or len(runner.get("briefs") or [])
+        or len(composed)
+        or len(finished_results)
+    )
+
+    if refusal_path.is_file() and not manifest_path.is_file():
+        return {
+            "wave_dir": str(wave_dir),
+            "state": "refused",
+            "reason": refusal_path.read_text(encoding="utf-8", errors="replace").strip(),
+            "finished": len(finished_results),
+            "total": total,
+        }
+    if manifest_path.is_file():
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        state = "recovered" if manifest.get("recovery") else "done"
+        return {
+            "wave_dir": str(wave_dir),
+            "state": state,
+            "succeeded": manifest.get("succeeded"),
+            "failed": manifest.get("failed"),
+            "total": manifest.get("total_briefs"),
+            "aborted": manifest.get("aborted"),
+            "timestamp": manifest.get("timestamp"),
+        }
+    pid = runner.get("pid")
+    lstart = runner.get("lstart", "")
+    if isinstance(pid, int) and _pid_alive(pid, lstart):
+        return {
+            "wave_dir": str(wave_dir),
+            "state": "running",
+            "pid": pid,
+            "started_at": runner.get("started_at"),
+            "finished": len(finished_results),
+            "total": total,
+            "log_path": runner.get("log_path"),
+        }
+    return {
+        "wave_dir": str(wave_dir),
+        "state": "interrupted",
+        "pid": pid,
+        "started_at": runner.get("started_at") or launched.get("timestamp"),
+        "finished": len(finished_results),
+        "total": total,
+        "hint": f"xgrok_wave.py recover {wave_dir}",
+    }
+
+
+def recover_wave(
+    wave_dir: Path,
+    grok_home: str | None = None,
+    *,
+    overwrite: bool = False,
+) -> dict[str, Any]:
+    """Recover an interrupted wave from native Grok session transcripts without launching any new Grok calls.
+
+    Reuses launched_session(), assistant-text extraction, query_outcomes(), and audit_query_clocks().
+    Missing dollar costs are explicitly marked 'unavailable' (never $0).
+    """
+    wave_dir = wave_dir.resolve()
+    if not wave_dir.is_dir():
+        raise FileNotFoundError(f"Wave directory not found: {wave_dir}")
+    manifest_path = wave_dir / "manifest.json"
+    if manifest_path.is_file() and not overwrite:
+        raise FileExistsError(f"{manifest_path} already exists; pass --overwrite to re-recover")
+
+    runner_path = wave_dir / "runner.json"
+    runner = json.loads(runner_path.read_text(encoding="utf-8")) if runner_path.is_file() else {}
+    pid = runner.get("pid")
+    if isinstance(pid, int) and _pid_alive(pid, runner.get("lstart", "")):
+        raise RuntimeError(f"wave runner pid {pid} is still running; wait for it to finish before recovering")
+
+    launched_path = wave_dir / "launched.json"
+    launched = json.loads(launched_path.read_text(encoding="utf-8")) if launched_path.is_file() else {}
+    common_tail = launched.get("common_tail")
+    effective_home = grok_home or runner.get("grok_home") or launched.get("grok_home")
+    homes = session_homes(effective_home)
+
+    launch_ts = launched.get("timestamp") or runner.get("started_at")
+    if launch_ts:
+        launch_dt = _aware_clock(str(launch_ts).replace("Z", "+00:00"))
+    else:
+        composed_files = sorted((wave_dir / "composed").glob("*.md")) if (wave_dir / "composed").is_dir() else []
+        if composed_files:
+            launch_dt = datetime.fromtimestamp(min(p.stat().st_mtime for p in composed_files), timezone.utc)
+        else:
+            launch_dt = datetime.now(timezone.utc)
+    now_dt = datetime.now(timezone.utc)
+
+    # Discover all lanes in the wave from launched/runner metadata, composed briefs, and existing results.
+    lane_meta: dict[str, dict[str, Any]] = {}
+    for entry in (launched.get("briefs") or runner.get("briefs") or []):
+        if isinstance(entry, dict) and entry.get("name"):
+            lane_meta[entry["name"]] = dict(entry)
+    composed_dir = wave_dir / "composed"
+    if composed_dir.is_dir():
+        for path in sorted(composed_dir.glob("*.md")):
+            lane_meta.setdefault(path.stem, {"name": path.stem})
+            lane_meta[path.stem]["composed_brief_path"] = str(path)
+    for res_path in sorted(wave_dir.glob("*-result.json")):
+        name = res_path.name.removesuffix("-result.json")
+        lane_meta.setdefault(name, {"name": name})
+
+    if not lane_meta:
+        raise ValueError(f"no composed briefs, launched metadata, or lane results found in {wave_dir}")
+
+    workers: list[dict[str, Any]] = []
+    existing_lanes: list[str] = []
+    recovered_lanes: list[str] = []
+    unmatched_lanes: list[str] = []
+
+    for name in sorted(lane_meta):
+        meta = lane_meta[name]
+        existing_result = wave_dir / f"{name}-result.json"
+        if existing_result.is_file():
+            row = json.loads(existing_result.read_text(encoding="utf-8"))
+            if row.get("x_queries") is not None and any(
+                q.get("window_status") is None or "bound_form" not in q for q in row["x_queries"]
+            ):
+                win = row.get("fresh_window")
+                l_dt = _aware_clock(str(row["launched_at"]).replace("Z", "+00:00")) if row.get("launched_at") else launch_dt
+                row["x_queries"] = audit_query_clocks(row["x_queries"], win, l_dt)
+                _write_json_atomic(existing_result, row)
+            workers.append(row)
+            existing_lanes.append(name)
+            continue
+
+        composed_path = Path(meta["composed_brief_path"]) if meta.get("composed_brief_path") else None
+        brief_path = Path(meta["brief_path"]) if meta.get("brief_path") else None
+        request_text = ""
+        if composed_path and composed_path.is_file():
+            request_text = composed_path.read_text(encoding="utf-8")
+        elif brief_path and brief_path.is_file():
+            request_text = brief_path.read_text(encoding="utf-8")
+
+        raw_brief_text = brief_path.read_text(encoding="utf-8") if brief_path and brief_path.is_file() else None
+        try:
+            window = approved_window(request_text, launch_dt, brief_text=raw_brief_text)
+        except ValueError:
+            window = None
+
+        mode = meta.get("mode") or infer_brief_mode(request_text, DEFAULT_MODE)
+        effort = meta.get("effort") or infer_brief_effort(request_text)
+        model = meta.get("model") or infer_brief_model(request_text)
+        system_prompt = meta.get("system_prompt") or infer_brief_system_prompt(request_text)
+
+        session_id, source = launched_session(homes, request_text, launch_dt, now_dt)
+        if not session_id:
+            unmatched_lanes.append(name)
+            row = {
+                "name": name,
+                "brief_path": str(brief_path) if brief_path else None,
+                "composed_brief_path": str(composed_path) if composed_path else None,
+                "mode": mode,
+                "effort": effort,
+                "model": model,
+                "system_prompt": system_prompt,
+                "status": "failed",
+                "returncode": -1,
+                "elapsed_seconds": None,
+                "packet_path": None,
+                "raw_json_path": None,
+                "log_path": str(wave_dir / f"{name}.log") if (wave_dir / f"{name}.log").is_file() else None,
+                "usage": {},
+                "cost_usd": "unavailable",
+                "stop_reason": None,
+                "x_tool_calls": None,
+                "x_tool_calls_retried": None,
+                "error": f"recovery failed: {source}",
+                "session_id": None,
+                "session_source": source,
+                "launched_at": launch_dt.isoformat(),
+                "completed_at": None,
+                "fetched_at": None,
+                "fresh_window": window,
+                "x_queries": None,
+                "recovered": True,
+            }
+            _write_json_atomic(existing_result, row)
+            workers.append(row)
+            continue
+
+        session_dir = _find_session_dir(session_id, homes)
+        packet_text, turn_completed, completed_at = (
+            _extract_session_assistant(session_dir) if session_dir else ("", False, None)
+        )
+        created_dt = launch_dt
+        created_at = launch_dt.isoformat()
+        if session_dir and (session_dir / "summary.json").is_file():
+            try:
+                created_dt = _aware_clock(
+                    str(json.loads((session_dir / "summary.json").read_text())["created_at"]).replace("Z", "+00:00")
+                )
+                created_at = created_dt.isoformat()
+            except (OSError, ValueError, KeyError, TypeError):
+                pass
+
+        raw_calls = read_x_tool_calls(session_id, homes)
+        events = stream_events(session_id, homes)
+        calls = query_outcomes(raw_calls, packet_text) if packet_text else raw_calls
+        audited = audit_query_clocks(calls, window, max(launch_dt, created_dt))
+        x_calls = len(calls) if calls is not None else None
+        retried = sum(call["retried"] for call in calls) if calls is not None else None
+        fetched = [c["fetched_at"] for c in calls or [] if c.get("fetched_at")]
+
+        packet_md_path = wave_dir / f"{name}-packet.md"
+        raw_json_path = wave_dir / f"{name}-raw.json"
+        stop_reason = (
+            "recovered: turn_completed in native session transcript"
+            if turn_completed
+            else "recovered: assistant message in native session transcript"
+            if packet_text
+            else "recovered: incomplete session without assistant message"
+        )
+
+        if packet_text:
+            packet_md_path.write_text(packet_text, encoding="utf-8")
+            _write_json_atomic(
+                raw_json_path,
+                {
+                    "text": packet_text,
+                    "sessionId": session_id,
+                    "stopReason": stop_reason,
+                    "usage": {},
+                    "total_cost_usd": None,
+                    "cost_usd": "unavailable",
+                    "recovered": True,
+                },
+            )
+            if x_calls == 0:
+                status, error, rc = "failed", NO_X_CALLS_ERROR, 0
+            else:
+                status, error, rc = "success", None, 0
+        else:
+            status, error, rc = "failed", "recovered session has no completed assistant response", -1
+
+        recovered_lanes.append(name)
+        row = {
+            "name": name,
+            "brief_path": str(brief_path) if brief_path else None,
+            "composed_brief_path": str(composed_path) if composed_path else None,
+            "mode": mode,
+            "effort": effort,
+            "model": model,
+            "system_prompt": system_prompt,
+            "status": status,
+            "returncode": rc,
+            "elapsed_seconds": None,
+            "packet_path": str(packet_md_path) if packet_text else None,
+            "raw_json_path": str(raw_json_path) if packet_text else None,
+            "log_path": str(wave_dir / f"{name}.log") if (wave_dir / f"{name}.log").is_file() else None,
+            "usage": {},
+            "cost_usd": "unavailable",
+            "stop_reason": stop_reason,
+            "x_tool_calls": x_calls,
+            "x_tool_calls_retried": retried,
+            "stream_breaks": events["stream_breaks"] if events else None,
+            "last_update_at": events["last_update_at"] if events else None,
+            "error": error,
+            "session_id": session_id,
+            "session_source": source,
+            "launched_at": created_at,
+            "completed_at": completed_at or (events["last_update_at"] if events else None),
+            "fetched_at": max(fetched) if fetched else None,
+            "fresh_window": window,
+            "x_queries": audited,
+            "recovered": True,
+        }
+        _write_json_atomic(existing_result, row)
+        workers.append(row)
+
+    succeeded = sum(1 for r in workers if r["status"] == "success")
+    failed = len(workers) - succeeded
+    manifest = {
+        "schema_version": 2,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "output_dir": str(wave_dir),
+        "common_tail": common_tail,
+        "total_briefs": len(workers),
+        "succeeded": succeeded,
+        "failed": failed,
+        "aborted": None,
+        "recovery": {
+            "recovered_at": datetime.now(timezone.utc).isoformat(),
+            "grok_home": str(effective_home) if effective_home else None,
+            "recovered_lanes": recovered_lanes,
+            "existing_lanes": existing_lanes,
+            "unmatched_lanes": unmatched_lanes,
+            "cost_usd": "unavailable",
+        },
+        "workers": workers,
+    }
+    _write_json_atomic(manifest_path, manifest)
+    return manifest
+
+
+def _resolve_grok_home(args: argparse.Namespace) -> tuple[str | None, str | None]:
+    """Resolve account home from CLI args, failing loudly on empty GROK2_HOME/GROK3_HOME."""
+    if getattr(args, "grok_home", None) == "":
+        return None, "--grok-home requires a non-empty path"
+    if getattr(args, "grok_home", None):
+        return args.grok_home, None
+    if getattr(args, "grok2", False):
+        if "GROK2_HOME" in os.environ and os.environ["GROK2_HOME"] == "":
+            return None, "GROK2_HOME is set but empty; unset it or set a valid path"
+        return os.environ.get("GROK2_HOME") or str(Path.home() / ".grok2"), None
+    if getattr(args, "grok3", False):
+        if "GROK3_HOME" in os.environ and os.environ["GROK3_HOME"] == "":
+            return None, "GROK3_HOME is set but empty; unset it or set a valid path"
+        return os.environ.get("GROK3_HOME") or str(Path.home() / ".grok3"), None
+    return None, None
+
+
+def status_main(argv: list[str]) -> int:
+    parser = argparse.ArgumentParser(prog="xgrok_wave.py status", description="Check a wave's status and runner PID.")
+    parser.add_argument("wave_dir", type=Path, help="Wave output directory.")
+    parser.add_argument("--json", action="store_true", dest="as_json", help="Emit JSON status.")
+    args = parser.parse_args(argv)
+    try:
+        info = status_wave(args.wave_dir)
+    except FileNotFoundError as exc:
+        sys.stderr.write(f"xgrok_wave status error: {exc}\n")
+        return 2
+    if args.as_json:
+        print(json.dumps(info, indent=2))
+        return 0
+    state = info["state"]
+    if state in ("done", "recovered"):
+        aborted = f", aborted: {info['aborted']}" if info.get("aborted") else ""
+        print(f"wave {Path(info['wave_dir']).name}: {state} ({info['succeeded']}/{info['total']} succeeded, {info['failed']} failed{aborted})")
+    elif state == "running":
+        print(f"wave {Path(info['wave_dir']).name}: running (pid {info['pid']}, {info['finished']}/{info['total']} lanes finished)")
+    elif state == "refused":
+        print(f"wave {Path(info['wave_dir']).name}: refused ({info['reason']})")
+    else:
+        print(f"wave {Path(info['wave_dir']).name}: interrupted ({info['finished']}/{info['total']} lanes finished); run: {info['hint']}")
+    return 0
+
+
+def recover_main(argv: list[str]) -> int:
+    parser = argparse.ArgumentParser(
+        prog="xgrok_wave.py recover",
+        description="Recover packets and an audited manifest for an interrupted wave from native session transcripts.",
+    )
+    parser.add_argument("wave_dir", type=Path, help="Interrupted wave directory.")
+    account = parser.add_mutually_exclusive_group()
+    account.add_argument("--grok-home", type=str, default=None, help="Grok home path for session lookup.")
+    account.add_argument("--grok2", action="store_true", help="Look up sessions under GROK2_HOME / ~/.grok2.")
+    account.add_argument("--grok3", action="store_true", help="Look up sessions under GROK3_HOME / ~/.grok3.")
+    parser.add_argument("--overwrite", action="store_true", help="Overwrite an existing manifest.json.")
+    args = parser.parse_args(argv)
+    grok_home, err = _resolve_grok_home(args)
+    if err:
+        sys.stderr.write(f"xgrok_wave configuration error: {err}\n")
+        return 2
+    try:
+        manifest = recover_wave(args.wave_dir, grok_home, overwrite=args.overwrite)
+    except (FileNotFoundError, FileExistsError, RuntimeError, ValueError) as exc:
+        sys.stderr.write(f"xgrok_wave recover error: {exc}\n")
+        return 2
+    rec = manifest["recovery"]
+    print(
+        f"Recovered {args.wave_dir}: {manifest['succeeded']}/{manifest['total_briefs']} succeeded "
+        f"(recovered={len(rec['recovered_lanes'])}, existing={len(rec['existing_lanes'])}, "
+        f"unmatched={len(rec['unmatched_lanes'])}; recovered cost_usd=unavailable)"
+    )
+    print(f"Manifest written to: {Path(manifest['output_dir']) / 'manifest.json'}")
+    return 0 if manifest["failed"] == 0 else 1
+
+
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Run a concurrent wave of Grok retrieval briefs via xgrok.",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
@@ -1348,13 +2447,13 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="Path to the xgrok binary (auto-discovered by default).",
     )
-    parser.add_argument(
+    account = parser.add_mutually_exclusive_group()
+    account.add_argument(
         "--grok-home",
         type=str,
         default=None,
         help="Custom GROK_HOME path for worker auth/state.",
     )
-    account = parser.add_mutually_exclusive_group()
     account.add_argument(
         "--grok2",
         action="store_true",
@@ -1381,18 +2480,29 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Validate configuration and show job schedule without executing.",
     )
-    parser.add_argument("--transport-probe", action="store_true", help="require one recorded native search probe per workdir")
+    parser.add_argument("--transport-probe", action="store_true", help="require one recorded native search probe + bound canary per account/bound form")
+    parser.add_argument("--late-slice", action="store_true", help="treat this wave as a late slice (bound canary requires a <30m control post)")
+    parser.add_argument("--detach", action="store_true", help="launch the wave in its own detached session (outlives shell timeouts)")
     parser.add_argument(
         "--roster",
         type=Path,
         default=Path.home() / ".grok" / "skills" / "macro" / "references" / "roster.tsv",
         help="Roster TSV whose entries the composed briefs carry as 'Roster roles' (with --common-tail).",
     )
-    return parser.parse_args()
+    return parser.parse_args(argv)
 
 
-def main() -> int:
-    args = parse_args()
+def main(argv: list[str] | None = None) -> int:
+    raw_argv = list(sys.argv[1:] if argv is None else argv)
+    if raw_argv and raw_argv[0] in ("recover", "status") and not Path(raw_argv[0]).is_file():
+        return recover_main(raw_argv[1:]) if raw_argv[0] == "recover" else status_main(raw_argv[1:])
+
+    args = parse_args(raw_argv)
+    grok_home, home_err = _resolve_grok_home(args)
+    if home_err:
+        # A failed "$(xgrok --pick-account)" or empty GROK2_HOME="" must never silently run on ~/.grok.
+        sys.stderr.write(f"xgrok_wave configuration error: {home_err}\n")
+        return 2
 
     try:
         xgrok_bin = find_xgrok_bin(args.xgrok_bin)
@@ -1433,6 +2543,7 @@ def main() -> int:
                 effort=job.effort,
                 model=job.model,
                 system_prompt=job.system_prompt,
+                raw_text=job.text,
             )
             for job in jobs
         ]
@@ -1451,17 +2562,13 @@ def main() -> int:
         sys.stderr.write(f"xgrok_wave: {len(errors)} brief error(s); nothing launched.\n")
         return 2
 
-    grok_home = args.grok_home
-    if args.grok2 and not grok_home:
-        grok_home = os.environ.get("GROK2_HOME", str(Path.home() / ".grok2"))
-    if args.grok3 and not grok_home:
-        grok_home = os.environ.get("GROK3_HOME", str(Path.home() / ".grok3"))
-
     if args.output_dir:
         output_dir = args.output_dir.resolve()
     else:
         timestamp_str = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
         output_dir = Path.cwd() / f"xgrok-wave-{timestamp_str}"
+
+    bound_lines = format_bound_form_summary(jobs)
 
     if args.dry_run:
         print("--- xgrok_wave Dry Run ---")
@@ -1481,23 +2588,110 @@ def main() -> int:
                 f" (effort={job.effort or '-'} model={job.model or '-'}"
                 f" system_prompt={job.system_prompt or '-'})"
             )
+        for line in bound_lines:
+            print(line)
         return 0
 
     output_dir.mkdir(parents=True, exist_ok=True)
+    brief_records = [
+        {
+            "name": job.name,
+            "brief_path": str(job.brief_path),
+            "mode": job.mode,
+            "effort": job.effort,
+            "model": job.model,
+            "system_prompt": job.system_prompt,
+        }
+        for job in jobs
+    ]
 
+    if args.detach:
+        child_argv = [a for a in raw_argv if a != "--detach"]
+        if not args.output_dir:
+            child_argv.extend(["--output-dir", str(output_dir)])
+        wave_log = output_dir / "wave.log"
+        child_env = {**os.environ, "XGROK_WAVE_DETACHED": "1"}
+        with wave_log.open("a", encoding="utf-8") as log_handle:
+            proc = subprocess.Popen(
+                [sys.executable, "-B", str(Path(__file__).resolve()), *child_argv],
+                stdin=subprocess.DEVNULL,
+                stdout=log_handle,
+                stderr=subprocess.STDOUT,
+                start_new_session=True,
+                env=child_env,
+            )
+        if (
+            not (output_dir / "runner.json").is_file()
+            and not (output_dir / "manifest.json").is_file()
+            and not (output_dir / "NOT-LAUNCHED.txt").is_file()
+        ):
+            _write_json_atomic(
+                output_dir / "runner.json",
+                {
+                    "pid": proc.pid,
+                    "lstart": _process_start(proc.pid),
+                    "started_at": datetime.now(timezone.utc).isoformat(),
+                    "status": "running",
+                    "detached": True,
+                    "grok_home": grok_home,
+                    "log_path": str(wave_log),
+                    "total_briefs": len(jobs),
+                    "briefs": brief_records,
+                },
+            )
+        msg = (
+            f"xgrok_wave: started detached (pid {proc.pid}); log: {wave_log}; "
+            f"status: python3 {Path(__file__).resolve()} status {output_dir}"
+        )
+        print(msg)
+        return 0
+
+    for line in bound_lines:
+        sys.stderr.write(line + "\n")
+    sys.stderr.flush()
+
+    runner_record = {
+        "pid": os.getpid(),
+        "lstart": _process_start(os.getpid()),
+        "started_at": datetime.now(timezone.utc).isoformat(),
+        "status": "running",
+        "detached": os.environ.get("XGROK_WAVE_DETACHED") == "1",
+        "grok_home": grok_home,
+        "log_path": str(output_dir / "wave.log") if (output_dir / "wave.log").is_file() else None,
+        "total_briefs": len(jobs),
+        "briefs": brief_records,
+    }
+    _write_json_atomic(output_dir / "runner.json", runner_record)
+
+    canary_summary: dict[str, Any] | None = None
     if args.transport_probe:
         ok, note = native_probe(output_dir.parent, xgrok_bin, grok_home)
         print(note, file=sys.stderr)
         if not ok:
             refusal = note + "; no research lanes launched. Use the existing browser path; no account switching."
-            (output_dir / "NOT-LAUNCHED.txt").write_text(refusal + "\n")
+            (output_dir / "NOT-LAUNCHED.txt").write_text(refusal + "\n", encoding="utf-8")
+            _write_json_atomic(output_dir / "runner.json", {**runner_record, "status": "refused", "returncode": 3})
+            return 3
+        canary_ok, canary_note, canary_summary = bound_canary(
+            output_dir.parent, xgrok_bin, grok_home, jobs, late_slice=args.late_slice
+        )
+        if canary_note:
+            print(canary_note, file=sys.stderr)
+        if not canary_ok:
+            refusal = canary_note + "; no research lanes launched."
+            (output_dir / "NOT-LAUNCHED.txt").write_text(refusal + "\n", encoding="utf-8")
+            _write_json_atomic(output_dir / "runner.json", {**runner_record, "status": "refused", "returncode": 3})
             return 3
 
-    launched = output_dir / "launched.json"
-    staging = launched.with_name(f".launched-{os.getpid()}.tmp")
-    staging.write_text(json.dumps({"timestamp": datetime.now(timezone.utc).isoformat(),
-                                   "common_tail": common_tail}, indent=2) + "\n", encoding="utf-8")
-    os.replace(staging, launched)
+    _write_json_atomic(
+        output_dir / "launched.json",
+        {
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "common_tail": common_tail,
+            "grok_home": grok_home,
+            "briefs": brief_records,
+        },
+    )
 
     launch_paths: dict[str, Path | None] = {job.name: None for job in jobs}
     if common_tail:
@@ -1521,62 +2715,74 @@ def main() -> int:
     abort_reason: str | None = None
     stop_requested = threading.Event()
     stagger_seconds = max(0.0, float(args.stagger))
+    max_workers = max(1, args.max_workers)
+    pending = iter(jobs)
 
-    with ThreadPoolExecutor(max_workers=max(1, args.max_workers)) as executor:
-        try:
-            future_map: dict[Any, BriefJob] = {}
-            if stagger_seconds > 0 and len(jobs) > 1:
-                first_job = jobs[0]
-                first_future = executor.submit(
-                    run_single_worker, first_job, xgrok_bin, output_dir, args.timeout, grok_home,
-                    launch_paths[first_job.name], stop_requested,
+    def _record_done(done_futures: set[Future[dict[str, Any]]], in_flight: dict[Future[dict[str, Any]], BriefJob]) -> None:
+        nonlocal abort_reason
+        for future in done_futures:
+            in_flight.pop(future, None)
+            if future.cancelled():
+                continue
+            res = future.result()
+            results.append(res)
+            if (abort_reason is None and args.abort_after > 0 and len(results) == args.abort_after
+                    and all(r["status"] != "success" for r in results)):
+                abort_reason = (
+                    f"the first {args.abort_after} lanes to finish all failed "
+                    f"({'; '.join(sorted({str(r['error'])[:120] for r in results}))}); "
+                    "stopped the rest. Check the account (xgrok --usage, the worker home login) "
+                    "before relaunching; --abort-after 0 disables this stop"
                 )
-                future_map[first_future] = first_job
+                sys.stderr.write(f"xgrok_wave: {abort_reason}\n")
+                sys.stderr.flush()
+                stop_requested.set()
+                for queued in list(in_flight):
+                    queued.cancel()
+
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        try:
+            in_flight: dict[Future[dict[str, Any]], BriefJob] = {}
+
+            def submit_next() -> bool:
+                if stop_requested.is_set():
+                    return False
+                job = next(pending, None)
+                if job is None:
+                    return False
+                fut = executor.submit(
+                    run_single_worker, job, xgrok_bin, output_dir, args.timeout, grok_home,
+                    launch_paths[job.name], stop_requested,
+                )
+                in_flight[fut] = job
+                return True
+
+            if stagger_seconds > 0 and len(jobs) > 1:
+                submit_next()
                 deadline = time.monotonic() + stagger_seconds
-                while True:
+                while in_flight and not stop_requested.is_set():
                     remaining = deadline - time.monotonic()
                     if remaining <= 0:
                         break
-                    if first_future.done():
+                    done, _ = wait(in_flight, timeout=min(0.05, remaining), return_when=FIRST_COMPLETED)
+                    if done:
+                        _record_done(done, in_flight)
                         break
-                    if stop_requested.is_set():
+
+            while not stop_requested.is_set() and len(in_flight) < max_workers:
+                if not submit_next():
+                    break
+
+            while in_flight:
+                done, _ = wait(in_flight, return_when=FIRST_COMPLETED)
+                _record_done(done, in_flight)
+                while not stop_requested.is_set() and len(in_flight) < max_workers:
+                    if not submit_next():
                         break
-                    time.sleep(min(0.05, remaining))
-                for job in jobs[1:]:
-                    fut = executor.submit(
-                        run_single_worker, job, xgrok_bin, output_dir, args.timeout, grok_home,
-                        launch_paths[job.name], stop_requested,
-                    )
-                    future_map[fut] = job
-            else:
-                future_map = {
-                    executor.submit(
-                        run_single_worker, job, xgrok_bin, output_dir, args.timeout, grok_home,
-                        launch_paths[job.name], stop_requested,
-                    ): job
-                    for job in jobs
-                }
-            for future in as_completed(future_map):
-                if future.cancelled():
-                    continue
-                res = future.result()
-                results.append(res)
-                if (abort_reason is None and args.abort_after > 0 and len(results) == args.abort_after
-                        and all(r["status"] != "success" for r in results)):
-                    abort_reason = (
-                        f"the first {args.abort_after} lanes to finish all failed "
-                        f"({'; '.join(sorted({str(r['error'])[:120] for r in results}))}); "
-                        "stopped the rest. Check the account (xgrok --usage, the worker home login) "
-                        "before relaunching; --abort-after 0 disables this stop"
-                    )
-                    sys.stderr.write(f"xgrok_wave: {abort_reason}\n")
-                    sys.stderr.flush()
-                    stop_requested.set()
-                    for queued in future_map:
-                        queued.cancel()
         except KeyboardInterrupt:
             stop_requested.set()
             executor.shutdown(wait=True, cancel_futures=True)
+            _write_json_atomic(output_dir / "runner.json", {**runner_record, "status": "interrupted", "returncode": 130})
             sys.stderr.write("xgrok_wave: interrupted; stopped active workers and cancelled queued briefs.\n")
             return 130
 
@@ -1602,6 +2808,7 @@ def main() -> int:
         "xgrok_bin": str(xgrok_bin),
         "output_dir": str(output_dir),
         "common_tail": common_tail,
+        "bound_canary": canary_summary,
         "stagger_seconds": stagger_seconds,
         "total_briefs": len(jobs),
         "succeeded": succeeded,
@@ -1612,8 +2819,11 @@ def main() -> int:
     }
 
     manifest_path = output_dir / "manifest.json"
-    with open(manifest_path, "w", encoding="utf-8") as f:
-        json.dump(manifest, f, indent=2)
+    _write_json_atomic(manifest_path, manifest)
+    _write_json_atomic(
+        output_dir / "runner.json",
+        {**runner_record, "status": "done", "returncode": 0 if failed == 0 else 1},
+    )
 
     # Print summary to stdout
     print(f"\nWave execution completed in {total_elapsed:.1f}s: {succeeded}/{len(jobs)} succeeded.")

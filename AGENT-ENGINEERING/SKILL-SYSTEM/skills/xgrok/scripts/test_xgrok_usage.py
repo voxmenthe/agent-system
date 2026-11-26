@@ -111,6 +111,13 @@ RESPONSES = {
     },
 }
 
+# Per-account answers: GROK_HOME -> billing result object, or "rpc_error" (also for an unlisted home).
+by_home = os.environ.get("XGROK_FAKE_BY_HOME")
+if by_home:
+    answer = json.loads(by_home).get(os.environ.get("GROK_HOME"), "rpc_error")
+    scenario = "rpc_error" if answer == "rpc_error" else "by_home"
+    RESPONSES["by_home"] = {"jsonrpc": "2.0", "id": 2, "result": answer}
+
 interleave = os.environ.get("XGROK_FAKE_INTERLEAVE")
 # Billing requests to fail before the scenario's answer, as xAI's service did for ~/.grok3.
 billing_errors = int(os.environ.get("XGROK_FAKE_BILLING_ERRORS", "0"))
@@ -301,6 +308,62 @@ class UsageCliTests(unittest.TestCase):
         self.assertEqual(result.returncode, 2)
         self.assertIn("--usage cannot be combined with --mode", result.stderr)
 
+    def test_pick_account_prints_only_the_home_whose_quota_resets_next(self):
+        root = Path(self.tmp.name)
+        now = datetime.now(timezone.utc)
+
+        def answer(used: float, reset_days: float, tier: str) -> dict:
+            period = {"start": (now - timedelta(days=7 - reset_days)).isoformat(),
+                      "end": (now + timedelta(days=reset_days)).isoformat()}
+            return {"config": {"creditUsagePercent": used, "currentPeriod": period}, "subscription_tier": tier}
+
+        grok, grok2, grok3 = str(root / ".grok"), str(root / "second"), str(root / "third")
+        env = {"HOME": str(root), "GROK2_HOME": grok2, "GROK3_HOME": grok3}
+        by_home = {grok: answer(10, 6, "X Premium+"), grok2: answer(0, 4, "SuperGrok Lite")}  # grok3's reading fails
+        result = self.run_xgrok("--pick-account", env_extra={**env, "XGROK_FAKE_BY_HOME": json.dumps(by_home)})
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout, grok2 + "\n")
+        self.assertIn("X Premium+: 10% used", result.stderr)
+        self.assertIn(f"{grok3}; skipped: reading failed", result.stderr)
+
+        result = self.run_xgrok("--pick-account", env_extra={**env, "XGROK_FAKE_BY_HOME": "{}"})
+        self.assertEqual(result.returncode, 1)
+        self.assertEqual(result.stdout, "")
+
+    def test_pick_account_refuses_other_options_and_grok_home_refuses_an_empty_path(self):
+        brief = Path(self.tmp.name) / "brief.md"
+        brief.write_text("brief fixture\n")
+        for extra in (["--mode", "harvest"], [str(brief)], ["--grok2"], ["--grok-home", "/tmp/x"], ["--usage"]):
+            with self.subTest(extra=extra):
+                result = self.run_xgrok("--pick-account", *extra, env_extra={"HOME": self.tmp.name})
+                self.assertEqual(result.returncode, 2, result.stderr)
+                self.assertIn("--pick-account takes no other option or brief file", result.stderr)
+        # A failed $(xgrok --pick-account) substitutes "", which must not mean ~/.grok.
+        for args in (["--usage", "--grok-home", ""], ["--grok-home", "", str(brief)]):
+            with self.subTest(args=args):
+                result = self.run_xgrok(*args, env_extra={"XGROK_FAKE_SCENARIO": "new"})
+                self.assertEqual(result.returncode, 2, result.stderr)
+                self.assertIn("--grok-home requires a non-empty path", result.stderr)
+                self.assertFalse(self.capture.exists())
+
+    def test_empty_grok2_grok3_env_and_conflicting_account_flags_are_refused(self):
+        for flag, var in (("--grok2", "GROK2_HOME"), ("--grok3", "GROK3_HOME")):
+            with self.subTest(flag=flag):
+                result = self.run_xgrok("--usage", flag, env_extra={"XGROK_FAKE_SCENARIO": "new", var: ""})
+                self.assertEqual(result.returncode, 2, result.stderr)
+                self.assertIn(f"{var} is set but empty", result.stderr)
+                self.assertFalse(self.capture.exists())
+        for args in (
+            ["--usage", "--grok-home", "/tmp/x", "--grok2"],
+            ["--usage", "--grok2", "--grok-home", "/tmp/x"],
+            ["--usage", "--grok2", "--grok3"],
+        ):
+            with self.subTest(args=args):
+                result = self.run_xgrok(*args, env_extra={"HOME": self.tmp.name, "XGROK_FAKE_SCENARIO": "new"})
+                self.assertEqual(result.returncode, 2, result.stderr)
+                self.assertIn("conflicting account flags", result.stderr)
+                self.assertFalse(self.capture.exists())
+
     def test_non_finite_deadlines_fail_before_launch(self):
         for bad in ("nan", "inf", "-inf"):
             result = self.run_xgrok("--usage", env_extra={"XGROK_USAGE_TIMEOUT_S": bad})
@@ -385,6 +448,50 @@ class ParseQuotaTests(unittest.TestCase):
         quota = xgrok_usage.parse_quota(msg)
         self.assertEqual(quota.name, "Usage")
         self.assertEqual(quota.used_percent, 100.0)
+
+
+class PickAccountTests(unittest.TestCase):
+    NOW = datetime(2026, 11, 20, 4, 29, tzinfo=timezone.utc).timestamp()
+
+    def quota(self, used: float, reset_hours: float, reported: bool = True) -> xgrok_usage.Quota:
+        return xgrok_usage.Quota("SuperGrok", used, self.NOW + reset_hours * 3600, reported)
+
+    def pick(self, *readings):
+        return xgrok_usage.pick_account(list(readings), self.NOW)
+
+    def test_the_earliest_future_reset_wins(self):
+        home, reasons = self.pick(("/g1", self.quota(10, 150)), ("/g2", self.quota(0, 98)), ("/g3", self.quota(0, 147)))
+        self.assertEqual(home, "/g2")
+        self.assertTrue(reasons[1].startswith("chosen"), reasons)
+
+    def test_the_floor_compares_unrounded_remaining(self):
+        # 99.74% used prints as "0.3% remaining" but leaves 0.26: under the floor. 99.7% used leaves exactly 0.3.
+        home, reasons = self.pick(("/soon", self.quota(99.74, 1)), ("/later", self.quota(50, 100)))
+        self.assertEqual(home, "/later")
+        self.assertIn("0.26% remaining", reasons[0])
+        home, _ = self.pick(("/soon", self.quota(99.7, 1)), ("/later", self.quota(50, 100)))
+        self.assertEqual(home, "/soon")
+
+    def test_a_failed_reading_is_skipped_and_named(self):
+        home, reasons = self.pick(("/broken", xgrok_usage.UsageError("meter unavailable")), ("/ok", self.quota(10, 50)))
+        self.assertEqual(home, "/ok")
+        self.assertIn("meter unavailable", reasons[0])
+
+    def test_no_eligible_account_picks_none(self):
+        home, reasons = self.pick(("/spent", self.quota(100, 5)), ("/past", self.quota(0, -1)),
+                                  ("/broken", xgrok_usage.UsageError("snapshot failed")))
+        self.assertIsNone(home)
+        self.assertTrue(all(reason.startswith("skipped") for reason in reasons), reasons)
+
+    def test_ties_go_to_more_remaining_then_reading_order(self):
+        home, _ = self.pick(("/a", self.quota(60, 10)), ("/b", self.quota(20, 10)))
+        self.assertEqual(home, "/b")
+        home, _ = self.pick(("/a", self.quota(20, 10)), ("/b", self.quota(20, 10)))
+        self.assertEqual(home, "/a")
+
+    def test_a_period_with_no_usage_field_is_eligible(self):
+        home, _ = self.pick(("/fresh", self.quota(0, 10, reported=False)), ("/other", self.quota(0, 20)))
+        self.assertEqual(home, "/fresh")
 
 
 class FormatReportTests(unittest.TestCase):

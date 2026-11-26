@@ -29,7 +29,7 @@ directly with native X tools. Do not run `scripts/xgrok`, recursively invoke
 In any other host, use the launcher in this skill. It runs Grok headlessly,
 blocks shell, web, and file-mutation tools, and returns Grok's JSON envelope.
 Do not source `~/.bash_agents` or use its interactive `grokxh` / `grok2xh` / `grok3xh` wrappers.
-When directed to use the secondary or third Grok account, pass `--grok2` or `--grok3` (or `--grok-home ~/.grok2`, or set `GROK_HOME=~/.grok2`) to the retrieval scripts.
+When directed to use the secondary or third Grok account, pass `--grok2` or `--grok3` (or `--grok-home ~/.grok2`, or set `GROK_HOME=~/.grok2`) to the retrieval scripts. Otherwise, choose one with `--pick-account` (see the quota paragraph).
 
 ## Choose the retrieval mode
 
@@ -228,17 +228,30 @@ brief-validation failure before launch. Ctrl-C stops active worker groups,
 cancels queued briefs, and exits 130.
 
 `--transport-probe` checks one bounded native-X query on the selected account
-before dispatch. A returned empty page is a working transport; an error or
-unknown outcome refuses the wave with `NOT-LAUNCHED.txt`. An attempt whose session
+before dispatch, then runs a bound canary against a known-positive in-window
+post (`from:Reuters` from the transport probe, or a `<30m` post for a
+`--late-slice` wave) using each bound form present in the wave's briefs. A
+returned empty page is a working transport; an error, unknown outcome, or
+missed canary control refuses the wave with `NOT-LAUNCHED.txt` (recording
+`canary_failed` and printing the fallback order). An attempt whose session
 transcript shows no X call runs again, up to three attempts: a worker can answer
 without searching, while an outage fails every attempt. Its account, launcher,
-query outcome and consumption artifacts are saved in the run's `native-probe/`;
-one successful probe is reused within that run, not between runs. The record's
+query outcome, bound canary, and consumption artifacts are saved in the run's
+`native-probe/` and keyed per account in `native-probe.json` (preserving legacy
+top-level fields from the first probed account); one successful probe is reused
+per account within that run, not between runs, and a failed probe never switches
+accounts. The record's
 `outcome_source` names what was matched: "worker-reported, matched to one
 executed keyword search" only when it was, otherwise "unmatched: ..." with the
 reason (no X call executed, no worker answer, other calls), and the outcome
 stays unknown. `mkt wave`
 enables this; `--dry-run` and `mkt wave --check` remain offline.
+
+Pass `--detach` to run a wave in its own session (outliving calling-shell
+timeouts), inspect it with `scripts/xgrok_wave.py status WAVE_DIR`, and recover
+an interrupted wave from native session transcripts without launching new Grok
+calls via `scripts/xgrok_wave.py recover WAVE_DIR` (missing dollar costs are
+recorded as `"unavailable"`, never `$0`).
 
 Put the shared window, verified prints, method rules, and return format in one
 file and pass it with `--common-tail path.md`; the runner appends it to every
@@ -246,14 +259,22 @@ brief, launches the composed copy from `results/composed/`, and records the
 tail's sha256 in the manifest. Between brief and tail the composed copy carries a "Roster roles" block:
 the roster entry (registries and note, `--roster`, default the macro skill's roster.tsv) of each rostered
 handle the brief names, so workers copy a role instead of guessing it. Before launching (and in `--dry-run`) the runner
-refuses a macro-mode brief without a `Delegated budget:` line and any literal
+refuses `_PST`/`_PDT` string query bounds outright (use `_UTC` or
+`since_time:`/`until_time:` Unix epochs), warns on string upper bounds within
+60 minutes of launch, prints each brief's bound forms, refuses a macro-mode brief without a `Delegated budget:` line and any literal
 query that combines more than four `from:` handles with keyword terms, since
 such queries silently drop their time bounds; `--no-query-lint` disables the
-query check when a brief deliberately quotes such a query.
-The runner also validates approved fresh bounds and literal future/widened
+query check when a brief deliberately quotes such a query. It also warns on a
+literal query with an `OR` outside parentheses plus a `since:`, `until:`,
+`filter:`, `min_*` or `lang:` operator: X applies those to the last OR term
+only, so `from:a OR from:b since:…` leaves `from:a` unbounded.
+The runner also validates approved fresh bounds (brief-declared harvest metadata
+overrides `--common-tail` deterministically) and literal future/widened
 upper bounds before launch, even with `--no-query-lint`. Worker records add
 `launched_at`, `completed_at`, `fresh_window`, available `fetched_at`, and
-`x_queries` with the supported query arguments, sent bounds and bound status.
+`x_queries` with the supported query arguments, sent bounds, `bound_form`, and bound status
+(`or-scope-unbounded` for an executed query of that unparenthesized shape,
+whatever its sent bounds).
 Only an observed tool completion supplies fetch time; missing telemetry stays
 unavailable. A valid clock audit alone does not certify silence: result caps,
 filters and known-matching misses still need the worker's coverage evidence.
@@ -277,6 +298,24 @@ its response stream broke: they ran again, so they count, but the worker's
 packet counts only its final attempt. Report them beside the total.
 If telemetry is unavailable, record that limitation instead of assuming zero
 usage or an unlimited allowance.
+
+When no account is named, run `scripts/xgrok --pick-account` before allocating
+a wave. It reads every account's quota and prints the home of the account whose
+quota resets next among those with at least 0.3% remaining, so credits that
+would otherwise expire are spent first. Capture the path and pass it as
+`--grok-home` to the launcher and the wave runner; a failed pick prints nothing
+and exits 1, and both refuse an empty `--grok-home`:
+
+```bash
+GROK_PICK="$("$XGROK_SCRIPT" --pick-account)" || exit 1
+python3 "$XGROK_WAVE" --grok-home "$GROK_PICK" --briefs-dir … --output-dir …
+```
+
+A named account always wins, and `mkt wave` keeps its own cost-guarded pick.
+The pick is a snapshot: another session can drain the account, and the
+runner's stop after two failed lanes is the backstop. The 0.3% floor shows only
+that an account is not exhausted: percentages are not comparable across tiers,
+so record one `--usage` reading per wave to learn what a wave costs.
 
 Give each shared root one enrichment owner. Other lanes receive its actual
 receipt or a follow-up dependency on that owner's packet; a path unreadable by
@@ -376,6 +415,13 @@ For a load-bearing image with a direct media URL, download it to a local file
 and inspect it with the host's image reader; use browser tools if the URL is
 missing, gated, or unsuitable for direct retrieval. Preserve post/media
 provenance and label an unread image rather than infer its numbers from text.
+Before writing, list the receipts the answer will cite whose claim the image
+carries (packets mark them `Media (unread)`), download those images into the
+run's `media/` folder, and label each use "opened". Opening them caught both
+false and missed evidence (2026-11-19: a reply cited as evidence was a meme; a
+chart showed standard GRPO ending below base, which no text said). Limit this
+to cited, image-carried receipts, not every image. A run prompt with its own
+image step, such as `mkt media` into `images/`, keeps that step.
 
 ## Compose the parent answer
 

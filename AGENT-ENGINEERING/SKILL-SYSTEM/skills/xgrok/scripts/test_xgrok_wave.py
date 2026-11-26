@@ -6,7 +6,7 @@ Run: python3 scripts/test_xgrok_wave.py   (test_xgrok.sh also runs this)
 
 from __future__ import annotations
 
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 import json
 import os
 from pathlib import Path
@@ -177,8 +177,12 @@ class FlooredOrListTests(unittest.TestCase):
             self.assertEqual(xgrok_wave.lint_floored_or_lists(text), [], text)
 
     def test_the_warning_reaches_validation_without_blocking_launch(self):
-        job = xgrok_wave.BriefJob("b", Path("/dev/null"), "harvest", FLOORED_LONG_OR_LINE.replace(
-            " until:2026-10-08_10:21:58_PDT", ""))
+        utc_line = (
+            FLOORED_LONG_OR_LINE
+            .replace("since:2026-10-08_09:40:00_PDT", "since:2026-10-08_16:40:00_UTC")
+            .replace(" until:2026-10-08_10:21:58_PDT", "")
+        )
+        job = xgrok_wave.BriefJob("b", Path("/dev/null"), "harvest", utc_line)
         errors, warnings = xgrok_wave.validate_jobs([job], True)
         self.assertEqual(errors, [])
         self.assertEqual(len(warnings), 1)
@@ -209,6 +213,53 @@ class BroadTopicWordLintTests(unittest.TestCase):
         errors, warnings = xgrok_wave.validate_jobs([job], True)
         self.assertEqual(errors, [])
         self.assertEqual([w[:30] for w in warnings], ["f: line 1: single-ticker query"])
+
+
+# Executed queries from the 2026-11-19 DLR v7 waves (both manifests). The unparenthesized ones returned posts outside
+# their bounds, the first handle's back to 2025, yet the audit labeled every one within-approved-query-bounds.
+V7_UNSCOPED_ROSTER_QUERY = ("from:stellaathena OR from:rasbt OR from:Tim_Dettmers OR from:OfirPress -filter:replies "
+                            "since:2026-11-13_02:43:00_UTC until:2026-11-20_02:43:00_UTC")
+V7_UNSCOPED_PHRASE_QUERY = ('"weight-space programming" OR "weight space programming" (SFT OR obsolete OR sparks) '
+                            "since:2026-11-13_02:43:00_UTC until:2026-11-20_02:43:00_UTC")
+V7_SCOPED_ROSTER_QUERY = ("(from:aimalysheva OR from:cwolferesearch OR from:HeMuyu0327 OR from:huskydogewoof) "
+                          "-filter:replies since:2026-11-13_02:43:00_UTC until:2026-11-20_02:43:00_UTC")
+V7_NESTED_GROUP_QUERY = ('("GUARD" (arxiv OR "memory pollution" OR "80.80" OR "Meta-Harness")) '
+                         "since:2026-11-13_02:43:00_UTC until:2026-11-20_02:43:00_UTC")
+
+
+class OrScopeTests(unittest.TestCase):
+    LAUNCH = datetime(2026, 11, 20, 2, 43, 14, tzinfo=timezone.utc)
+    METADATA = ("# fresh_since: 2026-11-13T02:43:00+00:00\n# fresh_until: 2026-11-20T02:43:00+00:00\n"
+                "# context_since: 2026-10-30T00:00:00+00:00\n")
+
+    def status(self, query: str) -> str:
+        window = xgrok_wave.approved_window(self.METADATA, self.LAUNCH)
+        audit = xgrok_wave.audit_query_clocks([{"arguments": {"query": query}}], window, self.LAUNCH)
+        self.assertEqual(audit[0]["silence_support"], "not-established")
+        return audit[0]["window_status"]
+
+    def test_a_top_level_or_carrying_bounds_or_filters_is_not_within_bounds(self):
+        for query in (V7_UNSCOPED_ROSTER_QUERY, V7_UNSCOPED_PHRASE_QUERY, "from:a OR from:b -filter:replies",
+                      "from:a OR from:b lang:en min_faves:3"):
+            with self.subTest(query=query):
+                self.assertEqual(self.status(query), "or-scope-unbounded")
+
+    def test_parenthesized_nested_and_quoted_or_keep_their_bound_status(self):
+        for query, expected in ((V7_SCOPED_ROSTER_QUERY, "within-approved-query-bounds"),
+                                (V7_NESTED_GROUP_QUERY, "within-approved-query-bounds"),
+                                ('"this OR that" since:2026-11-14_00:00:00_UTC until:2026-11-15_00:00:00_UTC',
+                                 "within-approved-query-bounds"),
+                                ("from:a OR from:b", "unbounded")):
+            with self.subTest(query=query):
+                self.assertEqual(self.status(query), expected)
+
+    def test_the_brief_lint_warns_on_a_literal_unscoped_or_without_blocking_launch(self):
+        job = xgrok_wave.BriefJob("b", Path("/dev/null"), "harvest",
+                                  f"Seed batch: `{V7_UNSCOPED_ROSTER_QUERY}`\nRoots: `{V7_SCOPED_ROSTER_QUERY}`\n")
+        errors, warnings = xgrok_wave.validate_jobs([job], True)
+        self.assertEqual(errors, [])
+        self.assertEqual(len(warnings), 1, warnings)
+        self.assertTrue(warnings[0].startswith("b: line 1: top-level OR"), warnings)
 
 
 class BriefValidationTests(unittest.TestCase):
@@ -392,6 +443,26 @@ class WaveSettingsCliTests(unittest.TestCase):
                     self.assertIn(needle, result.stderr)
                     self.assertFalse((root / "launched").exists())
                 self.assertFalse((root / "out").exists())
+
+    def test_an_empty_grok_home_is_refused_before_any_launch(self):
+        # A failed $(xgrok --pick-account) substitutes "", which the runner silently ran as ~/.grok.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            brief = root / "brief.md"
+            brief.write_text("Objective: x\n")
+            launcher = root / "launcher"
+            launcher.write_text(f"#!{sys.executable}\nfrom pathlib import Path\n"
+                                "Path(__file__).with_name('launched').touch()\nprint('{\"text\": \"hi\"}')\n")
+            launcher.chmod(0o755)
+            for extra in ([], ["--dry-run"]):
+                result = subprocess.run(
+                    [sys.executable, str(Path(xgrok_wave.__file__)), str(brief), "--xgrok-bin", str(launcher),
+                     "--output-dir", str(root / "out"), "--grok-home", "", *extra],
+                    capture_output=True, text=True, timeout=10,
+                )
+                self.assertEqual(result.returncode, 2, result.stderr)
+                self.assertIn("--grok-home requires a non-empty path", result.stderr)
+                self.assertFalse((root / "launched").exists())
 
     def test_env_contains_exactly_requested_keys_and_manifest_records_them(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -1115,12 +1186,25 @@ class PreflightCliTests(unittest.TestCase):
             command = [sys.executable, str(Path(xgrok_roster.__file__)), "--roster", str(roster),
                        "--today", "2026-09-22"]
             checked = subprocess.run(command + ["check", str(brief)], capture_output=True, text=True, check=True)
-            self.assertIn("USED STALE: 1 handles in these briefs (1 never verified)", checked.stdout)
+            self.assertIn(
+                "STALE (>30d): 2 roster (1 unverified), 1 used in these briefs (1 unverified); --list-stale names them",
+                checked.stdout,
+            )
             self.assertNotIn("USED STALE: Rory_Johnston", checked.stdout)
             listed = subprocess.run(command + ["check", str(brief), "--list-stale"],
                                     capture_output=True, text=True, check=True)
             self.assertIn("USED STALE: Rory_Johnston (never verified)", listed.stdout)
             self.assertNotIn("USED STALE: dampedspring", listed.stdout)
+            # Item 29: labeled off-roster handles collapse to 1 compact line unless --verbose; UNLABELED/PASTE stay verbatim.
+            labeled_brief = root / "labeled.md"
+            labeled_brief.write_text("Labels: @OffOne (context); @OffTwo (lead)\nAnchors: @OffOne @OffTwo\n")
+            compact = subprocess.run(command + ["check", str(labeled_brief)], capture_output=True, text=True, check=True)
+            self.assertIn("OFF-ROSTER (labeled context): 2 handle(s) across 1 brief(s) (--verbose lists them)", compact.stdout)
+            self.assertNotIn("OffOne", compact.stdout)
+            verbose = subprocess.run(command + ["check", str(labeled_brief), "--verbose"], capture_output=True, text=True, check=True)
+            self.assertIn("OFF-ROSTER (labeled context): OffOne", verbose.stdout)
+            self.assertIn("OFF-ROSTER (labeled context): OffTwo", verbose.stdout)
+            self.assertIn("STALE (no verified date or older than 30d):", verbose.stdout)
             out = root / "probes"
             subprocess.run(command + ["probe-brief", "--briefs", str(brief), "--only-stale", "30", "--out", str(out)],
                            capture_output=True, text=True, check=True)
@@ -1240,6 +1324,507 @@ class RosterProbeAndVerifyTests(unittest.TestCase):
             path.write_text("handle\tverified\nfoo\t\n")
             with self.assertRaises(ValueError):
                 xgrok_roster.load_roster(path)
+
+
+def _snowflake_for(moment: datetime) -> str:
+    ms = int(moment.timestamp() * 1000) - xgrok_wave.TWITTER_EPOCH_MS
+    return str(ms << 22)
+
+
+class BoundPreflightAndEpochAuditTests(unittest.TestCase):
+    LAUNCH = datetime(2026, 11, 23, 7, 10, 0, tzinfo=timezone.utc)
+    WINDOW = {
+        "since": "2026-11-21T16:10:00-08:00",  # 2026-11-22T00:10:00Z = 1795306200
+        "until": "2026-11-22T23:09:36-08:00",  # 2026-11-23T07:09:36Z = 1795417776
+        "context_since": "2026-10-29T00:00:00-07:00",
+    }
+
+    def test_epoch_bounds_audit_in_bounds_and_classify_bound_form(self):
+        cases = [
+            ("(from:fejau_inc OR from:INArteCarloDoss) since_time:1795309800 until_time:1795417776",
+             "within-approved-query-bounds", "epoch", "1795309800", "1795417776"),
+            ("from:alpha since_time:1795000000 until_time:1795417776",
+             "context-lookback", "epoch", "1795000000", "1795417776"),
+            ("from:alpha since_time:1795309800 until_time:1795420000",
+             "future", "epoch", "1795309800", "1795420000"),
+            ("from:alpha since_time:1795417776 until_time:1795309800",
+             "reversed", "epoch", "1795417776", "1795309800"),
+            ("from:alpha since_time:1795309800 until_time:1795417799",
+             "widened", "epoch", "1795309800", "1795417799"),
+            ("from:alpha since_time:badepoch until_time:1795417776",
+             "unavailable-bound-clock", "mixed", "badepoch", "1795417776"),
+            ("from:a OR from:b since_time:1795309800 until_time:1795417776",
+             "or-scope-unbounded", "epoch", "1795309800", "1795417776"),
+            ("from:alpha since:2026-11-22_01:10:00_UTC until:2026-11-23_07:09:36_UTC",
+             "within-approved-query-bounds", "utc", "2026-11-22_01:10:00_UTC", "2026-11-23_07:09:36_UTC"),
+            ("from:alpha since:2026-11-22_01:10:00_PST until:2026-11-22_23:09:36_PST",
+             "within-approved-query-bounds", "pt", "2026-11-22_01:10:00_PST", "2026-11-22_23:09:36_PST"),
+            ("from:alpha within_time:24h",
+             "unbounded", "within-time", None, None),
+            ("from:alpha",
+             "unbounded", "unbounded", None, None),
+        ]
+        for query, expected_ws, expected_form, exp_s, exp_u in cases:
+            with self.subTest(query=query):
+                audited = xgrok_wave.audit_query_clocks([{"arguments": {"query": query}}], self.WINDOW, self.LAUNCH)
+                row = audited[0]
+                self.assertEqual(row["window_status"], expected_ws)
+                self.assertEqual(row["bound_form"], expected_form)
+                self.assertEqual(row["sent_since"], exp_s)
+                self.assertEqual(row["sent_until"], exp_u)
+        self.assertEqual(xgrok_wave.classify_bound_form(None), "unavailable")
+        self.assertEqual(xgrok_wave.classify_bound_form("since:2026-11-22 until:2026-11-23"), "date-only")
+        self.assertEqual(xgrok_wave.classify_bound_form("since:2026-11-22T01:00:00+00:00"), "iso")
+
+    def test_pst_pdt_bounds_are_refused_and_near_present_string_upper_bound_warns(self):
+        launch = datetime(2026, 11, 23, 7, 10, 0, tzinfo=timezone.utc)
+        pst_job = xgrok_wave.BriefJob(
+            "bad", Path("bad.md"), "harvest",
+            "Query: `from:alpha since:2026-11-22_12:00:00_PST until:2026-11-22_23:00:00_PST`\n",
+        )
+        errors, _ = xgrok_wave.validate_jobs([pst_job], True, launch=launch)
+        self.assertTrue(any("_PST/_PDT query bound refused" in e for e in errors), errors)
+
+        near_utc = xgrok_wave.BriefJob(
+            "near", Path("near.md"), "harvest",
+            "Query: `from:alpha since:2026-11-23_06:00:00_UTC until:2026-11-23_06:50:00_UTC`\n",
+        )
+        errors, warnings = xgrok_wave.validate_jobs([near_utc], True, launch=launch)
+        self.assertEqual(errors, [])
+        self.assertTrue(any("within 60 min of launch" in w for w in warnings), warnings)
+
+        # Epoch upper bound within 60m and >60m string upper bound do not trigger the string near-present warning.
+        epoch_near = xgrok_wave.BriefJob(
+            "ep", Path("ep.md"), "harvest",
+            f"Query: `from:alpha since_time:{int(launch.timestamp()) - 1800} until_time:{int(launch.timestamp()) - 60}`\n",
+        )
+        old_utc = xgrok_wave.BriefJob(
+            "old", Path("old.md"), "harvest",
+            "Query: `from:alpha since:2026-11-22_12:00:00_UTC until:2026-11-23_05:00:00_UTC`\n",
+        )
+        errors, warnings = xgrok_wave.validate_jobs([epoch_near, old_utc], True, launch=launch)
+        self.assertEqual((errors, warnings), ([], []))
+
+    def test_bound_form_summary_lists_per_call_forms_and_ignores_prose_slashes_in_common_tail(self):
+        tail = (
+            "# fresh_since: 2026-11-22T00:00:00+00:00\n"
+            "# fresh_until: 2026-11-23T07:00:00+00:00\n"
+            "Exact query bounds: since:2026-11-23_01:00:00_UTC for the newest slice; "
+            "until:2026-11-23_07:00:00_UTC as the upper bound. "
+            "Never write _PST or _PDT query bounds (use _UTC or since_time:/until_time: Unix epochs). "
+            "In-lane circuit breaker: no since:/until:/since_time:/until_time:).\n"
+        )
+        b_utc = xgrok_wave.BriefJob(
+            "utc-lane", Path("u.md"), "harvest",
+            xgrok_wave.compose_brief("1. `from:a since:2026-11-23_01:00:00_UTC until:2026-11-23_07:00:00_UTC`\n", tail),
+            raw_text="1. `from:a since:2026-11-23_01:00:00_UTC until:2026-11-23_07:00:00_UTC`\n",
+        )
+        b_ep = xgrok_wave.BriefJob(
+            "ep-lane", Path("e.md"), "harvest",
+            xgrok_wave.compose_brief("1. `from:b since_time:1795309800 until_time:1795417776`\n", tail),
+            raw_text="1. `from:b since_time:1795309800 until_time:1795417776`\n",
+        )
+        utc_info = xgrok_wave.brief_bound_forms(b_utc)
+        self.assertEqual(utc_info["tail"], "utc")
+        self.assertEqual(utc_info["forms"], ["utc"])
+        self.assertFalse(utc_info["mixed"])
+        ep_info = xgrok_wave.brief_bound_forms(b_ep)
+        self.assertEqual(ep_info["calls"], ["epoch"])
+        self.assertTrue(ep_info["mixed"])
+        summary = "\n".join(xgrok_wave.format_bound_form_summary([b_utc, b_ep]))
+        self.assertIn("WAVE MIXED: epoch, utc", summary)
+        self.assertIn("utc-lane: call 1=utc; tail=utc", summary)
+        self.assertIn("ep-lane: call 1=epoch; tail=utc [MIXED]", summary)
+
+    def test_item22_brief_harvest_metadata_deterministically_overrides_common_tail(self):
+        launch = datetime(2026, 11, 23, 7, 10, 0, tzinfo=timezone.utc)
+        tail = (
+            "Output orientation: participant-native.\n"
+            "# fresh_since: 2026-11-21T20:00:00-08:00\n"
+            "# fresh_until: 2026-11-22T23:09:00-08:00\n"
+            "# context_since: 2026-10-29T00:00:00-07:00\n"
+            "Exact query bounds: since:2026-11-22_04:00:00_UTC; until:2026-11-23_07:09:00_UTC.\n"
+        )
+        # Brief declares 30-day harvest window starting BEFORE tail's context_since and ending 1m before tail's fresh_until.
+        brief_with_ctx = (
+            "# mode: harvest\n# effort: medium\n"
+            "# fresh_since: 2026-10-23T00:00:00-07:00\n"
+            "# fresh_until: 2026-11-22T23:08:00-08:00\n"
+            "# context_since: 2026-09-23T00:00:00-07:00\n"
+            "Objective: candidate discovery.\n"
+        )
+        composed = xgrok_wave.compose_brief(brief_with_ctx, tail)
+        win = xgrok_wave.approved_window(composed, launch, brief_text=brief_with_ctx)
+        self.assertEqual(win, {
+            "since": "2026-10-23T00:00:00-07:00",
+            "until": "2026-11-22T23:08:00-08:00",
+            "context_since": "2026-09-23T00:00:00-07:00",
+        })
+        # Also works without raw_text / brief_text, and when brief omits context_since (no reversed-window crash).
+        brief_no_ctx = (
+            "# mode: harvest\n# effort: medium\n"
+            "# fresh_since: 2026-10-23T00:00:00-07:00\n"
+            "# fresh_until: 2026-11-22T23:08:00-08:00\n"
+            "Objective: candidate discovery.\n"
+        )
+        composed_no_ctx = xgrok_wave.compose_brief(brief_no_ctx, tail)
+        win2 = xgrok_wave.approved_window(composed_no_ctx, launch)
+        self.assertEqual(win2["since"], "2026-10-23T00:00:00-07:00")
+        self.assertEqual(win2["until"], "2026-11-22T23:08:00-08:00")
+        self.assertIsNone(win2["context_since"])
+        # Validate job passes cleanly (tail's later until: does not falsely widen brief's fresh_until).
+        job = xgrok_wave.BriefJob("cand", Path("cand.md"), "harvest", composed, effort="medium", raw_text=brief_with_ctx)
+        errors, warnings = xgrok_wave.validate_jobs([job], True, launch=launch)
+        self.assertEqual((errors, warnings), ([], []))
+        # YAML frontmatter harvest window + common tail comments also splits cleanly without raw_text.
+        fm_brief = (
+            "---\nmode: harvest\nfresh_since: 2026-10-23T00:00:00-07:00\n"
+            "fresh_until: 2026-11-22T23:08:00-08:00\n---\nObjective: frontmatter cand.\n"
+        )
+        win3 = xgrok_wave.approved_window(xgrok_wave.compose_brief(fm_brief, tail), launch)
+        self.assertEqual(win3["since"], "2026-10-23T00:00:00-07:00")
+        self.assertIsNone(win3["context_since"])
+
+
+class PerAccountProbeAndCanaryTests(unittest.TestCase):
+    def _write_fake_transport(
+        self,
+        root: Path,
+        *,
+        transport_outcomes: dict[str, dict],
+        canary_hit: bool = True,
+        canary_author_query_ok: bool = True,
+    ) -> Path:
+        """Fake launcher that reads GROK_HOME to decide per-account transport & bound-canary behavior."""
+        cfg = {
+            "transport": transport_outcomes,
+            "canary_hit": canary_hit,
+            "canary_author_query_ok": canary_author_query_ok,
+        }
+        (root / "fake_cfg.json").write_text(json.dumps(cfg))
+        launcher = root / "launcher"
+        launcher.write_text(
+            f"#!{sys.executable}\n"
+            "import json, os, re, sys\nfrom pathlib import Path\n"
+            "root = Path(__file__).parent\n"
+            "cfg = json.loads((root / 'fake_cfg.json').read_text())\n"
+            "grok_home = Path(sys.argv[sys.argv.index('--grok-home') + 1]) if '--grok-home' in sys.argv else Path(os.environ['GROK_HOME'])\n"
+            "acct = grok_home.name\n"
+            "brief_path = Path(sys.argv[-1])\n"
+            "name = brief_path.stem\n"
+            "brief_text = brief_path.read_text()\n"
+            "with (root / 'launch.log').open('a') as f: f.write(f'{acct}:{name}\\n')\n"
+            "def record_tx(sid, query):\n"
+            "    sdir = grok_home / 'sessions' / 'w' / sid\n"
+            "    sdir.mkdir(parents=True, exist_ok=True)\n"
+            "    ev = {'timestamp': 1795417800, 'params': {'update': {'sessionUpdate': 'tool_call_update', "
+            "'toolCallId': 'call-0', 'status': 'completed', "
+            "'rawOutput': {'name': 'x_keyword_search', 'input': json.dumps({'query': query})}}}}\n"
+            "    (sdir / 'updates.jsonl').write_text(json.dumps(ev) + '\\n')\n"
+            "if name == 'transport':\n"
+            "    ans = cfg['transport'][acct]\n"
+            "    sid = f'sess-transport-{acct.lstrip(\".\")}'\n"
+            "    record_tx(sid, 'from:Reuters')\n"
+            "    print(json.dumps({'text': json.dumps(ans), 'sessionId': sid, 'total_cost_usd': 0.02}))\n"
+            "elif name == 'bound-canary':\n"
+            "    m = re.search(r'exact query: \"([^\"]+)\"', brief_text)\n"
+            "    q = m.group(1) if m else ''\n"
+            "    m_pid = re.search(r'in-window post (\\d+)', brief_text)\n"
+            "    pid = m_pid.group(1) if m_pid else ''\n"
+            "    sid = f'sess-canary-{acct.lstrip(\".\")}'\n"
+            "    record_tx(sid, q if cfg['canary_author_query_ok'] else 'from:wrong')\n"
+            "    hit = cfg['canary_hit']\n"
+            "    ans = {'outcome': 'returned', 'count': 1 if hit else 0, 'matched_post_id': hit, "
+            "'post_ids': [pid] if hit else [], 'error': None}\n"
+            "    print(json.dumps({'text': json.dumps(ans), 'sessionId': sid, 'total_cost_usd': 0.02}))\n"
+            "else:\n"
+            "    sid = f'sess-{acct.lstrip(\".\")}-{name}'\n"
+            "    record_tx(sid, 'from:alpha')\n"
+            "    print(json.dumps({'text': 'packet ' + name, 'sessionId': sid, 'total_cost_usd': 0.05}))\n"
+        )
+        launcher.chmod(0o755)
+        return launcher
+
+    def test_per_account_probe_keys_accounts_and_failed_second_account_refuses_without_switching(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            pid = _snowflake_for(datetime.now(timezone.utc) - timedelta(hours=2))
+            launcher = self._write_fake_transport(
+                root,
+                transport_outcomes={
+                    ".grok": {"outcome": "returned", "count": 1, "post_id": pid, "error": None},
+                    ".grok2": {"outcome": "returned", "count": 1, "post_id": pid, "error": None},
+                    ".grok3": {"outcome": "error", "count": 0, "post_id": None, "error": "429/1015"},
+                },
+            )
+            brief = root / "lane.md"
+            brief.write_text("Objective: unbounded test.\n")
+            base = [sys.executable, str(Path(xgrok_wave.__file__)), str(brief), "--xgrok-bin", str(launcher),
+                    "--transport-probe", "--max-workers", "1"]
+
+            # 1) First healthy account (.grok) probes once and launches; top-level legacy keys come from .grok.
+            r1 = subprocess.run([*base, "--grok-home", str(root / ".grok"), "--output-dir", str(root / "w1")],
+                                capture_output=True, text=True, timeout=20)
+            self.assertEqual(r1.returncode, 0, r1.stderr)
+            doc = json.loads((root / "native-probe.json").read_text())
+            self.assertEqual(doc["account"], ".grok")
+            self.assertEqual(doc["outcome"], "returned")
+            self.assertIn(".grok", doc["accounts"])
+
+            # 2) Second healthy account (.grok2) probes once and launches; top-level legacy keys stay .grok.
+            r2 = subprocess.run([*base, "--grok-home", str(root / ".grok2"), "--output-dir", str(root / "w2")],
+                                capture_output=True, text=True, timeout=20)
+            self.assertEqual(r2.returncode, 0, r2.stderr)
+            doc = json.loads((root / "native-probe.json").read_text())
+            self.assertEqual(doc["account"], ".grok")
+            self.assertEqual(doc["accounts"][".grok2"]["outcome"], "returned")
+
+            # 3) Failed third account (.grok3) refuses without switching accounts and launches 0 lanes.
+            r3 = subprocess.run([*base, "--grok-home", str(root / ".grok3"), "--output-dir", str(root / "w3")],
+                                capture_output=True, text=True, timeout=20)
+            self.assertEqual(r3.returncode, 3, r3.stderr)
+            self.assertTrue((root / "w3" / "NOT-LAUNCHED.txt").is_file())
+            self.assertIn("no account switching", (root / "w3" / "NOT-LAUNCHED.txt").read_text())
+            doc = json.loads((root / "native-probe.json").read_text())
+            self.assertEqual(doc["accounts"][".grok3"]["outcome"], "error")
+            self.assertEqual(doc["accounts"][".grok"]["outcome"], "returned")
+
+            # 4) First account (.grok) remains usable and reuses cached probe (no second transport call).
+            r4 = subprocess.run([*base, "--grok-home", str(root / ".grok"), "--output-dir", str(root / "w4")],
+                                capture_output=True, text=True, timeout=20)
+            self.assertEqual(r4.returncode, 0, r4.stderr)
+            log = (root / "launch.log").read_text().splitlines()
+            self.assertEqual(log, [".grok:transport", ".grok:lane", ".grok2:transport", ".grok2:lane", ".grok3:transport", ".grok:lane"])
+
+    def test_legacy_single_record_native_probe_replays_cleanly(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "native-probe.json").write_text(json.dumps({
+                "timestamp": "2026-11-20T18:00:00+00:00",
+                "account": ".grok",
+                "outcome": "returned",
+                "count": 1,
+            }))
+            launcher = self._write_fake_transport(root, transport_outcomes={})
+            brief = root / "lane.md"
+            brief.write_text("Objective: unbounded.\n")
+            res = subprocess.run(
+                [sys.executable, str(Path(xgrok_wave.__file__)), str(brief), "--xgrok-bin", str(launcher),
+                 "--grok-home", str(root / ".grok"), "--output-dir", str(root / "w1"), "--transport-probe"],
+                capture_output=True, text=True, timeout=20,
+            )
+            self.assertEqual(res.returncode, 0, res.stderr)
+            self.assertEqual((root / "launch.log").read_text().splitlines(), [".grok:lane"])
+
+    def test_bound_canary_hit_launches_and_miss_refuses_recording_canary_failed(self):
+        for hit in (True, False):
+            with self.subTest(hit=hit), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                pid = _snowflake_for(datetime.now(timezone.utc) - timedelta(hours=2))
+                launcher = self._write_fake_transport(
+                    root,
+                    transport_outcomes={".grok": {"outcome": "returned", "count": 1, "post_id": pid, "error": None}},
+                    canary_hit=hit,
+                )
+                brief = root / "lane.md"
+                brief.write_text("Query: `from:alpha since:2026-11-22_12:00:00_UTC until:2026-11-22_18:00:00_UTC`\n")
+                res = subprocess.run(
+                    [sys.executable, str(Path(xgrok_wave.__file__)), str(brief), "--xgrok-bin", str(launcher),
+                     "--grok-home", str(root / ".grok"), "--output-dir", str(root / "w1"), "--transport-probe"],
+                    capture_output=True, text=True, timeout=20,
+                )
+                doc = json.loads((root / "native-probe.json").read_text())
+                self.assertIn(".grok|utc|normal", doc["bound_canaries"])
+                self.assertEqual(doc["canary_failed"], not hit)
+                self.assertEqual(doc["bound_canary"]["outcome"], "passed" if hit else "canary_failed")
+                if hit:
+                    self.assertEqual(res.returncode, 0, res.stderr)
+                    self.assertEqual((root / "launch.log").read_text().splitlines(),
+                                     [".grok:transport", ".grok:bound-canary", ".grok:lane"])
+                    manifest = json.loads((root / "w1" / "manifest.json").read_text())
+                    self.assertEqual(manifest["bound_canary"]["outcome"], "passed")
+                else:
+                    self.assertEqual(res.returncode, 3, res.stderr)
+                    self.assertEqual((root / "launch.log").read_text().splitlines(),
+                                     [".grok:transport", ".grok:bound-canary"])
+                    not_launched = (root / "w1" / "NOT-LAUNCHED.txt").read_text()
+                    self.assertIn("fallback order:", not_launched)
+                    self.assertFalse((root / "w1" / "manifest.json").exists())
+
+    def test_late_slice_canary_requires_under_30m_control_and_uses_hydrated_when_present(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            old_pid = _snowflake_for(datetime.now(timezone.utc) - timedelta(hours=3))
+            launcher = self._write_fake_transport(
+                root,
+                transport_outcomes={".grok": {"outcome": "returned", "count": 1, "post_id": old_pid, "error": None}},
+                canary_hit=True,
+            )
+            brief = root / "late.md"
+            brief.write_text("Query: `from:alpha since:2026-11-22_12:00:00_UTC until:2026-11-22_18:00:00_UTC`\n")
+            base = [sys.executable, str(Path(xgrok_wave.__file__)), str(brief), "--xgrok-bin", str(launcher),
+                    "--grok-home", str(root / ".grok"), "--transport-probe", "--late-slice"]
+
+            # Without a <30m control, late-slice canary refuses with canary_failed=True before any lane runs.
+            r1 = subprocess.run([*base, "--output-dir", str(root / "w1")], capture_output=True, text=True, timeout=20)
+            self.assertEqual(r1.returncode, 3, r1.stderr)
+            doc = json.loads((root / "native-probe.json").read_text())
+            self.assertTrue(doc["canary_failed"])
+            self.assertIn("<30m", doc["bound_canary"]["error"])
+            self.assertEqual((root / "launch.log").read_text().splitlines(), [".grok:transport"])
+
+            # Add a <30m hydrated post: late-slice canary uses it, passes, and launches the lane.
+            fresh_pid = _snowflake_for(datetime.now(timezone.utc) - timedelta(minutes=10))
+            (root / "hydrated").mkdir()
+            (root / "hydrated" / f"{fresh_pid}.json").write_text(json.dumps({
+                "id_str": fresh_pid, "user": {"screen_name": "FreshAuthor"}, "text": "fresh",
+            }))
+            r2 = subprocess.run([*base, "--output-dir", str(root / "w2")], capture_output=True, text=True, timeout=20)
+            self.assertEqual(r2.returncode, 0, r2.stderr)
+            doc = json.loads((root / "native-probe.json").read_text())
+            self.assertFalse(doc["canary_failed"])
+            self.assertEqual(doc["bound_canary"]["control_post_id"], fresh_pid)
+            self.assertEqual(doc["bound_canary"]["control_author"], "FreshAuthor")
+            self.assertIn(".grok|utc|late-slice", doc["bound_canaries"])
+
+
+class DetachStatusAndRecoverTests(unittest.TestCase):
+    def test_detach_runs_wave_in_background_and_status_tracks_completion(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            write_transcript(root / "grok", "sess-a", ["x_keyword_search"])
+            launcher = root / "launcher"
+            launcher.write_text(
+                f"#!{sys.executable}\nimport json, time\ntime.sleep(0.2)\n"
+                "print(json.dumps({'text': 'detached packet', 'sessionId': 'sess-a'}))\n"
+            )
+            launcher.chmod(0o755)
+            brief = root / "a.md"
+            brief.write_text("Objective: detached worker.\n")
+            out = root / "wave1"
+            res = subprocess.run(
+                [sys.executable, str(Path(xgrok_wave.__file__)), str(brief), "--xgrok-bin", str(launcher),
+                 "--grok-home", str(root / "grok"), "--output-dir", str(out), "--detach"],
+                capture_output=True, text=True, timeout=15,
+            )
+            self.assertEqual(res.returncode, 0, res.stderr)
+            self.assertIn("started detached", res.stdout)
+            _wait_for(out / "manifest.json", seconds=15)
+            st = subprocess.run(
+                [sys.executable, str(Path(xgrok_wave.__file__)), "status", str(out), "--json"],
+                capture_output=True, text=True, timeout=10,
+            )
+            self.assertEqual(st.returncode, 0, st.stderr)
+            info = json.loads(st.stdout)
+            self.assertEqual((info["state"], info["succeeded"], info["failed"]), ("done", 1, 0))
+
+    def test_recover_reconstructs_packets_and_audited_manifest_with_unavailable_cost_and_zero_grok_calls(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            home = root / ".grok"
+            wave = root / "wave1"
+            composed = wave / "composed"
+            composed.mkdir(parents=True)
+            launch_ts = "2026-11-22T01:14:35+00:00"
+            (wave / "launched.json").write_text(json.dumps({"timestamp": launch_ts, "grok_home": str(home)}))
+            req_ok = (
+                "# mode: harvest\n# effort: medium\n"
+                "# fresh_since: 2026-11-20T09:27:00-08:00\n"
+                "# fresh_until: 2026-11-21T17:10:31-08:00\n"
+                "Lane: 01-ok.\n"
+            )
+            req_miss = "# mode: harvest\n# effort: medium\nLane: 02-miss.\n"
+            (composed / "01-ok.md").write_text(req_ok)
+            (composed / "02-miss.md").write_text(req_miss)
+            # Pre-existing finished lane is preserved as-is.
+            (wave / "00-done-result.json").write_text(json.dumps({
+                "name": "00-done", "status": "success", "returncode": 0, "usage": {"output_tokens": 10},
+                "x_tool_calls": 1, "x_queries": [], "launched_at": launch_ts,
+            }))
+            # Native Grok session transcript for 01-ok with an epoch query + assistant message + turn_completed.
+            q_ep = "from:dampedspring since_time:1795195620 until_time:1795309831"
+            updates = "\n".join([
+                json.dumps({"timestamp": 1795310105, "params": {"update": {
+                    "sessionUpdate": "tool_call_update", "toolCallId": "ctc_req_call-0", "status": "completed",
+                    "rawOutput": {"name": "x_keyword_search", "input": json.dumps({"query": q_ep, "mode": "Latest"})}}}}),
+                json.dumps({"timestamp": 1795310120, "params": {"update": {"sessionUpdate": "turn_completed"}}}),
+            ]) + "\n"
+            sdir = write_session(home, "01a200d1-bd07-71f2-9129-9dabdd9905e2", req_ok, "2026-11-22T01:14:36Z", updates)
+            packet_body = (
+                "# X retrieval packet\n\n## Search log\n"
+                f'- Query result: {{"query":"{q_ep}","outcome":"returned","count":5,"error":null}}\n'
+            )
+            with (sdir / "chat_history.jsonl").open("a") as fh:
+                fh.write(json.dumps({"type": "assistant", "content": packet_body}) + "\n")
+
+            # Status reports interrupted before recover.
+            st1 = subprocess.run(
+                [sys.executable, str(Path(xgrok_wave.__file__)), "status", str(wave), "--json"],
+                capture_output=True, text=True, timeout=10,
+            )
+            self.assertEqual(json.loads(st1.stdout)["state"], "interrupted")
+
+            # Recover runs offline (empty PATH ensures zero Grok/subprocess calls).
+            rec = subprocess.run(
+                [sys.executable, str(Path(xgrok_wave.__file__)), "recover", str(wave)],
+                capture_output=True, text=True, timeout=10, env={"PATH": ""},
+            )
+            self.assertEqual(rec.returncode, 1, rec.stderr)  # 02-miss failed -> exit 1
+            manifest = json.loads((wave / "manifest.json").read_text())
+            self.assertEqual((manifest["total_briefs"], manifest["succeeded"], manifest["failed"]), (3, 2, 1))
+            self.assertEqual(manifest["recovery"]["cost_usd"], "unavailable")
+            by_name = {w["name"]: w for w in manifest["workers"]}
+            self.assertEqual(by_name["00-done"]["status"], "success")
+            self.assertNotIn("recovered", by_name["00-done"])
+            ok_w = by_name["01-ok"]
+            self.assertEqual(ok_w["status"], "success")
+            self.assertEqual(ok_w["cost_usd"], "unavailable")
+            self.assertEqual(ok_w["x_tool_calls"], 1)
+            self.assertEqual(ok_w["x_queries"][0]["window_status"], "within-approved-query-bounds")
+            self.assertEqual(ok_w["x_queries"][0]["bound_form"], "epoch")
+            self.assertEqual(ok_w["x_queries"][0]["result_count"], 5)
+            self.assertEqual((wave / "01-ok-packet.md").read_text(), packet_body)
+            raw_env = json.loads((wave / "01-ok-raw.json").read_text())
+            self.assertIsNone(raw_env["total_cost_usd"])
+            self.assertEqual(raw_env["cost_usd"], "unavailable")
+            self.assertEqual(by_name["02-miss"]["status"], "failed")
+            self.assertEqual(by_name["02-miss"]["cost_usd"], "unavailable")
+
+            # Re-running without --overwrite refuses exit 2.
+            again = subprocess.run(
+                [sys.executable, str(Path(xgrok_wave.__file__)), "recover", str(wave)],
+                capture_output=True, text=True, timeout=10,
+            )
+            self.assertEqual(again.returncode, 2)
+            # Status now reports recovered.
+            st2 = subprocess.run(
+                [sys.executable, str(Path(xgrok_wave.__file__)), "status", str(wave), "--json"],
+                capture_output=True, text=True, timeout=10,
+            )
+            self.assertEqual(json.loads(st2.stdout)["state"], "recovered")
+
+
+class AccountFlagEdgeTests(unittest.TestCase):
+    def test_empty_grok2_grok3_env_and_conflicting_flags_fail_loudly(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            brief = root / "a.md"
+            brief.write_text("Objective: x\n")
+            launcher = root / "launcher"
+            launcher.write_text(f"#!{sys.executable}\nfrom pathlib import Path\nPath(__file__).with_name('ran').touch()\n")
+            launcher.chmod(0o755)
+            base = [sys.executable, str(Path(xgrok_wave.__file__)), str(brief), "--xgrok-bin", str(launcher), "--dry-run"]
+            for flag, var in (("--grok2", "GROK2_HOME"), ("--grok3", "GROK3_HOME")):
+                with self.subTest(flag=flag):
+                    res = subprocess.run([*base, flag], capture_output=True, text=True, timeout=10,
+                                         env={**os.environ, var: ""})
+                    self.assertEqual(res.returncode, 2, res.stderr)
+                    self.assertIn(f"{var} is set but empty", res.stderr)
+                    self.assertFalse((root / "ran").exists())
+            conflict = subprocess.run([*base, "--grok-home", str(root / "h"), "--grok2"],
+                                      capture_output=True, text=True, timeout=10)
+            self.assertEqual(conflict.returncode, 2)
+            self.assertIn("not allowed with argument", conflict.stderr)
 
 
 if __name__ == "__main__":

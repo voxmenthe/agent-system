@@ -85,10 +85,15 @@ calls and return 5-12 receipts. If an identity is ambiguous, make one bounded
    separately from complementary source roles.
 8. Keep each query to one keyword group plus at most one `from:` group of
    four handles, or split the roster from the keywords. Longer combined
-   queries silently drop their `since:`/`until:` bounds.
+   queries silently drop their `since:`/`until:` bounds. Parenthesize every
+   OR group, as in `(from:a OR from:b) -filter:replies since:{bound}`: after
+   an unparenthesized OR, X applies `since:`, `until:`, filters, floors and
+   `lang:` to the last OR term only.
 9. If any returned post falls outside the committed window, the query is
    bound-failed: mark it so in the Search log, drop the leaked posts, do not
-   count that page as coverage, and split the query before retrying.
+   count that page as coverage, and split the query before retrying. A page
+   whose posts all belong to the first OR term and fall outside the bound is
+   bound-failed.
 10. Batch at most four handles when the window is under about three hours;
     query a handle alone when a prolific poster is in the set or the window
     spans the cash session. Test silence in two stages: a four-handle batch

@@ -7,6 +7,7 @@ usage() {
 Usage: xgrok [--mode harvest|whathappened|list-summary|macro|dlresearch|agents] [--grok-home PATH | --grok2 | --grok3] [BRIEF_FILE]
        xgrok --usage [--grok-home PATH | --grok2 | --grok3]
        xgrok --setup-worker-home [--grok-home PATH | --grok2 | --grok3]
+       xgrok --pick-account
 
 Read a delegated X-retrieval brief from BRIEF_FILE or standard input, run Grok
 (default grok-4.7; override with XGROK_MODEL) at medium reasoning effort
@@ -26,12 +27,20 @@ it prints.
 
 With --usage, skip retrieval and print the selected account's subscription
 quota (used/remaining percentage and reset time) via the grok billing RPC.
+
+With --pick-account, read every account's quota (~/.grok, then GROK2_HOME or
+~/.grok2, then GROK3_HOME or ~/.grok3) and print only the home of the account
+whose quota resets next among those with at least 0.3% remaining; each reading
+and verdict goes to stderr. Nothing is printed and the exit status is 1 when
+no account qualifies.
 EOF
 }
 
 mode="harvest"
 brief_file=""
 usage_only=0
+pick_account=0
+account_flag=0
 setup_worker_home=0
 explicit_mode=0
 
@@ -54,20 +63,52 @@ while (($#)); do
       setup_worker_home=1
       shift
       ;;
+    --pick-account)
+      pick_account=1
+      shift
+      ;;
     --grok-home)
+      if ((account_flag)); then
+        echo "xgrok: conflicting account flags: pass at most one of --grok-home, --grok2, or --grok3" >&2
+        exit 2
+      fi
       if (($# < 2)); then
         echo "xgrok: --grok-home requires a path" >&2
         exit 2
       fi
+      # A failed "$(xgrok --pick-account)" substitutes "", which must not fall back to ~/.grok.
+      if [[ -z "$2" ]]; then
+        echo "xgrok: --grok-home requires a non-empty path" >&2
+        exit 2
+      fi
       export GROK_HOME="$2"
+      account_flag=1
       shift 2
       ;;
     --grok2|--secondary)
+      if ((account_flag)); then
+        echo "xgrok: conflicting account flags: pass at most one of --grok-home, --grok2, or --grok3" >&2
+        exit 2
+      fi
+      if [[ -n "${GROK2_HOME+set}" && -z "${GROK2_HOME}" ]]; then
+        echo "xgrok: GROK2_HOME is set but empty; unset it or set a valid path" >&2
+        exit 2
+      fi
       export GROK_HOME="${GROK2_HOME:-$HOME/.grok2}"
+      account_flag=1
       shift
       ;;
     --grok3)
+      if ((account_flag)); then
+        echo "xgrok: conflicting account flags: pass at most one of --grok-home, --grok2, or --grok3" >&2
+        exit 2
+      fi
+      if [[ -n "${GROK3_HOME+set}" && -z "${GROK3_HOME}" ]]; then
+        echo "xgrok: GROK3_HOME is set but empty; unset it or set a valid path" >&2
+        exit 2
+      fi
       export GROK_HOME="${GROK3_HOME:-$HOME/.grok3}"
+      account_flag=1
       shift
       ;;
     -h|--help)
@@ -104,6 +145,18 @@ fi
 
 script_dir="$(CDPATH='' cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 skill_dir="$(dirname -- "$script_dir")"
+usage_helper="$script_dir/xgrok_usage.py"
+if ((pick_account)); then
+  if ((explicit_mode || usage_only || setup_worker_home || account_flag)) || [[ -n "$brief_file" ]]; then
+    echo "xgrok: --pick-account takes no other option or brief file; it reads every account" >&2
+    exit 2
+  fi
+  if [[ ! -f "$usage_helper" ]]; then
+    echo "xgrok: missing usage helper: $usage_helper" >&2
+    exit 1
+  fi
+  exec python3 "$usage_helper" --pick
+fi
 if ((usage_only)); then
   if ((explicit_mode)); then
     echo "xgrok: --usage cannot be combined with --mode" >&2
@@ -113,7 +166,6 @@ if ((usage_only)); then
     echo "xgrok: --usage does not take a brief file" >&2
     exit 2
   fi
-  usage_helper="$script_dir/xgrok_usage.py"
   if [[ ! -f "$usage_helper" ]]; then
     echo "xgrok: missing usage helper: $usage_helper" >&2
     exit 1

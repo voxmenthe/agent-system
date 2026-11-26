@@ -241,33 +241,51 @@ def check_briefs(
     )
 
 
-def format_check_report(report: CheckReport, stale_days: int, list_stale: bool = False) -> str:
+def format_check_report(
+    report: CheckReport, stale_days: int, list_stale: bool = False, verbose: bool = False
+) -> str:
     lines: list[str] = []
-    for item in report.off_roster:
-        status = "labeled context" if item.labeled else "UNLABELED"
+    unlabeled = [item for item in report.off_roster if not item.labeled]
+    labeled = [item for item in report.off_roster if item.labeled]
+    for item in unlabeled:
         near = f"  near: {', '.join(item.near_matches)}" if item.near_matches else ""
-        why = f"  ({'; '.join(item.hints)})" if item.hints and not item.labeled else ""
-        lines.append(f"OFF-ROSTER ({status}): {item.handle}  in {', '.join(item.briefs)}{near}{why}")
+        why = f"  ({'; '.join(item.hints)})" if item.hints else ""
+        lines.append(f"OFF-ROSTER (UNLABELED): {item.handle}  in {', '.join(item.briefs)}{near}{why}")
+    if labeled:
+        if verbose:
+            for item in labeled:
+                near = f"  near: {', '.join(item.near_matches)}" if item.near_matches else ""
+                lines.append(f"OFF-ROSTER (labeled context): {item.handle}  in {', '.join(item.briefs)}{near}")
+        else:
+            brief_count = len({brief for item in labeled for brief in item.briefs})
+            lines.append(
+                f"OFF-ROSTER (labeled context): {len(labeled)} handle(s) across {brief_count} brief(s) (--verbose lists them)"
+            )
     if not report.off_roster:
         lines.append("OFF-ROSTER: none")
     lines += [f"PASTE into {brief} as its own line: {line}" for brief, line in report.paste_labels]
     unverified = sum(1 for entry in report.stale if entry.verified is None)
-    lines.append(
-        f"STALE (no verified date or older than {stale_days}d): {len(report.stale)} roster handles "
-        f"({unverified} never verified); run probe-brief to refresh"
-    )
-    if report.used_stale and not list_stale:
-        never = sum(1 for entry in report.used_stale if entry.verified is None)
-        lines.append(f"USED STALE: {len(report.used_stale)} handles in these briefs ({never} never verified); "
-                     "--list-stale names them")
-    for entry in report.used_stale if list_stale else ():
-        age = f"last verified {entry.verified}" if entry.verified else "never verified"
-        lines.append(f"USED STALE: {entry.handle} ({age})")
-    if report.used_stale:
+    used_never = sum(1 for entry in report.used_stale if entry.verified is None)
+    if list_stale or verbose:
         lines.append(
-            f"Refresh these before relying on silence: probe-brief --briefs BRIEF... "
-            f"--only-stale {stale_days} --out DIR; review live results, then verify --date DATE HANDLE..."
+            f"STALE (no verified date or older than {stale_days}d): {len(report.stale)} roster handles "
+            f"({unverified} never verified); run probe-brief to refresh"
         )
+        for entry in report.used_stale:
+            age = f"last verified {entry.verified}" if entry.verified else "never verified"
+            lines.append(f"USED STALE: {entry.handle} ({age})")
+        if report.used_stale:
+            lines.append(
+                f"Refresh these before relying on silence: probe-brief --briefs BRIEF... "
+                f"--only-stale {stale_days} --out DIR; review live results, then verify --date DATE HANDLE..."
+            )
+    else:
+        used_clause = (
+            f", {len(report.used_stale)} used in these briefs ({used_never} unverified); --list-stale names them"
+            if report.used_stale
+            else ""
+        )
+        lines.append(f"STALE (>{stale_days}d): {len(report.stale)} roster ({unverified} unverified){used_clause}")
     return "\n".join(lines)
 
 
@@ -340,6 +358,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     check.add_argument("briefs", nargs="+", type=Path, help="Brief files or directories of .md briefs.")
     check.add_argument("--stale-days", type=int, default=DEFAULT_STALE_DAYS)
     check.add_argument("--list-stale", action="store_true", help="Name each used stale handle.")
+    check.add_argument("--verbose", action="store_true", help="List every labeled off-roster handle and full stale block.")
 
     probe = subparsers.add_parser("probe-brief", help="Write handle liveness probe briefs.")
     probe.add_argument("--out", type=Path, required=True, help="Directory to write the probe briefs into.")
@@ -372,7 +391,7 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "check":
         report = check_briefs(_brief_files(args.briefs), roster, args.today, args.stale_days)
-        print(format_check_report(report, args.stale_days, args.list_stale))
+        print(format_check_report(report, args.stale_days, args.list_stale, args.verbose))
         return 1 if report.unlabeled else 0
 
     if args.command == "probe-brief":
