@@ -21,6 +21,13 @@ query; giant keyword piles hide which term found the result.
 If an operator fails, simplify once. Do not invent syntax or repeatedly retry a
 backend-rejected `in_reply_to_tweet_id:` query.
 
+## Page cap and time splits
+
+The page limit is 10; asking for more does nothing. When a Latest page returns
+10, split the window before concluding anything from it: two-day blocks for
+discovery, one-day blocks for a handle. Over a week, small Latest pages
+otherwise collapse onto the last day or two.
+
 ## Open research pulse
 
 Prefer mechanism and evaluation terms:
@@ -70,6 +77,20 @@ from:{seed_handle} since:{bound} filter:self_threads
 Add a title/method anchor when topic-specific. Do not require
 `-filter:replies`: exemplar breakdowns may be stored as self-thread
 continuations that the root-only lane misses.
+
+To pulse several seeds at once, batch at most four handles:
+
+```text
+(from:{a} OR from:{b} OR from:{c} OR from:{d}) -filter:replies since:{bound} until:{bound}
+```
+
+The parentheses are required. Without them X applies the bounds and filter to
+the last handle only, and the other handles come back from any date; on
+2026-11-19 seven such roster pages hid about 15 seeds' activity.
+
+For a seed whose row in `source-seeds.md` says the signal is reply-shaped, add
+`from:{handle} filter:replies` in one- or two-day bounds. Multi-day `from:`
+pages missed known posts that one-day bounds returned.
 
 ## Source-seed expansion
 
@@ -131,10 +152,12 @@ Shortlist only 2–5 roots. Under a normal budget, fully enrich the best 2–3:
 
 1. `x_thread_fetch(root_or_material_node)`
 2. `conversation_id:{root_id}` in Latest, no engagement floor
-3. `conversation_id:{root_id} filter:self_threads`
-4. local `since:{day} until:{day}` or timestamp inspection around a material node
-5. optional `conversation_id:{root_id} min_faves:2` as a precision comparison
-6. fallback `to:{root_author} filter:replies`; retain exact conversation ID only
+3. if step 2 is empty, or misses children the thread fetch or another query
+   already showed: `to:{root_author} since:{bound} until:{bound}` next, before
+   semantic search or other lanes; retain exact conversation ID only
+4. `conversation_id:{root_id} filter:self_threads`
+5. local `since:{day} until:{day}` or timestamp inspection around a material node
+6. optional `conversation_id:{root_id} min_faves:2` as a precision comparison
 
 A root counts as enriched only after both steps 1 and 2 complete. A thread-only
 root remains a candidate. A completed check with zero additive nodes belongs in
@@ -142,6 +165,13 @@ Coverage, the search log, or Gaps, not the Key conversations table.
 
 The floor-free lane protects quiet corrections. The self-thread lane protects
 technical continuations. `to:` is contaminated across roots unless post-filtered.
+
+An under-cap page is not proof of silence. Time-boxed and floor-free
+`conversation_id:` pages, multi-day `from:{handle}` pages, and time-boxed reply
+pages all missed posts already returned elsewhere on 2026-11-19, while bounded
+`to:{root_author}` recovered replies that `conversation_id:` returned empty. A
+query family that missed a known post in this run cannot support a silence
+claim for that thread or handle; label the miss a known-matching miss.
 
 ## Query stopping rules
 

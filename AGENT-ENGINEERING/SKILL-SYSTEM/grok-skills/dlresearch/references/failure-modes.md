@@ -100,3 +100,15 @@ breakdowns.
 **Response:** Treat adjacency as candidate discovery. Require two distinct
 substantive own-root conversations in the window; nodes in one self-thread
 remain one source event.
+
+## 14. Unparenthesized OR batch loses its bounds
+
+**Symptom:** `from:a OR from:b OR from:c -filter:replies since:… until:…`
+returns posts from long before the bound, often all from the first handle, and
+the other handles look quiet.
+
+**Response:** Parenthesize every OR group:
+`(from:a OR from:b OR from:c) -filter:replies since:… until:…`. Without
+parentheses X applies bounds and filters to the last OR term only. A page
+whose posts all belong to the first OR term and fall outside the bound is
+bound-failed; it proves nothing about the other handles.

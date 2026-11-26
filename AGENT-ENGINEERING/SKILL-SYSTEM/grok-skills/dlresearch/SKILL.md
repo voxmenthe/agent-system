@@ -172,11 +172,12 @@ For each selected root, progress only as far as new information warrants:
 
 1. `x_thread_fetch` on the root or important node.
 2. Floor-free `conversation_id:{root_id}` Latest search.
-3. `conversation_id:{root_id} filter:self_threads` for author continuations.
-4. A local `since:`/`until:` box around a material mid-thread node.
-5. One modest engagement-floor comparison only if useful.
-6. `to:{root_author} filter:replies` only as fallback; post-filter exact
-   returned `conversation_id == root_id`.
+3. If step 2 is empty or misses children already seen, bounded
+   `to:{root_author}` next; post-filter exact returned
+   `conversation_id == root_id`.
+4. `conversation_id:{root_id} filter:self_threads` for author continuations.
+5. A local `since:`/`until:` box around a material mid-thread node.
+6. One modest engagement-floor comparison only if useful.
 
 A root counts as an **enriched conversation** only after both steps 1 and 2
 complete. A thread-only root remains a candidate. If a completed enrichment
