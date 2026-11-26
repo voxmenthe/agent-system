@@ -3,6 +3,15 @@
 
 The browser is the transport. This script never reads cookies or credentials and
 never uses a different Chrome profile as a fallback.
+
+Two ways to drive that Chrome, tried in this order (`--transport auto`):
+
+1. Claude in Chrome: a `claude --claude-in-chrome-mcp` server, spoken to over
+   stdio. It works in a tab group behind the user's windows.
+2. AppleScript, only when Claude in Chrome does not connect after one retry. It
+   drives a window the helper opened itself, never a tab the user opened.
+
+Each command's JSON says which transport ran. A fallback is explained on stderr.
 """
 
 from __future__ import annotations
@@ -12,14 +21,18 @@ import base64
 import contextlib
 import datetime as dt
 import fcntl
+import gzip
 import json
 import os
 from pathlib import Path
+import pwd
+import queue
 import re
 import subprocess
 import sys
+import threading
 import time
-from typing import Any, Iterator
+from typing import Any, Iterator, Protocol
 from urllib.parse import unquote, urlencode, urlsplit, urlunsplit
 
 
@@ -28,11 +41,34 @@ PROFILE_EMAIL = os.environ.get("CHROME_PROFILE_EMAIL")
 # Local State remains authoritative whenever macOS permits it to be read.
 OBSERVED_PROFILE_DIRECTORY = "Default"
 CHROME_APP = "Google Chrome"
+CHROME_BUNDLE_ID = "com.google.Chrome"
 WSJ_HOME = "https://www.wsj.com/"
 LATEST_URL = "https://www.wsj.com/news/latest-headlines"
 STATE_DIR = Path.home() / ".codex" / "state" / "wsj-research"
 STATE_FILE = STATE_DIR / "browser.json"
 LOCK_FILE = STATE_DIR / "browser.lock"
+
+CLAUDE_IN_CHROME = "claude-in-chrome"
+APPLESCRIPT = "applescript"
+# Claude Code's login lives under the real home, also when a host runs this with
+# another HOME (the second Antigravity account uses HOME=~/.agy2).
+REAL_HOME = Path(pwd.getpwuid(os.getuid()).pw_dir)
+CLAUDE_BINARY = REAL_HOME / ".local" / "bin" / "claude"
+CIC_STATE_FILE = STATE_DIR / "claude-in-chrome.json"
+CIC_DROPPED_ENV = frozenset({"ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN"})
+# Activation trailed the new window by up to about 3 seconds (2026-11-24).
+FRONT_APP_WATCH_SECONDS = 5
+FRONT_APP_SETTLE_SECONDS = 0.5
+FRONT_APP_RECHECK_SECONDS = 2
+FRONT_APP_HAND_BACKS = 3
+CIC_CONNECT_TIMEOUT = 20
+# The extension stops page JavaScript after 45 seconds.
+CIC_CALL_TIMEOUT = 60
+# The extension cuts every returned string at 1,000 characters and a whole
+# result at 51,200, so results come back as gzip+base64 parts of 997 characters,
+# 45 per call. The "~" keeps a part from matching the extension's base64 filter.
+CIC_PART_SIZE = 996
+CIC_PARTS_PER_CALL = 45
 
 EXIT_LOGIN_REQUIRED = 10
 EXIT_JAVASCRIPT_DISABLED = 11
@@ -82,29 +118,6 @@ end tell
     return _run_applescript(script)
 
 
-def _execute_json(window_id: int, tab_id: int, source: str) -> Any:
-    raw = _execute_js(window_id, tab_id, source)
-    try:
-        return json.loads(raw)
-    except json.JSONDecodeError as exc:
-        raise WsjError(f"WSJ returned malformed structured data: {exc}") from exc
-
-
-def _window_ids() -> list[int]:
-    raw = _run_applescript(
-        f'''
-tell application "{CHROME_APP}"
-  set output to ""
-  repeat with browserWindow in windows
-    set output to output & (id of browserWindow as text) & linefeed
-  end repeat
-  return output
-end tell
-'''
-    )
-    return [int(value) for value in raw.splitlines() if value.strip().isdigit()]
-
-
 def _tab_exists(window_id: int, tab_id: int) -> bool:
     """Whether the saved tab is still open, asked by its ids alone: walking every tab fails while other tabs open
     and close (TM, 10-20: -1719, "Can't get item 43 of every tab")."""
@@ -123,51 +136,84 @@ end tell
     ) == "yes"
 
 
-def _all_tabs() -> list[dict[str, Any]]:
-    """Every tab of every window. A tab opened or closed mid-walk makes AppleScript's index go stale (-1719), so a
-    failed walk is retried once."""
-    separator = "|||WSJ-RESEARCH|||"
-    script = f'''
-tell application "{CHROME_APP}"
-  set output to ""
-  repeat with browserWindow in windows
-    repeat with browserTab in tabs of browserWindow
-      set output to output & (id of browserWindow as text) & "{separator}" & ¬
-        (id of browserTab as text) & "{separator}" & (URL of browserTab as text) & linefeed
-    end repeat
-  end repeat
-  return output
-end tell
-'''
+def _load_json(path: Path) -> dict[str, Any]:
     try:
-        raw = _run_applescript(script)
-    except WsjError as error:
-        if error.exit_code != 1:
-            raise
-        time.sleep(0.5)
-        raw = _run_applescript(script)
-    tabs: list[dict[str, Any]] = []
-    for line in raw.splitlines():
-        parts = line.split(separator, 2)
-        if len(parts) == 3 and parts[0].isdigit() and parts[1].isdigit():
-            tabs.append(
-                {"window_id": int(parts[0]), "tab_id": int(parts[1]), "url": parts[2]}
-            )
-    return tabs
+        value = json.loads(path.read_text())
+    except (FileNotFoundError, json.JSONDecodeError, OSError):
+        return {}
+    return value if isinstance(value, dict) else {}
+
+
+def _save_json(path: Path, value: dict[str, Any]) -> None:
+    STATE_DIR.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_suffix(".tmp")
+    temporary.write_text(json.dumps(value, indent=2) + "\n")
+    temporary.replace(path)
 
 
 def _load_state() -> dict[str, Any]:
-    try:
-        return json.loads(STATE_FILE.read_text())
-    except (FileNotFoundError, json.JSONDecodeError, OSError):
-        return {}
+    return _load_json(STATE_FILE)
 
 
 def _save_state(target: dict[str, Any]) -> None:
-    STATE_DIR.mkdir(parents=True, exist_ok=True)
-    temporary = STATE_FILE.with_suffix(".tmp")
-    temporary.write_text(json.dumps(target, indent=2) + "\n")
-    temporary.replace(STATE_FILE)
+    _save_json(STATE_FILE, target)
+
+
+def _front_bundle_id() -> str | None:
+    """The frontmost app's bundle id, or None when macOS does not say."""
+    try:
+        front = subprocess.run(["lsappinfo", "front"], text=True, capture_output=True, check=False).stdout.strip()
+        info = subprocess.run(["lsappinfo", "info", "-only", "bundleID", front], text=True, capture_output=True,
+                              check=False).stdout
+    except OSError:
+        return None
+    match = re.search(r'bundleID="([^"]+)"', info)
+    return match.group(1) if match else None
+
+
+@contextlib.contextmanager
+def _returning_front_app() -> Iterator[None]:
+    """Give the front back to the user's app after a step that creates a Chrome window.
+
+    Chrome comes to the front whenever a window is created from outside it. This
+    was observed for AppleScript `make new window`, `open -na`, and the window
+    that holds a new Claude in Chrome tab group. Nothing is done when Chrome was
+    already in front.
+    """
+    before = _front_bundle_id()
+    succeeded = False
+    try:
+        yield
+        succeeded = True
+    finally:
+        if before and before != CHROME_BUNDLE_ID:
+            # A step that failed most likely created no window, so it gets one
+            # look, not a wait.
+            _hand_front_back(before, FRONT_APP_WATCH_SECONDS if succeeded else 0)
+
+
+def _hand_front_back(before: str, watch: float) -> None:
+    """Return the front to BEFORE whenever Chrome takes it within WATCH seconds.
+
+    Chrome activates in more than one step: on 2026-11-24 it took the front
+    again 0.2 seconds after a first hand-back. So the helper lets Chrome settle
+    before each hand-back and keeps watching afterward. It stops once the user
+    is in a third app.
+    """
+    deadline = time.monotonic() + watch
+    handed_back = 0
+    while handed_back < FRONT_APP_HAND_BACKS:
+        front = _front_bundle_id()
+        if front == CHROME_BUNDLE_ID:
+            time.sleep(FRONT_APP_SETTLE_SECONDS)
+            if _front_bundle_id() == CHROME_BUNDLE_ID:
+                subprocess.run(["open", "-b", before], capture_output=True, check=False)
+                handed_back += 1
+                deadline = max(deadline, time.monotonic() + FRONT_APP_RECHECK_SECONDS)
+            continue
+        if front != before or time.monotonic() >= deadline:
+            return
+        time.sleep(0.1)
 
 
 @contextlib.contextmanager
@@ -241,77 +287,58 @@ end tell
     return Path(path).name if path else None
 
 
-def _find_existing_target(profile_directory: str) -> dict[str, Any] | None:
-    candidates = [
-        tab
-        for tab in _all_tabs()
-        if urlsplit(tab["url"]).hostname in {"wsj.com", "www.wsj.com"}
-    ]
-    checked: dict[int, bool] = {}
-    for tab in reversed(candidates):
-        window_id = tab["window_id"]
-        if window_id not in checked:
-            checked[window_id] = (
-                _window_profile_directory(window_id) == profile_directory
-            )
-        if checked[window_id]:
-            return {
-                "window_id": window_id,
-                "tab_id": tab["tab_id"],
-                "profile_email": PROFILE_EMAIL,
-                "profile_directory": profile_directory,
-            }
-    return None
-
-
 def _open_profile_window(profile_directory: str) -> dict[str, Any]:
-    before = set(_window_ids())
-    result = subprocess.run(
-        [
-            "open",
-            "-na",
-            CHROME_APP,
-            "--args",
-            f"--profile-directory={profile_directory}",
-            "--new-window",
-            WSJ_HOME,
-        ],
-        text=True,
-        capture_output=True,
-        check=False,
-    )
-    if result.returncode:
-        raise WsjError(f"Could not open Chrome: {result.stderr.strip()}")
+    """Open the helper's own WSJ window, so a tab the user opened is never navigated.
 
-    deadline = time.monotonic() + 20
-    while time.monotonic() < deadline:
-        time.sleep(0.25)
-        after = set(_window_ids())
-        new_ids = after - before
-        tabs = _all_tabs()
-        for tab in reversed(tabs):
-            if tab["window_id"] in new_ids and "wsj.com" in tab["url"]:
-                target = {
-                    "window_id": tab["window_id"],
-                    "tab_id": tab["tab_id"],
-                    "profile_email": PROFILE_EMAIL,
-                    "profile_directory": profile_directory,
-                }
-                # Verify Chrome honored --profile-directory before trusting it.
-                if _window_profile_directory(tab["window_id"]) == profile_directory:
-                    return target
-        existing = _find_existing_target(profile_directory)
-        if existing:
-            return existing
-    raise WsjError("Timed out opening the WSJ Chrome window.", EXIT_BROWSER_TIMEOUT)
+    `make new window` stays in the one running Chrome. `open -na`, used before
+    2026-11-24, can start a second Chrome process for a moment, and AppleScript
+    then fails with -609. The new window uses Chrome's most recently used
+    profile, so the profile is checked once, in this window.
+    """
+    with _returning_front_app():
+        window_id = int(
+            _run_applescript(
+                f'''
+tell application "{CHROME_APP}"
+  set helperWindow to make new window
+  set URL of active tab of helperWindow to "{WSJ_HOME}"
+  return id of helperWindow
+end tell
+'''
+            )
+        )
+        found = _window_profile_directory(window_id)
+    if found != profile_directory:
+        _run_applescript(f'tell application "{CHROME_APP}" to close (first window whose id is {window_id})')
+        raise WsjError(
+            f"Chrome opened the helper's window in profile {found!r}, not {profile_directory!r} "
+            f"({PROFILE_EMAIL}). Use a {PROFILE_EMAIL} Chrome window once so Chrome counts it as "
+            "most recently used, then retry.",
+            EXIT_BROWSER_TIMEOUT,
+        )
+    tab_id = int(
+        _run_applescript(
+            f'tell application "{CHROME_APP}" to return id of active tab of (first window whose id is {window_id})'
+        )
+    )
+    return {
+        "window_id": window_id,
+        "tab_id": tab_id,
+        "profile_email": PROFILE_EMAIL,
+        "profile_directory": profile_directory,
+        "owned": True,
+    }
 
 
 def _target() -> dict[str, Any]:
+    """The helper's own saved tab, or a new window of its own. A saved tab without
+    `owned` predates 2026-11-24 and may be a tab the user opened, so it is not reused."""
     profile_directory = _resolve_profile_directory()
     state = _load_state()
     window_id, tab_id = state.get("window_id"), state.get("tab_id")
     if (
-        state.get("profile_email") == PROFILE_EMAIL
+        state.get("owned") is True
+        and state.get("profile_email") == PROFILE_EMAIL
         and state.get("profile_directory") == profile_directory
         and isinstance(window_id, int)
         and isinstance(tab_id, int)
@@ -319,35 +346,36 @@ def _target() -> dict[str, Any]:
     ):
         return state
 
-    target = _find_existing_target(profile_directory)
-    if target is None:
-        target = _open_profile_window(profile_directory)
+    print("wsj: opening the helper's own Chrome window for AppleScript.", file=sys.stderr)
+    target = _open_profile_window(profile_directory)
     _save_state(target)
     return target
 
 
+# A WSJ page already in the tab has __NEXT_DATA__ too, so readiness alone can pass on
+# the old document and the next read returns the previous page. Mark the old document
+# first; only a newly loaded one lacks the mark.
+LEAVING_JS = "window.__wsjResearchLeaving = true, 'marked'"
+READY_JS = "document.getElementById('__NEXT_DATA__') && !window.__wsjResearchLeaving ? 'ready' : ''"
+NAVIGATION_WAIT_SECONDS = 30
+SETTLE_SECONDS = 0.65
+
+
 def _navigate(target: dict[str, Any], url: str) -> None:
     escaped_url = url.replace("\\", "\\\\").replace('"', '\\"')
-    # A WSJ page already in the tab has __NEXT_DATA__ too, so readiness alone can pass on
-    # the old document and the next read returns the previous page. Mark the old document
-    # first; only a newly loaded one lacks the mark.
-    leaving_js = "window.__wsjResearchLeaving = true; 'marked'"
-    ready_js = (
-        "document.getElementById('__NEXT_DATA__') && !window.__wsjResearchLeaving ? 'ready' : ''"
-    ).replace('"', '\\"')
     script = f'''
 tell application "{CHROME_APP}"
   set targetWindow to first window whose id is {target["window_id"]}
   set targetTab to first tab of targetWindow whose id is {target["tab_id"]}
   try
-    execute targetTab javascript "{leaving_js}"
+    execute targetTab javascript "{LEAVING_JS}"
   end try
   set URL of targetTab to "{escaped_url}"
   repeat 120 times
     delay 0.25
     set pageReady to ""
     try
-      set pageReady to execute targetTab javascript "{ready_js}"
+      set pageReady to execute targetTab javascript "{READY_JS}"
     end try
     if pageReady is "ready" then exit repeat
   end repeat
@@ -360,7 +388,349 @@ end tell
     )
     if not separator or readiness != "ready" or not final_url:
         raise WsjError("WSJ navigation did not complete.", EXIT_BROWSER_TIMEOUT)
-    time.sleep(0.65)
+    time.sleep(SETTLE_SECONDS)
+
+
+class Tab(Protocol):
+    """The one tab a command drives, whichever transport reaches it."""
+
+    transport: str
+
+    def navigate(self, url: str) -> None: ...
+
+    def evaluate(self, source: str) -> str: ...
+
+    def describe(self) -> dict[str, Any]: ...
+
+
+class AppleScriptTab:
+    transport = APPLESCRIPT
+
+    def __init__(self, target: dict[str, Any]):
+        self.target = target
+
+    def navigate(self, url: str) -> None:
+        _navigate(self.target, url)
+
+    def evaluate(self, source: str) -> str:
+        return _execute_js(self.target["window_id"], self.target["tab_id"], source)
+
+    def describe(self) -> dict[str, Any]:
+        return {key: self.target[key] for key in ("profile_directory", "window_id", "tab_id")}
+
+
+class ClaudeInChromeUnavailable(WsjError):
+    """Claude in Chrome did not connect, so AppleScript may be used instead."""
+
+    def __init__(self, message: str):
+        super().__init__(message, EXIT_BROWSER_TIMEOUT)
+
+
+class _ToolError(WsjError):
+    """A Claude in Chrome tool answered with isError."""
+
+
+class _McpServer:
+    """One `claude --claude-in-chrome-mcp` process, spoken to as newline-delimited JSON-RPC over stdio."""
+
+    def __init__(self) -> None:
+        try:
+            self._process = subprocess.Popen(
+                [str(CLAUDE_BINARY), "--claude-in-chrome-mcp"],
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL,
+                text=True,
+                encoding="utf-8",
+                # The bridge signs in with the user's Claude login, so an API key a
+                # caller happens to export is never passed on.
+                env={**{key: value for key, value in os.environ.items() if key not in CIC_DROPPED_ENV},
+                     "HOME": str(REAL_HOME)},
+                cwd=REAL_HOME,
+            )
+        except OSError as exc:
+            raise ClaudeInChromeUnavailable(f"cannot start {CLAUDE_BINARY}: {exc}") from exc
+        self._lines: queue.Queue[str | None] = queue.Queue()
+        self._pump_thread = threading.Thread(target=self._pump, daemon=True)
+        self._pump_thread.start()
+        self._last_id = 0
+
+    def _pump(self) -> None:
+        assert self._process.stdout is not None
+        for line in self._process.stdout:
+            self._lines.put(line)
+        self._lines.put(None)
+
+    def _send(self, message: dict[str, Any]) -> None:
+        assert self._process.stdin is not None
+        try:
+            self._process.stdin.write(json.dumps(message) + "\n")
+            self._process.stdin.flush()
+        except OSError as exc:
+            raise WsjError("The Claude in Chrome server exited.", EXIT_BROWSER_TIMEOUT) from exc
+
+    def notify(self, method: str) -> None:
+        self._send({"jsonrpc": "2.0", "method": method})
+
+    def request(self, method: str, params: dict[str, Any], timeout: float) -> dict[str, Any]:
+        self._last_id += 1
+        request_id = self._last_id
+        self._send({"jsonrpc": "2.0", "id": request_id, "method": method, "params": params})
+        deadline = time.monotonic() + timeout
+        late = WsjError(f"Claude in Chrome did not answer {method} within {timeout:g}s.", EXIT_BROWSER_TIMEOUT)
+        while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise late
+            try:
+                line = self._lines.get(timeout=remaining)
+            except queue.Empty:
+                raise late from None
+            if line is None:
+                raise WsjError("The Claude in Chrome server exited.", EXIT_BROWSER_TIMEOUT)
+            try:
+                message = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if not isinstance(message, dict) or message.get("id") != request_id:
+                continue  # a notification, or an answer to an earlier, abandoned request
+            if "error" in message:
+                raise WsjError(f"Claude in Chrome {method} failed: {message['error']}", EXIT_BROWSER_TIMEOUT)
+            return message.get("result") or {}
+
+    def tool(self, name: str, arguments: dict[str, Any], *, timeout: float = CIC_CALL_TIMEOUT,
+             exit_code: int = EXIT_BROWSER_TIMEOUT) -> str:
+        """The tool's answer text. Reminders the server adds for models are skipped."""
+        result = self.request("tools/call", {"name": name, "arguments": arguments}, timeout)
+        texts = [
+            item.get("text", "")
+            for item in result.get("content") or []
+            if item.get("type") == "text" and not item.get("text", "").startswith("<system-reminder>")
+        ]
+        text = texts[0] if texts else ""
+        if result.get("isError"):
+            raise _ToolError(f"Claude in Chrome {name}: {text[:300]}", exit_code)
+        return text
+
+    def close(self) -> None:
+        with contextlib.suppress(OSError):
+            if self._process.stdin:
+                self._process.stdin.close()
+        try:
+            self._process.wait(5)
+        except subprocess.TimeoutExpired:
+            self._process.kill()
+            self._process.wait()
+        self._pump_thread.join(5)
+        if self._process.stdout and not self._pump_thread.is_alive():
+            self._process.stdout.close()
+
+
+# Runs SOURCE (an expression that yields a string), keeps the gzip+base64 of the
+# result on `window`, and returns its first parts. __wsjResearchSlice(start)
+# returns later parts. The extension returns an object as JSON, but a top-level
+# array only as "Array(n)", and a promise unless awaited.
+CIC_RESULT_JS = r'''await (async () => {
+  const value = String(__SOURCE__);
+  const stream = new Blob([value]).stream().pipeThrough(new CompressionStream("gzip"));
+  const bytes = new Uint8Array(await new Response(stream).arrayBuffer());
+  let binary = "";
+  for (let i = 0; i < bytes.length; i += 0x8000) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  }
+  window.__wsjResearchResult = btoa(binary);
+  window.__wsjResearchSlice = start => {
+    const result = window.__wsjResearchResult, parts = [];
+    for (let i = start; i < result.length && parts.length < __PARTS__; i += __SIZE__) {
+      parts.push("~" + result.slice(i, i + __SIZE__));
+    }
+    return {total: result.length, parts};
+  };
+  return window.__wsjResearchSlice(0);
+})()'''
+
+
+def _cic_parts(page: Any) -> tuple[int, str]:
+    """(total length, base64 text) from one CIC_RESULT_JS answer, refusing anything the extension rewrote."""
+    if not isinstance(page, dict) or not isinstance(page.get("total"), int) or not isinstance(page.get("parts"), list):
+        raise WsjError(f"Claude in Chrome returned an unexpected result: {str(page)[:200]}", EXIT_BROWSER_TIMEOUT)
+    for part in page["parts"]:
+        if not isinstance(part, str) or not part.startswith("~"):
+            raise WsjError(f"Claude in Chrome altered a result part: {str(part)[:80]}", EXIT_BROWSER_TIMEOUT)
+    return page["total"], "".join(part[1:] for part in page["parts"])
+
+
+def _cic_decode(total: int, encoded: str) -> str:
+    """The page's string from its gzip+base64 text. gzip's checksum catches a part the extension redacted."""
+    try:
+        if len(encoded) != total:
+            raise ValueError(f"{len(encoded)} of {total} characters arrived")
+        return gzip.decompress(base64.b64decode(encoded, validate=True)).decode("utf-8")
+    except (ValueError, OSError, EOFError) as exc:
+        raise WsjError(f"Claude in Chrome returned a damaged result ({exc}).", EXIT_BROWSER_TIMEOUT) from exc
+
+
+def _cic_tab_ids(text: str) -> list[int]:
+    """Tab ids in the shared tab group, from tabs_context_mcp's JSON; empty when it reports no group."""
+    try:
+        data = json.loads(text)
+    except json.JSONDecodeError:
+        return []
+    tabs = data.get("availableTabs") if isinstance(data, dict) else None
+    if not isinstance(tabs, list):
+        return []
+    return [tab["tabId"] for tab in tabs if isinstance(tab, dict) and isinstance(tab.get("tabId"), int)]
+
+
+class ClaudeInChromeTab:
+    """The helper's own tab in the one tab group that standalone Claude in Chrome servers share.
+
+    The group's first tab, the one `tabs_context_mcp` creates with the group,
+    anchors it: when that tab closes, the extension drops the group, and the
+    group's other tabs stay open in Chrome where no tool can reach them (seen
+    2026-11-24). So the helper keeps the tab it gets by creating the group, saved
+    in CIC_STATE_FILE, and reuses it on later runs. That also keeps the group's
+    window, and creating that window is the one step that brings Chrome to the
+    front. In a group someone else created, the helper adds a tab for the run and
+    closes it at the end. It never uses or closes a tab it did not create.
+    """
+
+    transport = CLAUDE_IN_CHROME
+
+    def __init__(self, server: _McpServer, tab_id: int, keep: bool):
+        self._server = server
+        self.tab_id = tab_id
+        self._keep = keep
+
+    @classmethod
+    def open(cls) -> "ClaudeInChromeTab":
+        """Connect and claim the tab, retrying once on a fresh server."""
+        reasons: list[str] = []
+        for _ in range(2):
+            server: _McpServer | None = None
+            try:
+                server = _McpServer()
+                server.request(
+                    "initialize",
+                    {
+                        "protocolVersion": "2025-06-18",
+                        "capabilities": {},
+                        "clientInfo": {"name": "wsj-research", "version": "1"},
+                    },
+                    CIC_CONNECT_TIMEOUT,
+                )
+                server.notify("notifications/initialized")
+                return cls(server, *_claim_cic_tab(server))
+            except WsjError as exc:
+                if server is not None:
+                    server.close()
+                reasons.append(str(exc))
+        raise ClaudeInChromeUnavailable(" Retried: ".join(reasons))
+
+    def _js(self, text: str) -> str:
+        return self._server.tool(
+            "javascript_tool", {"action": "javascript_exec", "tabId": self.tab_id, "text": text}, exit_code=1
+        )
+
+    def _js_object(self, text: str) -> Any:
+        raw = self._js(text)
+        try:
+            return json.loads(raw)
+        except json.JSONDecodeError:
+            raise WsjError(f"Claude in Chrome returned an unexpected result: {raw[:200]}", EXIT_BROWSER_TIMEOUT)
+
+    def evaluate(self, source: str) -> str:
+        text = (CIC_RESULT_JS.replace("__PARTS__", str(CIC_PARTS_PER_CALL))
+                .replace("__SIZE__", str(CIC_PART_SIZE)).replace("__SOURCE__", source.strip()))
+        total, encoded = _cic_parts(self._js_object(text))
+        while len(encoded) < total:
+            _, more = _cic_parts(self._js_object(f"window.__wsjResearchSlice({len(encoded)})"))
+            if not more:
+                break
+            encoded += more
+        return _cic_decode(total, encoded)
+
+    def navigate(self, url: str) -> None:
+        with contextlib.suppress(WsjError):
+            self.evaluate(LEAVING_JS)  # fails on a tab that shows no web page yet
+        self._server.tool("navigate", {"tabId": self.tab_id, "url": url})
+        deadline = time.monotonic() + NAVIGATION_WAIT_SECONDS
+        while time.monotonic() < deadline:
+            try:
+                if self.evaluate(READY_JS) == "ready":
+                    time.sleep(SETTLE_SECONDS)
+                    return
+            except WsjError:
+                pass  # the page navigated mid-evaluation
+            time.sleep(0.25)
+        raise WsjError("WSJ navigation did not complete.", EXIT_BROWSER_TIMEOUT)
+
+    def describe(self) -> dict[str, Any]:
+        return {"tab_id": self.tab_id}
+
+    def close(self) -> None:
+        try:
+            if not self._keep:
+                with contextlib.suppress(WsjError):
+                    self._server.tool("tabs_close_mcp", {"tabId": self.tab_id}, timeout=CIC_CONNECT_TIMEOUT)
+        finally:
+            self._server.close()
+
+
+def _claim_cic_tab(server: _McpServer) -> tuple[int, bool]:
+    """(tab id, keep it after the run).
+
+    The saved anchor tab when it is still in the group; else a tab added for this
+    run; else the anchor tab of a new group (one window, Chrome raised once).
+    """
+    saved = _load_json(CIC_STATE_FILE).get("tab_id")
+    try:
+        tabs = _cic_tab_ids(server.tool("tabs_context_mcp", {}, timeout=CIC_CONNECT_TIMEOUT))
+    except _ToolError:
+        tabs = []  # no group yet; creating one below says whether the browser is connected
+    if tabs and saved in tabs:
+        return saved, True
+    if tabs:
+        text = server.tool("tabs_create_mcp", {}, timeout=CIC_CONNECT_TIMEOUT)
+        match = re.search(r"Tab ID: (\d+)", text)
+        if not match:
+            raise WsjError(f"Claude in Chrome did not report the new tab: {text[:200]}", EXIT_BROWSER_TIMEOUT)
+        return int(match.group(1)), False
+    with _returning_front_app():
+        tabs = _cic_tab_ids(server.tool("tabs_context_mcp", {"createIfEmpty": True}, timeout=CIC_CONNECT_TIMEOUT))
+    if not tabs:
+        raise WsjError("Claude in Chrome did not create a tab group.", EXIT_BROWSER_TIMEOUT)
+    _save_json(CIC_STATE_FILE, {"tab_id": tabs[0]})
+    print("wsj: created the Claude in Chrome tab group; its new window brought Chrome to the front once.",
+          file=sys.stderr)
+    return tabs[0], True
+
+
+@contextlib.contextmanager
+def _connect(transport: str) -> Iterator[Tab]:
+    """The tab commands drive. `auto` uses AppleScript only when Claude in Chrome does not connect."""
+    if transport != APPLESCRIPT:
+        try:
+            tab = ClaudeInChromeTab.open()
+        except ClaudeInChromeUnavailable as exc:
+            if transport == CLAUDE_IN_CHROME:
+                raise
+            print(f"wsj: Claude in Chrome is unavailable ({exc}); using the AppleScript fallback.", file=sys.stderr)
+        else:
+            try:
+                yield tab
+            finally:
+                tab.close()
+            return
+    yield AppleScriptTab(_target())
+
+
+def _execute_json(tab: Tab, source: str) -> Any:
+    raw = tab.evaluate(source)
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise WsjError(f"WSJ returned malformed structured data: {exc}") from exc
 
 
 AUTH_JS = r'''
@@ -395,10 +765,10 @@ AUTH_JS = r'''
 '''
 
 
-def _require_login(target: dict[str, Any]) -> dict[str, Any]:
+def _require_login(tab: Tab) -> dict[str, Any]:
     status: dict[str, Any] = {}
     for _ in range(30):
-        status = _execute_json(target["window_id"], target["tab_id"], AUTH_JS)
+        status = _execute_json(tab, AUTH_JS)
         if status.get("authenticated"):
             return status
         if status.get("signed_out_signal"):
@@ -422,17 +792,16 @@ def _print_json(value: Any) -> None:
     print(json.dumps(value, indent=2, ensure_ascii=False))
 
 
-def command_status(_: argparse.Namespace) -> None:
-    target = _target()
-    _navigate(target, WSJ_HOME)
-    auth = _require_login(target)
+def command_status(args: argparse.Namespace) -> None:
+    with _connect(args.transport) as tab:
+        tab.navigate(WSJ_HOME)
+        auth = _require_login(tab)
     _print_json(
         {
             "authenticated": True,
+            "transport": tab.transport,
             "profile_email": PROFILE_EMAIL,
-            "profile_directory": target["profile_directory"],
-            "window_id": target["window_id"],
-            "tab_id": target["tab_id"],
+            **tab.describe(),
             "account_label": auth["account_label"],
             "header_sparse": auth["header_sparse"],
             "url": auth["url"],
@@ -511,10 +880,10 @@ def classify_story(story: dict[str, Any]) -> dict[str, Any]:
 
 
 def command_frontpage(args: argparse.Namespace) -> None:
-    target = _target()
-    _navigate(target, WSJ_HOME)
-    _require_login(target)
-    data = _execute_json(target["window_id"], target["tab_id"], FRONTPAGE_JS)
+    with _connect(args.transport) as tab:
+        tab.navigate(WSJ_HOME)
+        _require_login(tab)
+        data = _execute_json(tab, FRONTPAGE_JS)
     excluded = {"wsj | buy side", "videos"}
     stories = []
     for story in data["stories"]:
@@ -530,6 +899,7 @@ def command_frontpage(args: argparse.Namespace) -> None:
     data["stories"] = stories
     data["count"] = len(stories)
     data["profile_email"] = PROFILE_EMAIL
+    data["transport"] = tab.transport
     _print_json(data)
 
 
@@ -562,10 +932,10 @@ LATEST_JS = r'''
 
 
 def command_latest(args: argparse.Namespace) -> None:
-    target = _target()
-    _navigate(target, LATEST_URL)
-    _require_login(target)
-    data = _execute_json(target["window_id"], target["tab_id"], LATEST_JS)
+    with _connect(args.transport) as tab:
+        tab.navigate(LATEST_URL)
+        _require_login(tab)
+        data = _execute_json(tab, LATEST_JS)
     stories = [
         story
         for story in map(classify_story, data["stories"])
@@ -575,6 +945,7 @@ def command_latest(args: argparse.Namespace) -> None:
     data["stories"] = stories
     data["count"] = len(stories)
     data["profile_email"] = PROFILE_EMAIL
+    data["transport"] = tab.transport
     _print_json(data)
 
 
@@ -643,7 +1014,6 @@ def command_search(args: argparse.Namespace) -> None:
         raise WsjError("--from must be on or before --to.", EXIT_USAGE)
     sort = args.sort or ("desc" if start or end else "relevance")
 
-    target = _target()
     all_results: list[dict[str, Any]] = []
     seen_urls: set[str] = set()
     pages_fetched = 0
@@ -651,55 +1021,56 @@ def command_search(args: argparse.Namespace) -> None:
     last_page_full = False
     stopped_at_boundary = False
 
-    for page_number in range(1, args.pages + 1):
-        params: dict[str, Any] = {
-            "query": args.query,
-            "dateRange": args.date_range,
-            "products": ",".join(products),
-            "sort": sort,
-        }
-        if page_number > 1:
-            params["page"] = page_number
-        url = "https://www.wsj.com/search?" + urlencode(params)
-        _navigate(target, url)
-        _require_login(target)
-        page = _execute_json(target["window_id"], target["tab_id"], SEARCH_JS)
-        pages_fetched += 1
-        if page_number == 1:
-            first_metadata = {
-                "results_count_meta": page.get("results_count_meta"),
-                "advanced_search_fields": page.get("advanced_search_fields"),
-                "sponsored_count_page_1": page.get("sponsored_count", 0),
+    with _connect(args.transport) as tab:
+        for page_number in range(1, args.pages + 1):
+            params: dict[str, Any] = {
+                "query": args.query,
+                "dateRange": args.date_range,
+                "products": ",".join(products),
+                "sort": sort,
             }
-        page_results = page.get("results", [])
-        last_page_full = len(page_results) >= 20
-        timestamps = [
-            parsed
-            for parsed in (_parse_timestamp(item.get("timestamp")) for item in page_results)
-            if parsed
-        ]
-        for item in page_results:
-            canonical = _clean_url(item["url"])
-            if not canonical or canonical in seen_urls:
-                continue
-            timestamp = _parse_timestamp(item.get("timestamp"))
-            if start and (timestamp is None or timestamp < start):
-                continue
-            if end and (timestamp is None or timestamp >= end):
-                continue
-            item["url"] = canonical
-            seen_urls.add(canonical)
-            all_results.append(item)
-            if len(all_results) >= args.max_results:
+            if page_number > 1:
+                params["page"] = page_number
+            url = "https://www.wsj.com/search?" + urlencode(params)
+            tab.navigate(url)
+            _require_login(tab)
+            page = _execute_json(tab, SEARCH_JS)
+            pages_fetched += 1
+            if page_number == 1:
+                first_metadata = {
+                    "results_count_meta": page.get("results_count_meta"),
+                    "advanced_search_fields": page.get("advanced_search_fields"),
+                    "sponsored_count_page_1": page.get("sponsored_count", 0),
+                }
+            page_results = page.get("results", [])
+            last_page_full = len(page_results) >= 20
+            timestamps = [
+                parsed
+                for parsed in (_parse_timestamp(item.get("timestamp")) for item in page_results)
+                if parsed
+            ]
+            for item in page_results:
+                canonical = _clean_url(item["url"])
+                if not canonical or canonical in seen_urls:
+                    continue
+                timestamp = _parse_timestamp(item.get("timestamp"))
+                if start and (timestamp is None or timestamp < start):
+                    continue
+                if end and (timestamp is None or timestamp >= end):
+                    continue
+                item["url"] = canonical
+                seen_urls.add(canonical)
+                all_results.append(item)
+                if len(all_results) >= args.max_results:
+                    break
+            if len(all_results) >= args.max_results or len(page_results) < 20:
                 break
-        if len(all_results) >= args.max_results or len(page_results) < 20:
-            break
-        if timestamps and sort == "desc" and start and min(timestamps) < start:
-            stopped_at_boundary = True
-            break
-        if timestamps and sort == "asc" and end and max(timestamps) >= end:
-            stopped_at_boundary = True
-            break
+            if timestamps and sort == "desc" and start and min(timestamps) < start:
+                stopped_at_boundary = True
+                break
+            if timestamps and sort == "asc" and end and max(timestamps) >= end:
+                stopped_at_boundary = True
+                break
 
     truncated = (
         len(all_results) >= args.max_results
@@ -717,6 +1088,7 @@ def command_search(args: argparse.Namespace) -> None:
         "truncated": truncated,
         "results": all_results,
         "profile_email": PROFILE_EMAIL,
+        "transport": tab.transport,
         **first_metadata,
     }
     if truncated:
@@ -824,10 +1196,10 @@ def command_article(args: argparse.Namespace) -> None:
     hostname = urlsplit(args.url).hostname
     if hostname not in {"wsj.com", "www.wsj.com"}:
         raise WsjError("Article URL must be on wsj.com.", EXIT_USAGE)
-    target = _target()
-    _navigate(target, args.url)
-    _require_login(target)
-    article = _execute_json(target["window_id"], target["tab_id"], ARTICLE_JS)
+    with _connect(args.transport) as tab:
+        tab.navigate(args.url)
+        _require_login(tab)
+        article = _execute_json(tab, ARTICLE_JS)
     blocks = article.get("blocks", [])
     if args.metadata_only:
         article.pop("blocks", None)
@@ -843,12 +1215,19 @@ def command_article(args: argparse.Namespace) -> None:
             used += size
         article["blocks"] = kept
     article["profile_email"] = PROFILE_EMAIL
+    article["transport"] = tab.transport
     _print_json(article)
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Research WSJ through the authenticated Chrome profile named by CHROME_PROFILE_EMAIL."
+    )
+    parser.add_argument(
+        "--transport",
+        choices=["auto", CLAUDE_IN_CHROME, APPLESCRIPT],
+        default="auto",
+        help="auto (default): Claude in Chrome, and AppleScript only when it does not connect after one retry.",
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
 

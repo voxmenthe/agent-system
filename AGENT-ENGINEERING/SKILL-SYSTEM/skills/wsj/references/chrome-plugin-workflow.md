@@ -1,7 +1,7 @@
 # WSJ Chrome Plugin Workflow
 
-This is the second transport: the host's own Chrome plugin. Use it only when
-Claude in Chrome tools are absent (see `SKILL.md`). Use this workflow after
+This is the third transport: the host's own Chrome plugin. Use it only when
+neither the Claude in Chrome tools nor the helper script works (see `SKILL.md`). Use this workflow after
 selecting Chrome and reading the complete `chrome:control-chrome` browser
 documentation. Reuse that browser binding for the whole task. Do not hard-code
 a plugin cache path in this skill.
@@ -117,9 +117,9 @@ surface is genuinely lazy-loaded or when visual context is part of the task.
 
 ## 4. Recovery
 
-- **Chrome plugin unavailable:** use the AppleScript fallback transport in
-  `SKILL.md` and [applescript-fallback.md](applescript-fallback.md). Do not
-  replace authenticated WSJ with a generic browser or web search.
+- **Chrome plugin unavailable:** it is the last transport. Tell the user which
+  transports failed and why. Do not replace authenticated WSJ with a generic
+  browser or web search.
 - **Extension interruption or disconnection:** follow the Chrome plugin's
   troubleshooting guidance, then reacquire a tab from the existing browser
   binding if the binding remains connected.
@@ -129,8 +129,8 @@ surface is genuinely lazy-loaded or when visual context is part of the task.
   `props.pageProps` keys without returning their values wholesale, and compare
   one homepage, one latest/search page, and one standard article before
   changing field mappings.
-- **Fallback exit `12`:** treat it as an AppleScript target/navigation failure,
-  not as evidence that the Chrome session lacks access.
+- **Helper exit `12`:** treat it as a browser-reach or navigation failure, not
+  as evidence that the Chrome session lacks access.
 - **Helper diagnostics:** see the diagnostics note in
   [applescript-fallback.md](applescript-fallback.md). Do not import Python
   modules from the live managed projection.

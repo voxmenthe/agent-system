@@ -7,8 +7,8 @@ as more stable than generated CSS classes.
 ## Authentication
 
 - Intended Chrome account: `$CHROME_PROFILE_EMAIL`.
-- Read through the transport `SKILL.md` selects. With Claude in Chrome, use the
-  tab in your own group; with the host Chrome plugin, claim the exact WSJ tab
+- Read through the transport `SKILL.md` selects. With Claude in Chrome, use your
+  own tab in the group; with the host Chrome plugin, claim the exact WSJ tab
   returned by `chrome.user.openTabs()`.
 - Verify the subscriber state in the page you are reading. Do not inspect Chrome's
   profile files, cookies, local storage, passwords, or credential stores.
@@ -24,20 +24,19 @@ as more stable than generated CSS classes.
 
 Never emit entitlement contents. Never inspect cookies or credential stores.
 
-### Legacy helper failure meanings
+### Helper script failure meanings
 
-The bundled Python helper remains a compatibility path for hosts with neither
-Claude in Chrome tools nor a Chrome plugin. Its state is stored under
-`~/.codex/state/wsj-research/browser.json`.
+The bundled helper script is the second transport (see
+[applescript-fallback.md](applescript-fallback.md)). Its state is stored under
+`~/.codex/state/wsj-research/`.
 
 - Exit `10` is an authenticated-session failure. Helpers predating the
   sparse-header fix false-positive on older `/articles/` pages that render no
   account button; confirm with `status` on the homepage before treating it as
   a logout.
 - Exit `11` means JavaScript from Apple Events is disabled.
-- Exit `12` is a browser-target transport failure, not an authentication result.
-  If a visible WSJ window opened, AppleScript may still have attached to a
-  different same-bundle or headless Chrome process; no article retrieval occurred.
+- Exit `12` is a browser-reach or navigation failure, not an authentication
+  result; no article retrieval occurred.
 
 ## Homepage
 
