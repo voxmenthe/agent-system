@@ -135,6 +135,40 @@ request --> result
         self.assertTrue(any("broken local link" in error for error in errors))
         self.assertTrue(any("starts at line 99" in error for error in errors))
 
+    def test_line_ranges_must_end_after_they_start_and_inside_the_file(self) -> None:
+        self.source.write_text("".join(f"line {number}\n" for number in range(1, 31)))
+        cases = (
+            ("[worker.py:2-30](worker.py#L2-L30)", None),
+            ("[`worker.py:4-6`](worker.py#L4)", None),
+            ("[worker.py:5](worker.py#L5-L5)", None),
+            ("[worker.py:10-9999](worker.py#L10-L9999)", "ends at line 9999"),
+            ("[worker.py:20-10](worker.py#L20-L10)", "ends before it starts"),
+            ("[`worker.py:5-31`](worker.py#L5)", "ends at line 31"),
+            ("[`worker.py:12-8`](worker.py#L12)", "ends before it starts"),
+        )
+        for link, expected in cases:
+            with self.subTest(link=link):
+                artifact = self.write_artifact(
+                    "worker-explanation-20260823.md",
+                    f"""# Explanation
+
+```text
+request --> result
+```
+
+{link}
+""",
+                )
+
+                errors, _, links = check_output.check_artifact(artifact)
+
+                self.assertEqual(1, links)
+                if expected is None:
+                    self.assertEqual([], errors)
+                else:
+                    self.assertEqual(1, len(errors), errors)
+                    self.assertIn(expected, errors[0])
+
 
 if __name__ == "__main__":
     unittest.main()

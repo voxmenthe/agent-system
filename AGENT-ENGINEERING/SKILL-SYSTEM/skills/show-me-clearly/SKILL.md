@@ -28,7 +28,8 @@ revision, comparison side, or plan boundary cannot be resolved, stop and ask
 for that missing fact.
 
 Always save the explanation as a new Markdown file with a descriptive name and
-`YYYYMMDD` suffix. Return a link to it.
+`YYYYMMDD` suffix, in `PLANS/EXPLANATIONS/` of the subject repository unless
+the user names a folder. Return a link to it.
 
 ## Write for this reader
 
@@ -45,6 +46,14 @@ processes, and failure boundaries when they matter. Define local jargon once,
 and ground abstractions in one concrete example. Plain language should expose
 the real mechanism with its precision intact.
 
+Keep this skill's machinery and framing out of the document. Headings and
+prose never name its working tools or stages ("claim ledger", "evidence
+ledger", "reading spine", "orientation map"), narrate the document ("in the
+zoom below we inspect…"), or print pacing labels ("the one idea to hold onto",
+"the key insight", "at its core"). Title the orientation section for the
+subject, such as "Where one upload goes". The spine's fixed headings and the
+receipt label are the only exceptions.
+
 ### Write in short lines
 
 One idea per sentence. Most sentences run 5–15 words; split a sentence that
@@ -56,6 +65,12 @@ delete the ones that only sound careful. Crisping means splitting sentences,
 never removing precision — byte limits, digests, lock ordering, and failure
 boundaries stay in the text. A revision that reads simpler but says less is
 wrong.
+
+Call each thing by its real name: the code identifier or the user's own words.
+Do not coin labels like "the switch-back note". Write "it", "this", or "that"
+only when the referent sits in the same or the previous sentence. Start each
+bullet with the word that sets it apart (a state, a verdict, a function name),
+not an opener every bullet shares; a skimming reader sees the first two words.
 
 When goals compete, use this order:
 
@@ -136,7 +151,9 @@ Keep a private claim ledger while working:
 claim | source side or revision | exact anchor | observed/inferred/proposed/conditional/unmeasured
 ```
 
-Do not print this ledger. It is a correctness aid, not the reader's explanation.
+Every node and edge you plan to draw is a claim too: record the call, import,
+ownership, or transition that backs it. Do not print this ledger. It is a
+correctness aid, not the reader's explanation.
 
 ### 3. Give the answer first
 
@@ -165,6 +182,9 @@ Match the visual grammar to the content, not to habit:
 | Ownership, registration, containment | shallow file or module tree |
 | UI structure | component tree with state hooks shown |
 | State machine, commit/failure boundary | connector flow map (`\|`, `v`, `` `-- ``) |
+| Why two inputs reach different outcomes | paired policy-evaluation trace |
+| One subject's phases, retries, and terminal outcomes | lifecycle phase rail |
+| Defenses and the risk that still gets through | compensating-layers chain |
 
 When a verified TLA+ model and its `view.mjs` cover a state machine, cite the
 `statechart` skill's numbered path and the check rather than redrawing it; a
@@ -177,29 +197,15 @@ example of any grammar in this table, see
 [`references/visual-examples.md`](references/visual-examples.md).
 
 Use a renderer-independent ASCII chart or ASCII table. Prefer a color-assisted
-raw HTML `<pre>` block for saved Markdown. Pair every color with a word label
-so the visual still works when styles are stripped. Use the literal `■` glyph
-for every colored node and put a subject-specific role beside it inside
-`<strong>`:
+raw HTML `<pre>` block for saved Markdown: the literal `■` glyph on every
+colored node, a subject-specific role inside `<strong>` beside it, and at most
+four roles from the fixed palette. The same reference holds the markup
+template and palette. Bracketed words like `[AMBER]` are ordinary text, not a
+color swatch. If raw HTML is unsuitable, use the same `■ ROLE` labels in a
+fenced `text` block.
 
-```html
-<pre>
-<span style="color:#0969da"><strong>■ CHECK</strong></span> validate the old and new state
-</pre>
-```
-
-Bracketed words like `[AMBER]` are ordinary text, not a color swatch. Choose at
-most four roles from this palette and use it consistently:
-
-| Color | Hex | Roles |
-|---|---|---|
-| blue | `#0969da` | entry, control, calls, checks |
-| amber | `#9a6700` | state, ownership, waiting, retained data |
-| green | `#1a7f37` | results, visible state, successful commit |
-| red | `#cf222e` | failure, refusal, unsafe state, stop |
-
-If raw HTML is unsuitable, use the same `■ ROLE` labels in a fenced `text`
-block. Color must never be the only carrier of meaning. Every grammar obeys
+Color must never be the only carrier of meaning: pair every color with a word
+label so the visual still works when styles are stripped. Every grammar obeys
 these rules; a colored `■ ROLE` node works inside a tree, beside the node it
 names.
 
@@ -278,12 +284,16 @@ three precise source links. In renderers that support it, prefer:
 ```
 
 Links must be repository-relative, display the complete cited range, and use
-`#L<start>` for navigation. Resolve every link from the artifact directory, and
-link non-contiguous ranges separately.
+`#L<start>` or `#L<start>-L<end>` for navigation. Resolve every link from the
+artifact directory, and link non-contiguous ranges separately.
 
 Observed source-backed claims need no status badge. Label `inferred`,
 `proposed`, `conditional`, or `unmeasured` where the reader first meets the
 claim. Do not hide uncertainty inside a collapsed receipt.
+
+For a number (a size, count, timing, or cost), say how you know it: **measured**
+(read from a run, log, or file), **derived** (computed from measured values or
+code constants; show the arithmetic once), or **inferred** (your judgment).
 
 Do not end with a dense evidence table that repeats the document. If a compact
 source map would materially help navigation, use at most six grouped links and
@@ -311,15 +321,20 @@ Read the saved artifact once as the target reader and check:
 - Important uncertainty appears in the prose.
 - Source receipts are local, precise, clickable, and not a second explanation.
 - Every cited line range covers the code it names — spot-check against the
-  actual file; the checker only verifies that start lines resolve.
+  actual file; the checker verifies that each range exists, not what it covers.
+- Diagram nodes and edges are claims too: every drawn call, import, ownership,
+  or transition matches source, or the visual says it is illustrative.
+- No skill machinery or framing label appears in a heading or in prose.
 - The final sentence is accurate enough to repeat.
 
-Then run the bundled checker from this skill directory:
+Then run the bundled checker:
 
 ```bash
-python3 scripts/check_output.py /absolute/path/to/explanation-YYYYMMDD.md
+python3 <skill-directory>/scripts/check_output.py /absolute/path/to/explanation-YYYYMMDD.md
 ```
 
-The checker verifies mechanical visual bounds, the dated filename, and local
-source-link resolution. It cannot judge whether the explanation is clear or
-technically correct; perform the reader check yourself.
+The checker verifies mechanical visual bounds, the dated filename, local
+source-link resolution, and that every cited range (a `#L<start>-L<end>` anchor
+or `file:<start>-<end>` link text) does not end before it starts and ends inside
+the file. It cannot judge whether the explanation is clear or technically
+correct; perform the reader check yourself.

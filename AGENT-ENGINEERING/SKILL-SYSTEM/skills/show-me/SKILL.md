@@ -44,7 +44,7 @@ src/
 └── transport/      # sends API requests
 ```
 
-- Show component interaction, control flow, or data flow with Mermaid:
+- Show component interaction, control flow, or data flow with Mermaid. Use `flowchart TD` for dependencies or architecture and `sequenceDiagram` only for message order over time; label nodes with real identifiers and arrows with verbs (`polls 30s`, `rejects 403`):
 
 ```mermaid
 sequenceDiagram
@@ -117,10 +117,10 @@ function expandSkill(command: string): string {
 }
 ```
 
-- For a visual UI, layout, state comparison, or concept too dense for Mermaid, write one focused HTML file — a diagram, an infographic, or a short slide deck, whichever fits the point. Match the product's colors, type, spacing, and components; use real labels and data; support desktop and mobile. Then open it for the user:
+- For a visual UI, layout, state comparison, or concept too dense for Mermaid, write one focused HTML file — a diagram, an infographic, or a short slide deck, whichever fits the point. Save it to `PLANS/EXPLANATIONS/YYMMDD-HHMM-show-me-<slug>.html` unless told otherwise. Keep it offline (no CDN scripts or remote fonts), within 9 nodes and 12 edges, with a word beside every color and no glow. Match the product's colors, type, spacing, and components; use real labels and data; support desktop and mobile. Then open it for the user:
 
 ```
-Bash(open path/to/show-me-{description}.html)
+Bash(open PLANS/EXPLANATIONS/<file>.html)
 ```
 
 ### guidance

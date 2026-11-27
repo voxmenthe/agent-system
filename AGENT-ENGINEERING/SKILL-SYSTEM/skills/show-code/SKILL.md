@@ -34,14 +34,18 @@ mental model. These are complementary lenses, not four reports to concatenate.
 
 Explain the inspected code; do not implement fixes, settle architecture, or
 turn review questions into a full approval verdict. Separately authorized
-implementation or review retains its own scope.
+implementation or review retains its own scope. Never copy a credential,
+token, signing secret, private email address, or `.env` value into the
+walkthrough; write `<REDACTED>` in its place.
 
 ## Build one connected explanation
 
 Start from [the walkthrough template](assets/walkthrough.md). Read
 [the explanation patterns](references/explanation-patterns.md) when composing
-the code walkthrough; they show how the four lenses reinforce one another.
-Adapt headings to the subject and remove sections that add no understanding.
+the code walkthrough; they show how the four lenses reinforce one another, and
+they hold the fold rubric, diagram selector, state-machine ladder, UI coverage,
+and redaction rules summarized below. Adapt headings to the subject and remove
+sections that add no understanding.
 
 ### Answer and orient
 
@@ -56,6 +60,28 @@ For a diagram, favor roughly seven elements and sixteen lines; split at a real
 boundary if labels or connectors become hard to read. These are diagram
 readability guides, not source-code line limits. Meaning must survive without
 color. Mermaid is optional only when requested and must be rendered and checked.
+Pick the diagram by what it must show: every path or one message's trace,
+between components or inside one. A sequence diagram never shows static
+structure.
+
+For a state machine, use the strongest evidence available: the `statechart`
+skill's chart and check when a verified TLA+ model and its `view.mjs` cover it;
+a breadth-first walk of the real code for a pure reducer with at most about
+2,000 states; otherwise a sketch labeled illustrative that names what it omits.
+
+### Fold a multi-file diff by attention
+
+When a diff touches more than a few files, plan coverage before writing:
+
+- **Group** files by concern, tests beside their code, ordered from the
+  caller-facing entry point down; rate each group **Read closely**, **Read
+  through**, or **Skim** to set its depth.
+- **Fold** every excerpt in `<details>` by default. Open one only for
+  `SUBTLE`, `HIDDEN EFFECT`, or `CORE` code, or `SMALL` code in a Read-closely
+  group. Being new is not a reason; delegation facades, generated files, and
+  whole test files for code changed elsewhere stay folded.
+- **Own** each changed file in one section; others give one line and a link
+  back. Count skipped mechanical files in one folded line.
 
 ### Teach the important code in context
 
@@ -76,6 +102,9 @@ wrap or scroll in its own panel without being squeezed into an ASCII diagram.
 Trim irrelevant lines, but mark every elision and label simplified pseudocode.
 Distinguish **real diff subset**, **new-file excerpt**, and **existing context**.
 Never manufacture removed lines for a new file or call edited code verbatim.
+When the change alters UI, cover four surfaces: the entry affordance, the
+surface it opens, the resulting saved, empty, or error states, and role or
+permission variants.
 
 ### Carry the instance and contracts through the explanation
 
@@ -132,6 +161,7 @@ The optional helper script requires Python 3 and Pandoc already on the host:
 
 ```bash
 python3 <skill-directory>/scripts/render.py <artifact-YYYYMMDD.md>
+python3 ~/.agents/skills/create-verification-skill/scripts/html_preflight.py <artifact-YYYYMMDD.html>
 ```
 
 It creates sibling HTML with embedded CSS, syntax-highlighted code, a contents
@@ -141,10 +171,22 @@ only to regenerate your own HTML. If Pandoc is unavailable, return the complete
 Markdown and state that HTML was not rendered; do not install tooling just to
 explain code. Keep authored HTML free of remote assets and required JavaScript.
 
+Run the preflight on every rendered HTML file; it writes nothing. Exit 0 means
+no defect in what it checked. Exit 1 prints a `DEFECT` line per problem (a
+cut-off document, replacement characters, unbalanced tags such as an unclosed
+`<details>`, SVG shapes past their viewBox): fix the Markdown, re-render with
+`--replace`, and rerun. Exit 2 means the file was unreadable. What it lists as
+not checked still needs a browser look.
+
 Read the result as the target reader. Check code excerpts against their source
 side, trace continuity, units and absent-value handling, and local links/ranges.
-Remove repeated facts and unexplained identifiers. For HTML, inspect the final
-desktop and narrow layout in an available browser; fix clipped explanations
-and page overflow. Distinguish rendering checks from tests of the subject code.
+Diagram nodes and edges are claims too: check every drawn call, import, data
+handoff, or transition against the source side it describes, and remove or label
+as illustrative anything the code does not back. For a multi-file diff, confirm
+each changed file appears exactly once, in its owning section or the mechanical
+line. Remove repeated facts and unexplained identifiers. For HTML, inspect the
+final desktop and narrow layout in an available browser; fix clipped
+explanations and page overflow. Distinguish rendering checks from tests of the
+subject code.
 Return links to the artifact(s), what they explain, and any material evidence
 or rendering limitation.

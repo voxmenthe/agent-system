@@ -17,8 +17,9 @@ DATED_NAME = re.compile(r".+-\d{8}\.md$")
 FENCE = re.compile(r"^```\s*([A-Za-z0-9_-]*)\s*$")
 HEADING = re.compile(r"^#{1,6}\s+(.+?)\s*$")
 HTML_TAG = re.compile(r"<[^>]+>")
-LINK = re.compile(r"\[[^]]*\]\(([^)]+)\)")
-LINE_FRAGMENT = re.compile(r"^(.*)#L([1-9][0-9]*)$")
+LINK = re.compile(r"\[([^]]*)\]\(([^)]+)\)")
+LINE_FRAGMENT = re.compile(r"^(.*)#L([1-9][0-9]*)(?:-L([1-9][0-9]*))?$")
+TEXT_RANGE = re.compile(r"[^\s:`]+:([1-9][0-9]*)-([1-9][0-9]*)(?![0-9])")
 
 
 @dataclass(frozen=True)
@@ -137,11 +138,23 @@ def normalized_link_target(raw: str) -> str:
     return unquote(target)
 
 
+def range_errors(target: str, start: int, end: int, line_count: int) -> list[str]:
+    """Check one cited start-end range against the target file's line count."""
+    if end < start:
+        return [f"source range {start}-{end} in link to {target} ends before it starts"]
+    if end > line_count:
+        return [
+            f"source range {start}-{end} in link to {target} ends at line {end}, "
+            f"but the file has {line_count} lines"
+        ]
+    return []
+
+
 def check_links(artifact: Path, text: str) -> tuple[list[str], int]:
     errors: list[str] = []
     source_links = 0
     for match in LINK.finditer(text):
-        target = normalized_link_target(match.group(1))
+        target = normalized_link_target(match.group(2))
         if target.startswith(("http://", "https://", "mailto:", "#")):
             continue
         fragment = LINE_FRAGMENT.match(target)
@@ -150,16 +163,26 @@ def check_links(artifact: Path, text: str) -> tuple[list[str], int]:
         if not target_path.is_file():
             errors.append(f"broken local link: {target}")
             continue
+        ranges = {
+            (int(found.group(1)), int(found.group(2)))
+            for found in TEXT_RANGE.finditer(match.group(1))
+        }
+        if fragment and fragment.group(3):
+            ranges.add((int(fragment.group(2)), int(fragment.group(3))))
+        if not fragment and not ranges:
+            continue
+        with target_path.open("r", encoding="utf-8", errors="replace") as handle:
+            line_count = sum(1 for _ in handle)
         if fragment:
             source_links += 1
             start_line = int(fragment.group(2))
-            with target_path.open("r", encoding="utf-8", errors="replace") as handle:
-                line_count = sum(1 for _ in handle)
             if start_line > line_count:
                 errors.append(
                     f"source link starts at line {start_line}, but "
                     f"{target_path} has {line_count} lines"
                 )
+        for start, end in sorted(ranges):
+            errors.extend(range_errors(target, start, end, line_count))
     if source_links == 0:
         errors.append("no repository-relative source link with a #L line anchor found")
     return errors, source_links

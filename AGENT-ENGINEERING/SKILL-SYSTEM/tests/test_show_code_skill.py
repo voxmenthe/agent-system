@@ -43,7 +43,8 @@ class ShowCodePackageTests(unittest.TestCase):
         self.assertEqual("skills/show-code", registry["show-code"]["source"])
         self.assertEqual(["~/.agents/skills/show-code"], registry["show-code"]["install_targets"])
         self.assertEqual("local-write", registry["show-code"]["effect_ceiling"])
-        self.assertEqual([], registry["show-code"]["dependencies"])
+        # SKILL.md runs create-verification-skill's html_preflight.py on rendered HTML.
+        self.assertEqual(["create-verification-skill"], registry["show-code"]["dependencies"])
         for name in ("show-me-clearly", "explain-code"):
             self.assertNotEqual(registry[name]["source"], registry["show-code"]["source"])
         for asset in ("walkthrough.md", "page.html", "show-code.css"):

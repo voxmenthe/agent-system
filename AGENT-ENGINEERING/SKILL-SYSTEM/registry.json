@@ -1024,7 +1024,9 @@
       "source": "skills/scientific-figure-making"
     },
     "show-code": {
-      "dependencies": [],
+      "dependencies": [
+        "create-verification-skill"
+      ],
       "effect_ceiling": "local-write",
       "evaluation_profile": "code-context-guided-trace-contract-questions",
       "install_targets": [
@@ -1111,7 +1113,7 @@
       "ownership": "custom",
       "provenance": {
         "license": "MIT",
-        "local_modifications": "Vendored from REFERENCE-REPOS/humanlayer-skills/plugins/show-me/skills/show-me/SKILL.md at revision 3c2629142c5d437428269b1b722b08c0b87f574d. Configured as explicit user-invokable only across supported hosts: added disable-model-invocation: true to frontmatter, explicit trigger contract in description, and allow_implicit_invocation: false in agents/openai.yaml.",
+        "local_modifications": "Vendored from REFERENCE-REPOS/humanlayer-skills/plugins/show-me/skills/show-me/SKILL.md at revision 3c2629142c5d437428269b1b722b08c0b87f574d. Configured as explicit user-invokable only across supported hosts: added disable-model-invocation: true to frontmatter, explicit trigger contract in description, and allow_implicit_invocation: false in agents/openai.yaml. 2026-11-26 (skill-system upgrade plan W2.3): the Mermaid bullet picks flowchart TD for dependencies or architecture and sequenceDiagram only for message order, with real identifiers and verb-labeled arrows; the HTML escape hatch saves to PLANS/EXPLANATIONS/YYMMDD-HHMM-show-me-<slug>.html and stays offline, within 9 nodes and 12 edges, with a word beside every color.",
         "origin": "https://github.com/humanlayer/skills",
         "revision": "3c2629142c5d437428269b1b722b08c0b87f574d"
       },
