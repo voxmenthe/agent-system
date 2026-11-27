@@ -84,6 +84,30 @@ class BehaviorContractTests(unittest.TestCase):
         self.assertRegex(frame, r"(?i)confirmed intent|settled outcome")
         self.assertRegex(frame, r"(?i)do not replace.*intent|unsettled")
 
+    def test_intent_handles_directional_forks_without_expanding_by_default(
+        self,
+    ) -> None:
+        intent = self.read("intent")
+        self.assertRegex(intent, r"(?i)directional fork")
+        self.assertRegex(
+            intent,
+            r"(?is)inextricably tied to the intent.*macro direction-setter",
+        )
+        self.assertRegex(
+            intent,
+            r"(?is)user-facing.*how humans will actually use.*UI designs",
+        )
+        self.assertRegex(
+            intent,
+            r"(?is)local, reversible, low-impact, and detailed implementation.*choices for later",
+        )
+        self.assertRegex(
+            intent,
+            r"(?is)deeper technical exploration or multi-round design.*option.*default",
+        )
+        self.assertIn("**High-level direction**", intent)
+        self.assertIn("**Open hinges**", intent)
+
     def test_map_is_read_only_and_cites_repository_evidence(self) -> None:
         content = self.read("map-change")
         self.assertRegex(content, r"(?i)read-only")
