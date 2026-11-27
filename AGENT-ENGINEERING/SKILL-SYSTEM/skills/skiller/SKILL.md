@@ -40,6 +40,12 @@ explicit-only.
 `catalog --full` prints every full description (about 25 KB); use it only when
 the brief lines are too thin to shortlist from.
 
+When the work is in a repository, add `--project <repository root>` to each
+`catalog` call. It also reads that repository's `.agents/skills`, lists them
+under `[project]`, and resolves their names. `[shadows global]` marks a project
+skill named like an installed one; `catalog --project DIR NAME` prints both
+descriptions, so say which one a row means.
+
 ## Choose few
 
 - Recommend a skill only where it changes what is done at that step: a
@@ -63,7 +69,7 @@ the brief lines are too thin to shortlist from.
 - **Mode:** an `auto` skill loads itself when the step matches; naming it in the
   plan makes that certain. An `explicit` skill runs only when invoked by name,
   so give the invocation for the user to type at that step: `$name` in Codex,
-  `/name` in Claude Code.
+  `/name` in Claude Code and Antigravity.
 - **Why here:** what it adds at that step, in one line.
 
 Write each row so it can be pasted into the plan step it names. Then, only when

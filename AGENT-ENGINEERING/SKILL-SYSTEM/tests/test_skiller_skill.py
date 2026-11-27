@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+import shutil
 import subprocess
 import tempfile
 import unittest
@@ -86,6 +87,104 @@ class SkillerSkillTests(unittest.TestCase):
         guide = (ROOT / "USER-GUIDE.md").read_text()
         self.assertIn("[`skiller`](skills/skiller/SKILL.md)", guide)
         self.assertIn("| `$skiller` |", guide)
+
+
+def write_skill(root: Path, description: str, *, explicit: bool = False, metadata: str | None = None) -> None:
+    root.mkdir(parents=True)
+    flag = "disable-model-invocation: true\n" if explicit else ""
+    (root / "SKILL.md").write_text(f"---\nname: {root.name}\ndescription: {json.dumps(description)}\n{flag}---\n\n# {root.name}\n")
+    if metadata is not None:
+        (root / "agents").mkdir()
+        (root / "agents/openai.yaml").write_text(metadata)
+
+
+# Five-character words: one ends at index 119, so keeping it whole plus "…" would make 121 characters.
+LONG_SENTENCE = " ".join(["Sweep", *(f"w{index:03d}" for index in range(40))])
+PROJECT_ALPHA = "Project alpha overrides the installed one. Use when testing shadows."
+LOCAL_ONLY = "Only in this project. Use when testing project skills."
+
+
+class CatalogFixtureTests(unittest.TestCase):
+    def setUp(self) -> None:
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        base = Path(temporary.name).resolve()
+        self.installed = base / "installed"
+        self.project = base / "project"
+        self.project_skills = self.project / ".agents" / "skills"
+        script = self.installed / "skiller" / "scripts" / "catalog"
+        script.parent.mkdir(parents=True)
+        shutil.copy2(CATALOG, script)
+        self.catalog = script
+        self.alpha = "Installed alpha. Use when testing."
+        write_skill(self.installed / "alpha", self.alpha,
+                    metadata='interface:\n  display_name: "Alpha"\n  short_description: "Alpha brief from openai yaml"\n')
+        write_skill(self.installed / "beta", f"{LONG_SENTENCE}. Second sentence must not appear.")
+        write_skill(self.installed / "gamma", "Do the gamma thing. Use when gamma.", explicit=True,
+                    metadata='interface:\n  display_name: "Gamma"\n')
+        write_skill(self.project_skills / "alpha", PROJECT_ALPHA, explicit=True)
+        write_skill(self.project_skills / "local-only", LOCAL_ONLY)
+
+    def installed_listing(self) -> list[str]:
+        result = run(script=self.catalog)
+        self.assertEqual(0, result.returncode, result.stderr)
+        return result.stdout.splitlines()
+
+    def test_brief_falls_back_to_the_first_sentence_without_openai_yaml_or_its_short_description(self) -> None:
+        header, alpha, beta, gamma = self.installed_listing()
+        self.assertTrue(header.startswith(f"3 skills in {self.installed} "), header)
+        self.assertEqual("alpha · auto · Alpha brief from openai yaml", alpha)
+        self.assertEqual("gamma · explicit · Do the gamma thing", gamma)
+        prefix = "beta · auto · "
+        self.assertTrue(beta.startswith(prefix), beta)
+        brief = beta.removeprefix(prefix)
+        self.assertLessEqual(len(brief), 120)
+        self.assertGreater(len(brief), 100)
+        self.assertTrue(brief.endswith("…"), brief)
+        kept = brief.removesuffix("…")
+        self.assertTrue(LONG_SENTENCE.startswith(kept), brief)
+        self.assertEqual(" ", LONG_SENTENCE[len(kept)], "truncation must end on a whole word")
+
+    def test_project_lists_its_skills_after_the_installed_ones_and_flags_shadows(self) -> None:
+        result = run("--project", str(self.project), script=self.catalog)
+        self.assertEqual(0, result.returncode, result.stderr)
+        lines = result.stdout.splitlines()
+        installed = self.installed_listing()
+        self.assertEqual(installed, lines[: len(installed)])
+        self.assertEqual(
+            [f"[project] 2 skills in {self.project_skills}",
+             "alpha · explicit · Project alpha overrides the installed one [shadows global]",
+             "local-only · auto · Only in this project"],
+            lines[len(installed):],
+        )
+
+    def test_project_names_resolve_positionally_including_project_skills(self) -> None:
+        result = run("--project", str(self.project), "local-only", "alpha", script=self.catalog)
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertEqual(
+            ["local-only · auto [project]", f"  {LOCAL_ONLY}",
+             "alpha · auto", f"  {self.alpha}",
+             "alpha · explicit [project] [shadows global]", f"  {PROJECT_ALPHA}"],
+            result.stdout.splitlines(),
+        )
+        missing = run("--project", str(self.project), "no-such-skill", script=self.catalog)
+        self.assertEqual(2, missing.returncode)
+        self.assertEqual("", missing.stdout)
+        self.assertIn("no installed skill named no-such-skill", missing.stderr)
+        full = run("--full", "--project", str(self.project), script=self.catalog)
+        self.assertEqual(0, full.returncode, full.stderr)
+        self.assertEqual(
+            [f"[project] 2 skills in {self.project_skills}",
+             "alpha · explicit [shadows global]", f"  {PROJECT_ALPHA}",
+             "local-only · auto", f"  {LOCAL_ONLY}"],
+            full.stdout.splitlines()[6:],
+        )
+
+    def test_project_must_name_an_existing_directory(self) -> None:
+        result = run("--project", str(self.project / "absent"), script=self.catalog)
+        self.assertEqual(2, result.returncode)
+        self.assertEqual("", result.stdout)
+        self.assertIn("is not a directory", result.stderr)
 
 
 if __name__ == "__main__":

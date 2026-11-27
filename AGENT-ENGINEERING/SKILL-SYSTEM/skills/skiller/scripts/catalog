@@ -1,13 +1,16 @@
 #!/usr/bin/env python3
 """List the installed skills, read live from the directory this skill is installed in.
 
-    catalog              one line per skill: name, explicit or auto, brief description
-    catalog NAME...      each named skill's full front-matter description
-    catalog --full       every skill's full front-matter description
+    catalog                    one line per skill: name, explicit or auto, brief description
+    catalog NAME...            each named skill's full front-matter description
+    catalog --full             every skill's full front-matter description
+    catalog --project DIR ...  also read DIR/.agents/skills, in a [project] section
 
-explicit: runs only when invoked by name ($name in Codex, /name in Claude Code), and
-hosts leave it out of the agent's own skill list. auto: the agent may also load it on
-its own when the task matches its description.
+explicit: runs only when invoked by name ($name in Codex, /name in Claude Code and
+Antigravity), and hosts leave it out of the agent's own skill list. auto: the agent may
+also load it on its own when the task matches its description. [shadows global] marks a
+project skill with the same name as an installed one. The brief description is the
+skill's agents/openai.yaml short_description, else the first sentence of its description.
 """
 from __future__ import annotations
 
@@ -19,6 +22,8 @@ from pathlib import Path
 
 SKILLS = Path(__file__).resolve().parents[2]
 SHORT = re.compile(r'^\s+short_description:\s*(".*")\s*$', re.M)
+SENTENCE_END = re.compile(r"(?<=[.!?])\s")
+BRIEF_LIMIT = 120
 
 
 def _value(raw: str) -> str:
@@ -42,12 +47,29 @@ def read_skill(root: Path) -> dict[str, str]:
     return fields
 
 
+def first_sentence(description: str) -> str:
+    sentence = SENTENCE_END.split(description.strip(), maxsplit=1)[0].removesuffix(".")
+    if len(sentence) <= BRIEF_LIMIT:
+        return sentence
+    kept = sentence[: BRIEF_LIMIT - 1]
+    if sentence[len(kept)] != " ":
+        kept = kept.rpartition(" ")[0] or kept  # drop the cut word unless it is the only one
+    return kept.rstrip(" ,;:(") + "…"
+
+
 def read_short(root: Path) -> str:
     path = root / "agents/openai.yaml"
-    match = SHORT.search(path.read_text())
-    if not match:
-        raise ValueError(f"no short_description in {path}")
-    return json.loads(match[1])
+    match = SHORT.search(path.read_text()) if path.is_file() else None
+    return json.loads(match[1]) if match else first_sentence(read_skill(root)["description"])
+
+
+def skill_roots(directory: Path) -> list[Path]:
+    return sorted(path for path in directory.iterdir() if (path / "SKILL.md").is_file())
+
+
+def print_full(root: Path, tags: str) -> None:
+    skill = read_skill(root)
+    print(f"{root.name} · {skill['mode']}{tags}\n  {skill['description']}")
 
 
 def main() -> int:
@@ -56,21 +78,43 @@ def main() -> int:
     )
     parser.add_argument("names", nargs="*", metavar="NAME", help="print these skills' full descriptions")
     parser.add_argument("--full", action="store_true", help="print every skill's full description")
+    parser.add_argument("--project", type=Path, metavar="DIR", help="also read the skills in DIR/.agents/skills")
     args = parser.parse_args()
-    roots = sorted(path for path in SKILLS.iterdir() if (path / "SKILL.md").is_file())
+    installed = skill_roots(SKILLS)
+    searched = [SKILLS]
+    # Each section is a header ("" for the installed one) and its skills, each with the tags printed after it.
+    sections: list[tuple[str, list[tuple[Path, str]]]] = [("", [(root, "") for root in installed])]
+    if args.project is not None:
+        if not args.project.is_dir():
+            raise ValueError(f"--project {args.project} is not a directory")
+        project_skills = args.project.resolve() / ".agents" / "skills"
+        project = skill_roots(project_skills) if project_skills.is_dir() else []
+        names = {root.name for root in installed}
+        tagged = [(root, " [shadows global]" if root.name in names else "") for root in project]
+        sections.append((f"[project] {len(project)} skills in {project_skills}", tagged))
+        searched.append(project_skills)
     if args.names:
-        installed = {root.name: root for root in roots}
-        if missing := [name for name in args.names if name not in installed]:
-            raise ValueError(f"no installed skill named {', '.join(missing)} in {SKILLS}")
-        roots = [installed[name] for name in args.names]
-    if args.names or args.full:
-        for root in roots:
-            skill = read_skill(root)
-            print(f"{root.name} · {skill['mode']}\n  {skill['description']}")
+        found: dict[str, list[tuple[Path, str]]] = {}
+        for header, entries in sections:
+            for root, tags in entries:
+                found.setdefault(root.name, []).append((root, (" [project]" + tags) if header else tags))
+        if missing := [name for name in args.names if name not in found]:
+            where = " or ".join(map(str, searched))
+            raise ValueError(f"no installed skill named {', '.join(missing)} in {where}")
+        for name in args.names:
+            for root, tags in found[name]:
+                print_full(root, tags)
         return 0
-    print(f"{len(roots)} skills in {SKILLS} (name · explicit or auto · brief description)")
-    for root in roots:
-        print(f"{root.name} · {read_skill(root)['mode']} · {read_short(root)}")
+    if not args.full:
+        print(f"{len(installed)} skills in {SKILLS} (name · explicit or auto · brief description)")
+    for header, entries in sections:
+        if header:
+            print(header)
+        for root, tags in entries:
+            if args.full:
+                print_full(root, tags)
+            else:
+                print(f"{root.name} · {read_skill(root)['mode']} · {read_short(root)}{tags}")
     return 0
 
 

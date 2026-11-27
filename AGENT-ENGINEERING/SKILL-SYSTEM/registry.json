@@ -1879,7 +1879,7 @@
         "license": "owner-authored",
         "origin": "owner request, 2026-10-25: an explicit-only skill that feeds the agent a brief description of every skill and asks it to recommend the ones a task should use, mainly during intent, grilling, or plan creation",
         "revision": "2026-10-25-initial",
-        "local_modifications": "scripts/catalog reads the installed skills live (SKILL.md front matter, agents/openai.yaml short_description) from the directory skiller is installed in, so the catalog never drifts from the library: brief lines for all, full descriptions for a shortlist. Explicit-only skills are absent from hosts' own skill lists, which is why the catalog exists. Advice only; it writes nothing."
+        "local_modifications": "scripts/catalog reads the installed skills live (SKILL.md front matter, agents/openai.yaml short_description) from the directory skiller is installed in, so the catalog never drifts from the library: brief lines for all, full descriptions for a shortlist. Explicit-only skills are absent from hosts' own skill lists, which is why the catalog exists. Advice only; it writes nothing. A skill without an openai.yaml short_description gets the first sentence of its description (at most 120 characters) as its brief. --project DIR also reads DIR/.agents/skills under a [project] heading and flags a project skill named like an installed one as [shadows global]."
       },
       "source": "skills/skiller"
     },
