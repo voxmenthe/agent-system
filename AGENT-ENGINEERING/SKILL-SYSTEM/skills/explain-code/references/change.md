@@ -98,6 +98,8 @@ Show the journey before and after with concrete files, commands, inputs, outputs
 
 Include a representative failure path when it explains the value—for example, whether invalid input fails before a build, credential lookup, provider call, durable write, or deployment.
 
+When the change alters a user interface, trace four surfaces, not only the control that opens the feature: the entry affordance, the surface it opens (dialog, popover, sheet, or page), the resulting, empty, and error states, and any role or permission variants. Say which surfaces you could not inspect.
+
 If the intended workflow is incomplete, show the usable partial path and the missing step. Never present a planned command or state as current behavior.
 
 Before writing HTML, draft:
@@ -131,12 +133,13 @@ Delete any fact that does not change the reader's understanding, decision, or ab
 
 ## 4. Use visuals and code only when they help
 
-Choose each visual by the question it answers:
+Read [visual-grammar.md](visual-grammar.md) before drawing; its pattern choice, budgets, and claim check apply to every figure. Choose each visual by the question it answers:
 
 - Use a before-and-after journey as the first substantial visual.
 - Use a milestone map for a staged change.
 - Use a system or data-flow diagram only after the outcome is clear.
 - Use tables for scorecards, authority changes, compatibility, and repeated mappings.
+- Use a before-and-after state diagram when the change alters a lifecycle, status field, reducer, or retry loop, drawn from the strongest proof below.
 
 Keep before-and-after diagrams geometrically comparable. Dim unchanged elements; mark additions, removals, unchanged elements, and future elements with text or shape as well as color. Use realistic commands, data, and artifacts. Connect each changed code group to the journey step it affects.
 
@@ -149,11 +152,36 @@ Explain implementation in proportion to its effect:
 - Start each technical subsection with the behavior it enables or protects.
 - Explain the concept before showing source detail.
 - Cite important claims with repository-relative `path:line` anchors.
-- Copy excerpts exactly; label omissions, shortened excerpts, and pseudocode.
+- Copy excerpts exactly; label omissions, shortened excerpts, and pseudocode. Never copy a credential, token, key, or `.env` value from the diff: replace it with `<REDACTED>` and say so.
 - Connect each excerpt to a journey, behavior, or invariant.
 - Move defensive details to optional depth unless they change the verdict.
 
 Do not paraphrase every changed file. Apply the parent skill's optional-effects rule: animation, shaders, WebGL, and WebGPU are appropriate only when they explain the change better than a stable before/after diagram.
+
+### Group, rate, and fold the changed code
+
+For a multi-file change, organize the implementation section before writing it:
+
+1. **Group by concern.** Keep each test with the code it tests. Order groups from the entry point a user or caller touches down through the layers, never alphabetically or in diff order.
+2. **Rate each group** `Read closely`, `Read through`, or `Skim`, highest attention first. The rating sets prose depth and which convenience excerpts open; it never removes an excerpt.
+3. **Fold excerpts by default** in `<details>`. Open one only when a trigger applies:
+   - `SUBTLE` — edge cases, ordering, off-by-one, error or retry paths, concurrency, or a conditional a summary would hide.
+   - `HIDDEN EFFECT` — the signature hides a mutation, side effect, or surprising return.
+   - `CORE` — the group's primary new algorithm, whose shape the signature does not reveal.
+   - `SMALL` — about ten changed lines or fewer. It opens on `Read closely` and stays folded on `Read through` and `Skim`.
+
+   `SUBTLE`, `HIDDEN EFFECT`, and `CORE` stay open at any rating. "It is all new" is not a trigger: routine wiring, boilerplate, and delegation stay folded however large, with their shape summarized in prose. The trigger names are your decision aid; do not print them as reader-facing labels.
+4. **Never open** a pure-delegation facade (say what it fronts and where the work lives), a generated file (say what generated it), or a whole test file for code changed elsewhere. Open one subtle test at most, unless the test suite itself is the subject.
+5. **Give each changed file or symbol one owner.** The highest-attention group that touches it explains it in full. Any other group gives one line of context and links to the owner's anchor instead of re-explaining the same lines.
+6. **Account for every changed file.** List the files no group explains in one folded line, by kind and count, such as "6 mechanical files folded: lockfile, 3 snapshots, 2 barrel re-exports", so a reader can see nothing was dropped silently.
+
+### Prove state machines before drawing them
+
+When the change alters a state machine, draw the old and new machines from the same proof, and let each caption say which proof backs it:
+
+1. **Checked model** — a verified TLA+ model and its `view.mjs` cover the behavior: use the `statechart` skill's chart and cite the check. When the change also changes the model, check both versions.
+2. **Walked code** — the transitions live in a pure function: walk it breadth-first from its real initial state with a throwaway script, following [the walk procedure](codebase.md#prove-a-state-machine-before-drawing-it). Run the same walk at base and head, reading the base version with `git show <base>:<path>` into the scratch directory rather than checking it out; the difference in reachable states and transitions is the change.
+3. **Illustrative sketch** — otherwise: caption it as not checked against the code, and name the events, timers, retries, or concurrency it leaves out.
 
 ## 5. Test the claims against costs and counterevidence
 
@@ -179,7 +207,7 @@ State whether complexity was **removed**, **concentrated behind a boundary**, **
 - Keep the old/new story, verdict, and surrounding context visible in the primary reading path.
 - Use callouts sparingly for definitions, invariants, edge cases, and “why this matters.” Use native `<details>` for optional depth.
 - Interactive controls are optional. Useful examples include before/after emphasis, trace highlighting, optional detail, and copyable paths.
-- A knowledge check is optional unless requested. When useful, build a bank of six to eight substantive questions using the parent skill's question-and-reveal format, 70% medium / 30% advanced target, and two-question display with **New questions** rotation. Emphasize motivation, practical behavior, tradeoffs, and migration consequences over line-number trivia.
+- A knowledge check is opt-in. Only when the user asks for one, build a bank of six to eight substantive questions by [knowledge-checks.md](knowledge-checks.md). Emphasize motivation, practical behavior, tradeoffs, and migration consequences over line-number trivia.
 
 ## 7. Mode-specific verification and handoff
 
@@ -188,5 +216,7 @@ State whether complexity was **removed**, **concentrated behind a boundary**, **
 3. Search for placeholders, invented identifiers, broken anchors, and inferred intent presented as fact.
 4. Ensure the opening verdict is no stronger than the evidence in the body.
 5. Keep achieved behavior, enabling work, and future work visibly distinct.
-6. Confirm a reader can identify—without reading the code walkthrough—the goal, prior friction, current behavior, remaining gap, principal cost, and present-day verdict.
-7. In the handoff, report the absolute output path and exact comparison explained.
+6. Confirm every changed file has one owning group or appears in the folded coverage line, every open excerpt meets an unfold trigger, and no excerpt carries a secret value.
+7. Confirm a reader can identify—without reading the code walkthrough—the goal, prior friction, current behavior, remaining gap, principal cost, and present-day verdict.
+8. If the page has a knowledge check, run the checks in [knowledge-checks.md](knowledge-checks.md#verify).
+9. In the handoff, report the absolute output path and exact comparison explained.

@@ -487,9 +487,9 @@
       "ownership": "custom",
       "provenance": {
         "license": "owner-authored",
-        "local_modifications": "Owner-approved 2026-08-09 consolidation of explain-codebase, explain-diff, and explain-progress. The codebase and change workflows remain separate references behind one explicit-only entry point; shared artifact guidance now treats modern CSS, motion, shaders, WebGL2, and WebGPU as optional progressive enhancements that must improve understanding and retain accessible static fallbacks. 2026-09-06: added a small linked Mermaid authoring reference distilled against official syntax guidance; standalone Codex Mermaid route archived. 2026-09-15: replaced MCQ and separate Feynman exercises with question-and-reveal understanding checks, no text entry, a 70% medium / 30% advanced mix, and hidden-bank refresh controls.",
+        "local_modifications": "Owner-approved 2026-08-09 consolidation of explain-codebase, explain-diff, and explain-progress. The codebase and change workflows remain separate references behind one explicit-only entry point; shared artifact guidance now treats modern CSS, motion, shaders, WebGL2, and WebGPU as optional progressive enhancements that must improve understanding and retain accessible static fallbacks. 2026-09-06: added a small linked Mermaid authoring reference distilled against official syntax guidance; standalone Codex Mermaid route archived. 2026-09-15: replaced MCQ and separate Feynman exercises with question-and-reveal understanding checks, no text entry, a 70% medium / 30% advanced mix, and hidden-bank refresh controls. 2026-11-26 (skill-system upgrade plan W2.4): knowledge checks moved to references/knowledge-checks.md and made opt-in in both modes; new references/visual-grammar.md (behavioral pattern choice, 9-node/12-arrow/2-accent budgets, build-up, a bounded two-pass 1x browser look); change mode folds excerpts by default with SUBTLE/HIDDEN EFFECT/CORE/SMALL unfold triggers, one owning section per file, UI four-surface coverage and secret redaction; both modes prove state diagrams by a checked model, a code walk, or a labelled sketch; an offline Content-Security-Policy meta tag.",
         "origin": "owner-live-library-consolidation",
-        "revision": "sha256:6e2f500f0b5f0f9af7120753bde519feca873d64dd1a073800799d8c4a8bcf0d",
+        "revision": "sha256:7b4170bf09bf83bb9648a090158880a10fb773ed1cfc972bb8200cfede714eb5",
         "snapshot": "20260731T001252Z"
       },
       "source": "skills/explain-code"
@@ -567,9 +567,9 @@
       "ownership": "custom",
       "provenance": {
         "license": "owner-authored",
-        "local_modifications": "Converted to canonical custom on 2026-08-09 under owner direction. The research workflow remains substantially intact; metadata now makes invocation explicit-only, and artifact guidance treats modern CSS, motion, shaders, WebGL2, and WebGPU as optional progressive enhancements that must improve understanding, remain evidence-bound, and retain accessible static fallbacks. 2026-09-15: replaced MCQ and separate Feynman exercises with question-and-reveal understanding checks, no text entry, a 70% medium / 30% advanced mix, and hidden-bank refresh controls.",
+        "local_modifications": "Converted to canonical custom on 2026-08-09 under owner direction. The research workflow remains substantially intact; metadata now makes invocation explicit-only, and artifact guidance treats modern CSS, motion, shaders, WebGL2, and WebGPU as optional progressive enhancements that must improve understanding, remain evidence-bound, and retain accessible static fallbacks. 2026-09-15: replaced MCQ and separate Feynman exercises with question-and-reveal understanding checks, no text entry, a 70% medium / 30% advanced mix, and hidden-bank refresh controls. 2026-11-26 (skill-system upgrade plan W2.4): scripts/citation_ledger.py checks that the artifact has citation links, that every in-page link resolves, and, with --source, that every quotation is verbatim; knowledge checks moved to references/knowledge-checks.md, mandatory on the tutorial track and opt-in on synthesis; open-and-confirm citations, [unverified] markers, retrieval-gap reporting, primary vs secondary separation, small-sample and conflict-of-interest flags, plain-prose rules, SVG budgets and an offline Content-Security-Policy meta tag.",
         "origin": "owner-live-library",
-        "revision": "sha256:8ebf67d98936020ce000d1894cc6c35b263092ba211e50f761baa2df0063c23f",
+        "revision": "sha256:d5fd8a95d623897f99487fc17d5ff346dc32d8fce3153f5a00e9878ed8629969",
         "snapshot": "20260731T001252Z"
       },
       "source": "skills/explain-research"

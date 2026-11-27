@@ -2,6 +2,8 @@
 
 Use this track to teach the underlying material deeply enough that a learner can explain, apply, and critique it. Treat the inspected sources as the evidence and teaching foundation, not as the page's organizing structure.
 
+Quiz checkpoints are mandatory on this track. Read [knowledge-checks.md](knowledge-checks.md) with this file; every question here uses its question-and-reveal format, rotation rules, and checks.
+
 ## Contents
 
 - [Design the learning path](#design-the-learning-path)
@@ -38,7 +40,7 @@ Define terms at first use. Explain symbols in words. Use source titles only wher
 ## Interleave practice with instruction
 
 - Place a diagnostic near the beginning and a checkpoint after every major learning module. Never defer all questions to the end.
-- Show exactly two questions at each checkpoint, drawn from a per-module bank of at least six. Use the parent skill's question-and-reveal format for all practice, including the diagnostic; do not add separate Feynman prompts or text-entry exercises.
+- Show exactly two questions at each checkpoint, drawn from a per-module bank of at least six. Use the question-and-reveal format in [knowledge-checks.md](knowledge-checks.md) for all practice, including the diagnostic; do not add separate Feynman prompts or text-entry exercises.
 - From the third module onward, mix at least one retrieval or transfer question from an earlier objective into each checkpoint.
 - Invite the learner to articulate a brief answer mentally or aloud, then click **Show answer** for a model answer and expanded explanation of the reasoning, assumptions, and concept to revisit. No answer selection, submission, or grading is involved.
 - Keep practice in the narrative flow. A global mixed-review control may supplement module checkpoints, but it must not become the only place questions appear.
@@ -59,7 +61,7 @@ Cover the learning objectives with materially different reasoning tasks:
 - evidence, method, or limitation interpretation; and
 - concise causal explanation in plain language, with a concrete example or an analogy's limits.
 
-Target **70% medium-level and 30% advanced** questions across the bank, rounding to whole questions, and distribute both levels across modules. Follow the parent skill's difficulty definitions; no separate question-type quota is needed. Variants must change the reasoning demand, scenario, misconception, or transfer context—not merely rename entities or paraphrase the prompt.
+Target **70% medium-level and 30% advanced** questions across the bank, rounding to whole questions, and distribute both levels across modules. Follow the difficulty definitions in [knowledge-checks.md](knowledge-checks.md); no separate question-type quota is needed. Variants must change the reasoning demand, scenario, misconception, or transfer context—not merely rename entities or paraphrase the prompt.
 
 Represent the bank as structured data with fields equivalent to `id`, `module`, `objective`, `difficulty`, `prompt`, `answer`, `explanation`, and `sourceRefs`. All items use the same question-and-reveal interaction; omit choice lists, correct-option keys, response inputs, and grading rubrics. Validate required fields before the artifact is handed off.
 

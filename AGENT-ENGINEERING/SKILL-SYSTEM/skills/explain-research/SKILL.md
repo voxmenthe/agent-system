@@ -11,7 +11,7 @@ Turn the requested source set into a traceable synthesis or a deep tutorial, the
 ## Establish the corpus and evidence
 
 1. State the research question, intended audience, requested documents, and boundaries of the corpus. If the question is implicit, infer a narrow working question and label it.
-2. Acquire and read the actual sources when available. Prefer the original paper, report, specification, dataset documentation, or official artifact over secondary summaries. Do not rely on an abstract for claims that require methods, results, or limitations.
+2. Acquire and read the actual sources when available. Prefer the original paper, report, specification, dataset documentation, or official artifact over secondary summaries. Do not rely on an abstract for claims that require methods, results, or limitations. Open every source you cite and confirm it makes the claim, or uses the term, the way you cite it; cut any citation you cannot confirm.
 3. Build an evidence ledger before drafting. For each source, record:
    - full title, authors or issuing body, date, and stable link or local filename;
    - research question or purpose;
@@ -19,15 +19,17 @@ Turn the requested source set into a traceable synthesis or a deep tutorial, the
    - central findings with page, section, figure, or table anchors;
    - limitations, threats to validity, and important scope conditions.
 4. Normalize terms that differ across documents, but preserve meaningful disagreements. Distinguish clearly among a source's measured result, the authors' interpretation, and your cross-source synthesis.
-5. Calibrate every claim to its evidence. Report sample sizes, uncertainty, effect sizes, baselines, and units when supplied. Never invent missing values, citations, causal conclusions, or consensus.
-6. Note inaccessible, unreadable, or only partially inspected sources. Do not silently substitute a review, blog post, or search snippet for a requested primary document.
+5. Calibrate every claim to its evidence. Report sample sizes, uncertainty, effect sizes, baselines, and units when supplied. Never invent missing values, citations, causal conclusions, or consensus. When a comparison rests on a small sample, say how far one case moves the result (with 43 cases, one case moves a rate by about 2.3 points, so smaller gaps are ties), and flag author, funder, or evaluator conflicts of interest and consequential denominator choices.
+6. Note inaccessible, unreadable, or only partially inspected sources, and report retrieval gaps in the Orientation, such as a paywalled paper, a search that returned nothing after a date, or a section that would not extract. Do not silently substitute a review, blog post, or search snippet for a requested primary document, or silently narrow the corpus to what loaded.
+7. Keep measured results from primary sources apart from secondary commentary, community reports, and press coverage. A forum thread is evidence that people report something, not that it is true.
+8. Give every load-bearing factual claim either a citation link to its bibliography entry or an explicit `[unverified]` marker when it rests on model background knowledge or cannot be confirmed in the corpus. Never blend unsourced knowledge into cited prose. If `[unverified]` claims carry much of the argument, say so in the Orientation.
 
-Quote only when wording itself matters; otherwise paraphrase and cite. Keep quotations short and respect applicable copyright limits.
+Quote only when wording itself matters; otherwise paraphrase and cite. Keep quotations short and respect applicable copyright limits. Mark every quotation with `<q>` or `<blockquote>`, copy it verbatim from the source text, and mark any omission with an ellipsis; the citation check compares each quotation with the sources.
 
 ## Choose the track
 
 1. **Synthesis track** — Use when the user asks for an overview, literature synthesis, evidence comparison, or decision-oriented guide. Follow the synthesis narrative below.
-2. **Tutorial track** — Use when the user asks to learn, be taught, or receive a deep tutorial on the material. Read [references/tutorial-track.md](references/tutorial-track.md) completely before outlining or writing. Teach the concepts and reasoning that the sources support; do not turn the track into a longer paper-by-paper overview.
+2. **Tutorial track** — Use when the user asks to learn, be taught, or receive a deep tutorial on the material. Read [references/tutorial-track.md](references/tutorial-track.md) and [references/knowledge-checks.md](references/knowledge-checks.md) completely before outlining or writing. Teach the concepts and reasoning that the sources support; do not turn the track into a longer paper-by-paper overview.
 3. **Combined track** — Use both only when the user explicitly requests a synthesis and a tutorial in one artifact. Keep the evidence verdict and the instructional sequence distinct, and reuse rather than duplicate explanations.
 
 Default to the synthesis track when the request does not identify a learning goal. Produce one artifact unless the user asks for separate outputs.
@@ -44,21 +46,9 @@ For the synthesis track, scale the depth to the corpus, but normally include the
 6. **Disagreements and uncertainty** — Diagnose whether apparent conflicts come from definitions, methods, populations, time, assumptions, statistical uncertainty, or genuinely different findings.
 7. **Implications and open questions** — Separate source-backed implications from your inference. Identify missing evidence and the next readings or experiments that would reduce uncertainty.
 8. **Guided reading path** — Recommend an efficient order for readers who have 10 minutes, one hour, or time for the full corpus.
-9. **Interspersed knowledge checks** — After every major section, insert a short quiz that displays exactly two questions drawn from a per-section bank of at least six. Use the question-and-reveal format below and provide a **New questions** button at each checkpoint so the reader can rotate through unseen questions without exposing the full pool. Both tracks use these checkpoints; the tutorial track adds spaced retrieval and a substantial question library (see [references/tutorial-track.md](references/tutorial-track.md)).
+9. **Knowledge checks (opt-in)** — Only when the user asks for practice, quizzes, or self-testing, insert a checkpoint after every major section, following [references/knowledge-checks.md](references/knowledge-checks.md). Otherwise spend that depth on the evidence. The tutorial track always uses checkpoints, with spaced retrieval and a substantial question library (see [references/tutorial-track.md](references/tutorial-track.md)).
 
-For a single long document, adapt the corpus map into a structure-and-argument map. For a small source set, combine sections instead of manufacturing breadth. Never omit source traceability or the interspersed knowledge checks.
-
-## Use question-and-reveal knowledge checks
-
-Use this format in both tracks, including diagnostics and inline practice. It replaces multiple-choice and separate Feynman-style exercises.
-
-- Show an open-ended question that the reader can answer briefly in their head or aloud, then a **Show answer** control. Do not offer answer choices, text boxes, textareas, editable response areas, submission, or automatic grading.
-- Test understanding rather than bare recall: ask why a mechanism works, predict a consequence, apply an idea to a new case, diagnose a misconception, or reason about an assumption or evidence limitation. Avoid trivia and definition-only prompts.
-- Target **70% medium-level and 30% advanced** questions across the bank, rounding to whole questions. Medium questions apply or explain a taught concept; advanced questions combine concepts, analyze boundary cases, or transfer reasoning to an unfamiliar scenario. Distribute both levels across sections and preserve the mix over a rotation cycle, not in every two-question display.
-- Reveal a concise source-grounded model answer followed by an expanded explanation of the reasoning, assumptions, boundary conditions, and useful misconception corrections, with evidence-ledger anchors. Keep both answer and explanation hidden until requested; a new question starts collapsed. Do not require a separate teach-back prompt or rubric.
-- Give each question a stable ID and record its objective, difficulty, prompt, model answer, explanation, and source references. Keep the undisplayed bank in escaped structured data, not a visible list, hidden DOM subtree, or print appendix. Escape `<` in embedded JSON and build question content with DOM text APIs, not `innerHTML`.
-- Use a native **New questions** button to replace the current pair with unseen eligible items and reset their answer reveals without reloading the page. Track seen IDs, avoid repeats until the eligible pool is exhausted, announce a new cycle, and show accurate progress.
-- Prefer native `<details><summary>Show answer</summary>…</details>` or an equivalent keyboard-operable disclosure with accessible names and expanded state. Announce rotation and cycle resets through `aria-live` and preserve useful keyboard focus. With JavaScript disabled, the initial two questions at each checkpoint and their working answer disclosures must remain in semantic HTML; only rotation may be unavailable.
+For a single long document, adapt the corpus map into a structure-and-argument map. For a small source set, combine sections instead of manufacturing breadth. Never omit source traceability.
 
 ## Use a research-specific visual language
 
@@ -71,24 +61,35 @@ Use this format in both tracks, including diagnostics and inline practice. It re
   - an uncertainty or applicability map for scope conditions and evidence gaps.
 - Encode numbers only from source data. Preserve units and baselines, label transformations, avoid false precision, and never draw an apparently quantitative chart from qualitative impressions.
 - Make non-comparability visible rather than forcing unlike results onto one scale. Use annotations to explain the reason.
+- Keep each SVG figure to at most 9 primary nodes, 12 arrows, and 2 accented elements; split an overview from its detail beyond that. Build a mechanism with three or more moving parts over two or three figures that each add one part, keeping the same geometry.
+- Treat every drawn edge as a claim: each support, qualify, or challenge arrow in an evidence map must match a ledger entry.
 - Give every figure a title, one-sentence takeaway, legend, source note, and text alternative. Place citations next to the claim or visual they support, not only in a bibliography.
-- Use stable citation chips or footnote markers that link to a numbered bibliography. Cite local documents by filename plus page or section, and web sources with direct stable links. Include access dates when relevant.
+- Use stable citation chips or footnote markers that link to a numbered bibliography: give each entry `id="src-<n>"` and link to it with `href="#src-<n>"`, the form the citation check reads. Cite local documents by filename plus page or section, and web sources with direct stable links. Include access dates when relevant.
 - Present equations with embedded MathML or readable HTML when needed; define every symbol and immediately explain the equation in words. Do not require a CDN-rendered math library.
+
+## Write plain, checkable prose
+
+Write clear, careful expository prose. Lead with the question each section answers, define technical terms on first use, distinguish fact from inference, and use transitions that make the evolving argument explicit.
+
+- **First words:** Start each list item and callout with the words that set it apart, such as **Confirmed:**, **Disputed:**, **Gap:**, or the method's name, never an opener every item shares.
+- **Linked terms:** In the primer and glossary, bold other defined terms inside a definition and say how they relate. When you carry a term across papers or fields, say what carries over and where the analogy breaks.
+- **Real names:** Use the source's own term, dataset name, or identifier, give each concept one name, and avoid "this" or "it" without an obvious referent.
+- **No filler:** Cut sentences that would fit any corpus, stock metaphors such as "substrate" or "flywheel", and framing labels such as "the key insight" or "at its core". State the finding instead.
 
 ## Produce one excellent HTML artifact
 
 - Write one self-contained HTML file with embedded CSS and optional JavaScript and no network-loaded fonts, scripts, styles, images, or shader code. The document must remain useful if JavaScript is disabled; use JavaScript only for progressive enhancement.
+- Place this policy immediately after `<meta charset>`: `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data:; font-src data:;">`. It blocks every network fetch while inline CSS, scripts, and SVG and `data:` images and fonts keep working; links to sources still navigate. If an inlined library needs something it blocks, such as `eval`, a worker, or a remote fetch, ship its rendered output instead of loosening the policy.
 - Save it under `PLANS/EXPLANATIONS/` at the relevant repository or workspace root by default. Create the directory if needed. Prefix the filename with the local timestamp in `YYMMDD-HHMM-` format, followed by a descriptive slug, such as `PLANS/EXPLANATIONS/260721-1430-agent-memory-literature.html`.
 - Use one long, coherent page with semantic section headings and anchored navigation. Do not use tabs for the top-level narrative. Include a compact sticky table of contents on wide screens and a simple collapsible contents control on narrow screens.
 - Give the page a clear title, explanatory deck, corpus/scope note, and reading-time estimate. Keep prose columns near `65–75ch`; let evidence maps, tables, and figures use the wider canvas.
-- Write in clear, careful expository prose. Lead with the question each section answers, define technical terms on first use, distinguish fact from inference, and use transitions that make the evolving argument explicit.
 - Establish a deliberate design system with CSS custom properties, consistent spacing, type scale, border treatment, and semantic colors. Support light and dark color schemes, high contrast, visible keyboard focus, and `prefers-reduced-motion`.
-- Use semantic HTML. Use real `<button>` elements for controls, `aria-expanded` where appropriate, keyboard-operable interactions, and status text that does not rely on color. Make quiz feedback available to assistive technology.
+- Use semantic HTML. Use real `<button>` elements for controls, `aria-expanded` where appropriate, keyboard-operable interactions, and status text that does not rely on color.
 - Draw baseline diagrams with semantic HTML/CSS or inline SVG. Do not use ASCII art. Avoid decorative charts, illegible axis labels, tiny citations, and connector lines that cross text. Put wide comparison tables in labeled scrolling regions on phones.
 - Use `<pre><code>` for quoted structured text or code. Preserve whitespace and provide safe overflow behavior. Escape all source text before inserting it into HTML.
 - Use callouts sparingly for definitions, evidence-quality warnings, contradictions, and scope conditions. Use native `<details>` for per-paper depth or methods notes, while keeping the track's primary explanation visible by default.
 - Add print styles that remove sticky UI and controls, expand essential evidence notes, preserve citations and URLs, and produce a legible PDF or paper copy.
-- Keep interactions purposeful: evidence filtering, source highlighting, optional methods detail, citation navigation, and quiz checkpoints or rotation are useful.
+- Keep interactions purposeful: evidence filtering, source highlighting, optional methods detail, citation navigation, and requested or tutorial quiz checkpoints are useful.
 
 ## Use contemporary visual capabilities selectively
 
@@ -106,9 +107,10 @@ Effects are optional. Add them only when they materially improve understanding o
 Before handing it off:
 
 1. Audit each substantive claim against the evidence ledger. Confirm citations resolve to the claimed page, section, figure, table, or stable source.
-2. Search for missing bibliography entries, ambiguous source labels, accidental causal language, inconsistent units, false precision, placeholders, and unlabeled inference.
-3. Confirm every interactive control works with keyboard input. Check quiz difficulty distribution, source-grounded model answers and expanded explanations, initially collapsed reveals, and a complete refresh cycle without premature repeats or full-bank exposure.
-4. Check desktop, narrow phone, tablet, reduced-motion, light/dark, and print presentations when tooling permits. Exercise the static fallback for every optional modern feature.
-5. Confirm the page makes sense in reading order with styles or JavaScript unavailable.
-6. Run `python3 ~/.agents/skills/create-verification-skill/scripts/html_preflight.py <file>` and fix every `DEFECT` it reports; what it lists as not checked still needs visual inspection.
-7. Open or render the finished file, fix visible defects, and report the absolute output path plus any corpus limitations.
+2. Run `python3 <skill-directory>/scripts/citation_ledger.py <file> --source <source-text> ...`, where `<skill-directory>` holds this file and each `--source` is the text of a quoted source (extract a PDF or web page to a scratch text file first). Fix every `DEFECT`: a page with no `#src-` citation link, an in-page link whose target is missing, a duplicate `id`, or a quotation not found verbatim in any source. Its count of prose blocks with neither a citation nor `[unverified]` is not verified by the check; read those blocks yourself.
+3. Search for missing bibliography entries, ambiguous source labels, accidental causal language, inconsistent units, false precision, placeholders, and unlabeled inference.
+4. Confirm every interactive control works with keyboard input. If the page has knowledge checks, run the checks in [references/knowledge-checks.md](references/knowledge-checks.md).
+5. Check desktop, narrow phone, tablet, reduced-motion, light/dark, and print presentations when tooling permits. Exercise the static fallback for every optional modern feature.
+6. Confirm the page makes sense in reading order with styles or JavaScript unavailable.
+7. Run `python3 ~/.agents/skills/create-verification-skill/scripts/html_preflight.py <file>` and fix every `DEFECT` it reports; what it lists as not checked still needs visual inspection.
+8. Open the finished file in a browser at 1× scale. Confirm the console shows no CSP or script errors, and look for clipped or overlapping text, labels detached from their connectors, connectors crossing boxes, content cut at a figure edge, and text too small to read; inspect tall figures in viewport-sized slices. Fix by restructuring before nudging coordinates, and stop after two fix passes. Report the absolute output path, corpus limitations, the citation check's counts, and any defect left.
