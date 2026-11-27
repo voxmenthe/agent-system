@@ -5,9 +5,11 @@ import os
 import re
 import shutil
 import stat
+import uuid
 from pathlib import Path
 from typing import Any
 
+from .backups import assert_same_filesystem, move_to_backup, restore_backup
 from .model import (
     CollisionError,
     OperationResult,
@@ -177,6 +179,9 @@ def configure_mimo(
     MiMo Desktop discovers skills only from MiMoCode roots and prefers real
     directory copies over symlinks. Each managed copy carries a marker with the
     projected source hash, plus locales/{en-US,zh-CN}.json display metadata.
+    With force, an unmanaged entry (no marker) at an active skill's name is
+    moved, not deleted, to ~/.agents/.skill-system/mimo-backups/<id>/<name>;
+    the result's quarantine_path names that backup root.
     """
     resolved_root = canonical_root.resolve()
     resolved_home = home.resolve()
@@ -205,6 +210,7 @@ def configure_mimo(
             existing_entries[child.name] = child
 
     planned_copies: dict[str, Path] = {}
+    collisions: set[str] = set()
     for name, source in sorted(active_skills.items()):
         destination = mimo_skills / name
         if not _is_safe_managed_tree(source):
@@ -226,8 +232,9 @@ def configure_mimo(
                 raise CollisionError(
                     f"refusing non-directory MiMo skill entry without --force: {entry}"
                 )
-            changes.append(f"replace non-directory entry: {entry}")
+            changes.append(f"back up and replace non-directory entry: {entry}")
             planned_copies[name] = source
+            collisions.add(name)
             continue
 
         marker = _read_marker(entry)
@@ -236,8 +243,9 @@ def configure_mimo(
                 raise CollisionError(
                     f"refusing unmanaged MiMo skill directory without --force: {entry}"
                 )
-            changes.append(f"replace unmanaged directory: {entry}")
+            changes.append(f"back up and replace unmanaged directory: {entry}")
             planned_copies[name] = source
+            collisions.add(name)
             continue
 
         locales_current = all(
@@ -250,6 +258,14 @@ def configure_mimo(
 
         changes.append(f"refresh skill copy {name} -> {destination}")
         planned_copies[name] = source
+
+    backup_root = (
+        resolved_home / ".agents" / ".skill-system" / "mimo-backups" / uuid.uuid4().hex
+    )
+    if apply:
+        # Preflight every backup device before the first write.
+        for name in sorted(collisions):
+            assert_same_filesystem(mimo_skills / name, backup_root)
 
     for name, entry in sorted(existing_entries.items()):
         if name in active_skills:
@@ -275,12 +291,22 @@ def configure_mimo(
 
     mimo_skills.mkdir(parents=True, exist_ok=True)
 
+    backed_up = False
     for name, source in sorted(planned_copies.items()):
         destination = mimo_skills / name
-        _copy_skill_tree(source, destination)
-        display_name, brief = _display_metadata(source, name)
-        _write_locales(destination, display_name, brief)
-        _write_marker(destination, source, content_hash(source))
+        backup: Path | None = None
+        if name in collisions and (destination.exists() or destination.is_symlink()):
+            backup = move_to_backup(destination, backup_root, name)
+            backed_up = True
+        try:
+            _copy_skill_tree(source, destination)
+            display_name, brief = _display_metadata(source, name)
+            _write_locales(destination, display_name, brief)
+            _write_marker(destination, source, content_hash(source))
+        except BaseException:
+            if backup is not None:
+                restore_backup(backup, destination)
+            raise
 
     # Flush directory changes
     descriptor = os.open(mimo_skills, os.O_RDONLY)
@@ -297,4 +323,5 @@ def configure_mimo(
         reason=reason,
         changes=tuple(changes),
         removed=tuple(removed),
+        quarantine_path=backup_root if backed_up else None,
     )

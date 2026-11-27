@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import os
-import shutil
+import uuid
 from pathlib import Path
 from typing import Any
 
+from .backups import assert_same_filesystem, move_to_backup, restore_backup
 from .model import (
     CollisionError,
     OperationResult,
@@ -28,7 +29,12 @@ def configure_claude(
     force: bool = False,
     clean_stale: bool = True,
 ) -> OperationResult:
-    """Project active ~/.agents/skills into ~/.claude/skills and remove stale symlinks."""
+    """Project active ~/.agents/skills into ~/.claude/skills and remove stale symlinks.
+
+    With force, a real directory at an active skill's name is moved, not deleted,
+    to ~/.agents/.skill-system/claude-backups/<id>/<name>; the result's
+    quarantine_path names that backup root.
+    """
     resolved_root = canonical_root.resolve()
     resolved_home = home.resolve()
     agents_skills = (resolved_home / ".agents" / "skills").resolve()
@@ -44,6 +50,7 @@ def configure_claude(
 
     changes: list[str] = []
     removed: list[str] = []
+    collisions: list[Path] = []
 
     # Scan existing ~/.claude/skills if present
     existing_entries: dict[str, Path] = {}
@@ -82,7 +89,10 @@ def configure_claude(
                             f"refusing to replace existing directory with symlink at {child} "
                             "without --force"
                         )
-                    removed.append(f"replace directory with symlink: {child.name}")
+                    removed.append(
+                        f"back up directory and replace with symlink: {child.name}"
+                    )
+                    collisions.append(child)
 
     # Determine required symlinks for active skills
     for name, agent_target in sorted(active_skills.items()):
@@ -117,6 +127,13 @@ def configure_claude(
             removed=tuple(removed),
         )
 
+    backup_root = (
+        resolved_home / ".agents" / ".skill-system" / "claude-backups" / uuid.uuid4().hex
+    )
+    # Preflight every backup device before the first write.
+    for entry in collisions:
+        assert_same_filesystem(entry, backup_root)
+
     # Perform mutations
     claude_skills.mkdir(parents=True, exist_ok=True)
 
@@ -127,16 +144,13 @@ def configure_claude(
             link_path = claude_skills / skill_name
             if link_path.is_symlink():
                 link_path.unlink()
-        elif item.startswith("replace directory with symlink: "):
-            skill_name = item.split(": ", 1)[1]
-            dir_path = claude_skills / skill_name
-            if dir_path.is_dir() and not dir_path.is_symlink():
-                shutil.rmtree(dir_path)
 
-    # Process additions / updates
+    # Process additions / updates; displaced directories are retained.
+    backed_up = False
     for name, agent_target in sorted(active_skills.items()):
         claude_target = claude_skills / name
         expected_rel_target = os.path.relpath(agent_target, claude_skills)
+        backup: Path | None = None
 
         if claude_target.is_symlink():
             current_target = os.readlink(claude_target)
@@ -145,12 +159,17 @@ def configure_claude(
                 continue
             claude_target.unlink()
         elif claude_target.exists():
-            if force and claude_target.is_dir():
-                shutil.rmtree(claude_target)
-            else:
+            if not (force and claude_target.is_dir()):
                 continue
+            backup = move_to_backup(claude_target, backup_root, name)
+            backed_up = True
 
-        claude_target.symlink_to(expected_rel_target)
+        try:
+            claude_target.symlink_to(expected_rel_target)
+        except BaseException:
+            if backup is not None:
+                restore_backup(backup, claude_target)
+            raise
 
     # Flush directory changes
     descriptor = os.open(claude_skills, os.O_RDONLY)
@@ -167,4 +186,5 @@ def configure_claude(
         reason=reason,
         changes=tuple(changes),
         removed=tuple(removed),
+        quarantine_path=backup_root if backed_up else None,
     )

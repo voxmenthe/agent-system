@@ -80,8 +80,10 @@ safely removes dangling or retired symlinks while preserving unmanaged
 Claude-local skills with non-colliding names. A real directory at an active
 shared skill's name is a collision, even when its content matches. Preserve
 and reconcile that directory before replacing it with a symlink.
-`configure-claude --force --apply` deletes colliding directories without a
-journaled preimage; it is not the shared installer's recoverable adoption path.
+`configure-claude --force --apply` moves colliding directories to
+`~/.agents/.skill-system/claude-backups/<id>/<name>` (reported as
+`quarantine_path`) instead of deleting them; it is still not the shared
+installer's journaled adoption path.
 
 ## Making shared skills visible to MiMo Desktop
 
@@ -102,7 +104,9 @@ writes `locales/en-US.json` and `locales/zh-CN.json` from the skill's
 marker with the projected source hash. Unmanaged local MiMo skills with
 non-colliding names are preserved. A real directory at an active shared
 skill's name without the marker is a collision; preserve and reconcile it
-first, or pass `--force` to replace it without a journaled preimage.
+first, or pass `--force` to move it to
+`~/.agents/.skill-system/mimo-backups/<id>/<name>` (reported as
+`quarantine_path`) before copying.
 `sync --apply` reruns this projection after the shared install stage.
 
 Restart MiMo Desktop or start a new conversation after applying so newly

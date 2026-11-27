@@ -6,8 +6,9 @@ import shutil
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
-from skill_system import CollisionError, configure_claude
+from skill_system import CollisionError, SkillSystem, configure_claude
 from skill_system.cli import run
 from tests.helpers import make_system, tree_snapshot, write_json, write_skill
 
@@ -41,6 +42,16 @@ class ClaudeAdapterTests(unittest.TestCase):
     def tearDown(self) -> None:
         self.temporary.cleanup()
 
+    def _unmanaged_alpha(self) -> tuple[Path, dict[str, tuple[str, int, bytes]]]:
+        colliding = self.claude_skills / "alpha"
+        (colliding / "nested").mkdir(parents=True)
+        (colliding / "local.txt").write_bytes(b"drifted \x00\xff sentinel\n")
+        (colliding / "nested" / "notes.md").write_text("keep me")
+        return colliding, tree_snapshot(colliding)
+
+    def _backup_parent(self) -> Path:
+        return (self.home / ".agents" / ".skill-system" / "claude-backups").resolve()
+
     def test_configure_claude_dry_run_and_apply(self) -> None:
         dry_run = configure_claude(self.root, self.home, apply=False)
         self.assertFalse(dry_run.applied)
@@ -51,6 +62,8 @@ class ClaudeAdapterTests(unittest.TestCase):
         applied = configure_claude(self.root, self.home, apply=True)
         self.assertTrue(applied.applied)
         self.assertEqual("configured", applied.reason)
+        self.assertIsNone(applied.quarantine_path)
+        self.assertFalse(self._backup_parent().exists())
         self.assertTrue(self.claude_skills.exists())
 
         # Verify symlinks
@@ -137,10 +150,7 @@ class ClaudeAdapterTests(unittest.TestCase):
             configure_claude(self.root, self.home, apply=True, force=False)
 
     def test_configure_claude_replaces_directory_collision_with_force(self) -> None:
-        self.claude_skills.mkdir(parents=True, exist_ok=True)
-        colliding = self.claude_skills / "alpha"
-        colliding.mkdir(parents=True, exist_ok=True)
-        (colliding / "local.txt").write_text("drifted")
+        colliding, before = self._unmanaged_alpha()
 
         result = configure_claude(self.root, self.home, apply=True, force=True)
         self.assertTrue(result.applied)
@@ -149,6 +159,37 @@ class ClaudeAdapterTests(unittest.TestCase):
             (self.agents_skills / "alpha").resolve(),
             (self.claude_skills / "alpha").resolve(),
         )
+        # The displaced directory is retained byte-identical outside discovery.
+        self.assertIsNotNone(result.quarantine_path)
+        self.assertEqual(self._backup_parent(), result.quarantine_path.parent)
+        self.assertEqual(before, tree_snapshot(result.quarantine_path / "alpha"))
+        self.assertEqual(["alpha"], sorted(p.name for p in result.quarantine_path.iterdir()))
+
+    def test_configure_claude_restores_collision_when_symlink_fails(self) -> None:
+        colliding, before = self._unmanaged_alpha()
+        real_symlink = os.symlink
+
+        def link_then_interrupt(source, link, target_is_directory=False):
+            real_symlink(source, link, target_is_directory)
+            raise KeyboardInterrupt
+
+        with patch("os.symlink", side_effect=link_then_interrupt):
+            with self.assertRaises(KeyboardInterrupt):
+                configure_claude(self.root, self.home, apply=True, force=True)
+
+        self.assertFalse(colliding.is_symlink())
+        self.assertEqual(before, tree_snapshot(colliding))
+        self.assertEqual(["alpha"], sorted(p.name for p in self.claude_skills.iterdir()))
+        leftovers = [p for p in self._backup_parent().rglob("*") if not p.is_dir()]
+        self.assertEqual([], leftovers)
+
+    def test_sync_force_retains_claude_collision(self) -> None:
+        _, before = self._unmanaged_alpha()
+
+        result = SkillSystem(self.root, self.home).sync(apply=True, force=True)
+        self.assertIsNotNone(result.claude)
+        self.assertTrue((self.claude_skills / "alpha").is_symlink())
+        self.assertEqual(before, tree_snapshot(result.claude.quarantine_path / "alpha"))
 
     def test_cli_configure_claude(self) -> None:
         args = [
@@ -164,7 +205,6 @@ class ClaudeAdapterTests(unittest.TestCase):
         self.assertTrue((self.claude_skills / "alpha").is_symlink())
 
     def test_sync_automatically_projects_to_claude(self) -> None:
-        from skill_system import SkillSystem
         system = SkillSystem(self.root, self.home)
         self.assertFalse((self.claude_skills / "alpha").exists())
 

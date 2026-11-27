@@ -1,14 +1,16 @@
 from __future__ import annotations
 
+import errno
 import json
 import shutil
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from skill_system import CollisionError, configure_mimo
 from skill_system.cli import run
-from tests.helpers import make_system
+from tests.helpers import make_system, tree_snapshot
 
 
 class MimoAdapterTests(unittest.TestCase):
@@ -33,6 +35,9 @@ class MimoAdapterTests(unittest.TestCase):
     def tearDown(self) -> None:
         self.temporary.cleanup()
 
+    def _backup_parent(self) -> Path:
+        return (self.home / ".agents" / ".skill-system" / "mimo-backups").resolve()
+
     def test_configure_mimo_dry_run_and_apply(self) -> None:
         dry_run = configure_mimo(self.root, self.home, apply=False)
         self.assertFalse(dry_run.applied)
@@ -43,6 +48,8 @@ class MimoAdapterTests(unittest.TestCase):
         applied = configure_mimo(self.root, self.home, apply=True)
         self.assertTrue(applied.applied)
         self.assertEqual("configured", applied.reason)
+        self.assertIsNone(applied.quarantine_path)
+        self.assertFalse(self._backup_parent().exists())
         self.assertTrue((self.mimo_skills / "alpha" / "SKILL.md").is_file())
         self.assertTrue((self.mimo_skills / "beta" / "SKILL.md").is_file())
         self.assertFalse((self.mimo_skills / "alpha").is_symlink())
@@ -80,6 +87,7 @@ class MimoAdapterTests(unittest.TestCase):
 
         refreshed = configure_mimo(self.root, self.home, apply=True)
         self.assertTrue(refreshed.applied)
+        self.assertIsNone(refreshed.quarantine_path)
         self.assertIn(
             "refresh skill copy alpha -> "
             + str((self.mimo_skills / "alpha").resolve()),
@@ -88,6 +96,16 @@ class MimoAdapterTests(unittest.TestCase):
         self.assertIn(
             "Updated body.",
             (self.mimo_skills / "alpha" / "SKILL.md").read_text(),
+        )
+
+        # Under --force a managed copy (marker present) is still refreshed in place.
+        skill_md.write_text(skill_md.read_text() + "\nForced body.\n")
+        forced = configure_mimo(self.root, self.home, apply=True, force=True)
+        self.assertTrue(forced.applied)
+        self.assertIsNone(forced.quarantine_path)
+        self.assertFalse(self._backup_parent().exists())
+        self.assertIn(
+            "Forced body.", (self.mimo_skills / "alpha" / "SKILL.md").read_text()
         )
 
     def test_configure_mimo_cleans_stale_managed_copies(self) -> None:
@@ -135,13 +153,74 @@ class MimoAdapterTests(unittest.TestCase):
     def test_configure_mimo_replaces_unmanaged_collision_with_force(self) -> None:
         self.mimo_skills.mkdir(parents=True, exist_ok=True)
         colliding = self.mimo_skills / "alpha"
-        colliding.mkdir(parents=True, exist_ok=True)
-        (colliding / "local.txt").write_text("drifted")
+        (colliding / "nested").mkdir(parents=True)
+        (colliding / "local.txt").write_bytes(b"drifted \x00\xff sentinel\n")
+        (colliding / "nested" / "notes.md").write_text("keep me")
+        stray = self.mimo_skills / "beta"
+        stray.write_bytes(b"not a directory\n")
+        before = tree_snapshot(colliding)
 
         result = configure_mimo(self.root, self.home, apply=True, force=True)
         self.assertTrue(result.applied)
         self.assertTrue((colliding / "SKILL.md").is_file())
         self.assertFalse((colliding / "local.txt").exists())
+        self.assertTrue((stray / "SKILL.md").is_file())
+        # Both displaced entries are retained byte-identical outside discovery.
+        self.assertIsNotNone(result.quarantine_path)
+        self.assertEqual(self._backup_parent(), result.quarantine_path.parent)
+        self.assertEqual(before, tree_snapshot(result.quarantine_path / "alpha"))
+        self.assertEqual(
+            b"not a directory\n", (result.quarantine_path / "beta").read_bytes()
+        )
+
+    def test_configure_mimo_restores_collision_when_replacement_fails(self) -> None:
+        colliding = self.mimo_skills / "alpha"
+        real_copyfile = shutil.copyfile
+        copies: list[str] = []
+        mid_replacement: list[bool] = []
+
+        def note_replacement_in_progress() -> None:
+            # Original moved aside and a replacement copy partly written.
+            mid_replacement.append(
+                any(colliding.rglob("*")) and not (colliding / "local.txt").exists()
+            )
+
+        def copy_once_then_fill_disk(source, destination, *args, **kwargs):
+            copies.append(str(source))
+            if len(copies) > 1:
+                note_replacement_in_progress()
+                raise OSError(errno.ENOSPC, "No space left on device")
+            return real_copyfile(source, destination, *args, **kwargs)
+
+        def fail_marker_write(*args, **kwargs):
+            note_replacement_in_progress()
+            raise OSError(errno.ENOSPC, "No space left on device")
+
+        failures = {
+            "mid-copy": patch("shutil.copyfile", side_effect=copy_once_then_fill_disk),
+            "marker-write": patch.object(Path, "write_text", side_effect=fail_marker_write),
+        }
+        for stage, failure in failures.items():
+            with self.subTest(stage=stage):
+                shutil.rmtree(self.mimo_skills, ignore_errors=True)
+                shutil.rmtree(self._backup_parent(), ignore_errors=True)
+                mid_replacement.clear()
+                (colliding / "nested").mkdir(parents=True)
+                (colliding / "local.txt").write_bytes(b"drifted \x00\xff sentinel\n")
+                (colliding / "nested" / "notes.md").write_text("keep me")
+                before = tree_snapshot(self.mimo_skills)
+
+                with failure, self.assertRaises(OSError):
+                    configure_mimo(self.root, self.home, apply=True, force=True)
+
+                self.assertTrue(mid_replacement)
+                self.assertNotIn(False, mid_replacement)
+                # Original restored verbatim; no partial copy left anywhere.
+                self.assertEqual(before, tree_snapshot(self.mimo_skills))
+                leftovers = [
+                    p for p in self._backup_parent().rglob("*") if not p.is_dir()
+                ]
+                self.assertEqual([], leftovers)
 
     def test_cli_configure_mimo(self) -> None:
         args = [
