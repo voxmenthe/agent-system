@@ -1,0 +1,6 @@
+interface:
+  display_name: "Chalk Talk"
+  short_description: "Animated single-idea board lessons in self-contained HTML"
+  default_prompt: "Use $chalk-talk to turn one idea into an animated, self-contained HTML board lesson."
+policy:
+  allow_implicit_invocation: false

@@ -259,6 +259,7 @@ Explicit selection is useful when the desired mode matters:
 - “Use `$illustrate-cn` to design or generate Xiaohei-style Chinese article illustrations.”
 - “Use `$illustrate` for the English Xiaohei illustration workflow.”
 - “Use `$scientific-figure-making` to build a publication-ready matplotlib figure with house style and vector export.”
+- “Use `$chalk-talk` to turn one idea into an animated board lesson I can play, scrub and replay.”
 - “Use `$explain-research` in tutorial track to teach me this inspected paper corpus with interspersed rotating quizzes.”
 - “Use `map-change`; inspect only and show me the real change surface.”
 - “Use `debugging`; diagnose this without implementing a fix.”
@@ -522,6 +523,7 @@ assessment may move them on demand or retire them.
 | [`illustrate-cn`](skills/illustrate-cn/SKILL.md) | Chinese original: shot lists and 16:9 white-background hand-drawn Chinese article illustrations using Xiaohei (小黑). | Explicit-only. Not code explanation, Mermaid, HTML, PPT infographics, or commercial illustration. Example images are style calibration, not composition templates. |
 | [`illustrate`](skills/illustrate/SKILL.md) | English translation of the same Xiaohei workflow, for English-language use or English source articles. | Explicit-only. Same visual IP and anti-copy rules. Labels follow the article language. Do not use it as a second code-visual route beside `show-me-clearly`. |
 | [`scientific-figure-making`](skills/scientific-figure-making/SKILL.md) | Publication-ready matplotlib figures for papers, slides, or reports: bars, trends, heatmaps, radar, concept schematics, and multi-panel layouts with house style and vector export. | Explicit-only. Matplotlib data plots with a publication target only; not interactive dashboards, exploratory plots, or Xiaohei and HTML illustration routes. |
+| [`chalk-talk`](skills/chalk-talk/SKILL.md) | One mechanism taught as an animated board lesson: a single self-contained HTML file with storyboarded beats, a deterministic `render(t)`, play/replay/scrub controls, and a headless-browser check of every beat; MP4 or GIF on request. | Explicit-only. One idea per board; not static diagrams, slide decks, dashboards of real data, or code walkthroughs. |
 
 ## Choosing between easily confused skills
 
@@ -558,6 +560,7 @@ assessment may move them on demand or retire them.
 | Chinese article illustrations in the Xiaohei hand-drawn style | `$illustrate-cn` |
 | The same Xiaohei workflow in English | `$illustrate` |
 | Publication-ready matplotlib figures for papers, slides, or reports | `$scientific-figure-making` |
+| One mechanism taught as an animated, replayable board lesson | `$chalk-talk` |
 | A durable cited HTML synthesis or deep, quiz-interleaved tutorial of a document corpus | `$explain-research` |
 | Durable prose in the repository | Normal editing under the documentation policy |
 | A commit, push, rebase, or pull request | Direct Git under the user's explicit request |

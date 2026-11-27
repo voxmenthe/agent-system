@@ -147,6 +147,23 @@
       },
       "source": "skills/bro"
     },
+    "chalk-talk": {
+      "dependencies": [],
+      "effect_ceiling": "local-write",
+      "evaluation_profile": "explicit-only-animated-board-lessons",
+      "install_targets": [
+        "~/.agents/skills/chalk-talk"
+      ],
+      "lifecycle": "experimental",
+      "ownership": "custom",
+      "provenance": {
+        "license": "owner-authored",
+        "origin": "owner-authored",
+        "revision": "2026-11-26-initial",
+        "local_modifications": "Original owner-authored explicit-only skill for single-idea animated HTML board lessons."
+      },
+      "source": "skills/chalk-talk"
+    },
     "code-like-luke": {
       "dependencies": [],
       "effect_ceiling": "local-write",

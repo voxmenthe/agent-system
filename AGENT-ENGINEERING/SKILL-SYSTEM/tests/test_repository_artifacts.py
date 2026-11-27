@@ -72,12 +72,12 @@ class RepositoryArtifactTests(unittest.TestCase):
             report = SkillSystem(ROOT, Path(temporary)).validate()
 
         self.assertTrue(report.ok)
-        self.assertEqual(75, len(report.custom_skills))
+        self.assertEqual(76, len(report.custom_skills))
         self.assertEqual(32, len(report.legacy_skills))
         self.assertEqual((), report.external_skills)
 
         registry = json.loads((ROOT / "registry.json").read_text())
-        self.assertEqual(107, len(registry["skills"]))
+        self.assertEqual(108, len(registry["skills"]))
         self.assertTrue(REMOVED_SKILLS.isdisjoint(registry["skills"]))
         for name in REMOVED_SKILLS:
             self.assertFalse((ROOT / "skills" / name).exists())

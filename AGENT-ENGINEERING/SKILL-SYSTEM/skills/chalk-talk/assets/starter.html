@@ -1,0 +1,190 @@
+<!doctype html>
+<html lang="en" data-theme="slate" data-style="sketch">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TOPIC | chalk talk</title>
+<style>
+:root{--hand:'Noteworthy','Chalkboard SE','Bradley Hand','Segoe Print',ui-rounded,cursive;
+  --mono:ui-monospace,'SF Mono',Menlo,Consolas,monospace;--text:system-ui,-apple-system,'Segoe UI',sans-serif;--serif:ui-serif,Georgia,serif}
+[data-theme="slate"]{--page:#11191c;--board:#182226;--ink:#ECEFE9;--dim:#A9B8B4;--faint:#2E3E44;--rule:#2A383D;
+  --hi:#F0B45A;--warn:#E87A6A;--good:#7AD0B0}
+[data-theme="paper"]{--page:#F1EDE4;--board:#FAF8F3;--ink:#1F2428;--dim:#59626A;--faint:#E2DCCF;--rule:#DDD6C8;
+  --hi:#1F4FB8;--warn:#A8431C;--good:#2E6B3A}
+*{box-sizing:border-box}
+html{background:var(--page);color:var(--ink)}
+body{margin:0;font:16px/1.5 var(--text)}
+.ct{max-width:1040px;margin:0 auto;padding:20px 16px 28px}
+.ct-kicker{margin:0;font:600 12px/1.2 var(--text);letter-spacing:.12em;text-transform:uppercase;color:var(--dim)}
+h1{margin:4px 0 14px;font:700 clamp(22px,3vw,32px)/1.2 var(--hand)}
+.ct-board{margin:0;background:var(--board);border:1px solid var(--rule);border-radius:14px;overflow:hidden}
+.ct-board svg{display:block;width:100%;height:auto}
+.ct-status{display:flex;gap:16px;align-items:flex-start;padding:10px 18px 12px;border-top:1px solid var(--rule)}
+.ct-slot{overflow:hidden}
+.ct-caption{flex:1;min-width:0;height:2.7em;font:17px/1.35 var(--hand)}
+.ct-count{flex:0 0 26ch;height:1.4em;text-align:right;white-space:nowrap;font:14px/1.4 var(--mono);color:var(--dim)}
+.ct-transport{display:flex;align-items:center;gap:10px;margin-top:12px}
+.ct-transport button{min-width:5.6em;padding:8px 14px;border:1px solid var(--rule);border-radius:999px;
+  background:transparent;color:var(--ink);font:600 14px/1 var(--text);cursor:pointer}
+.ct-transport input{flex:1;min-width:80px;accent-color:var(--hi)}
+.ct-clock{width:6ch;text-align:right;font:14px/1 var(--mono);color:var(--dim)}
+:focus-visible{outline:2px solid var(--hi);outline-offset:2px}
+.ct-takeaway{margin:18px 2px 0;font:18px/1.5 var(--serif)}
+.ct-note{margin:6px 2px 0;font-size:13px;color:var(--dim)}
+svg text{font-family:var(--hand)} svg .mono{font-family:var(--mono)}
+.f-ink{fill:var(--ink)}.f-dim{fill:var(--dim)}.f-hi{fill:var(--hi)}.f-warn{fill:var(--warn)}.f-good{fill:var(--good)}
+.s-ink{stroke:var(--ink)}.s-faint{stroke:var(--faint)}.s-hi{stroke:var(--hi)}.s-warn{stroke:var(--warn)}.s-good{stroke:var(--good)}
+[data-style="sketch"] .ct-sketch{filter:url(#ct-wobble)}
+@media (prefers-reduced-motion:reduce){[data-style="sketch"] .ct-sketch{filter:none}}
+@media (max-width:640px){.ct-status{flex-direction:column;gap:2px}.ct-caption{flex:none;width:100%;height:5.6em;font-size:15px}
+  .ct-count{flex:none;width:100%;text-align:left}}
+@media print{html{background:#fff}.ct-transport{display:none}.ct-board{break-inside:avoid}}
+</style>
+</head>
+<body>
+<main class="ct">
+  <header><p class="ct-kicker">Chalk talk</p><h1>TOPIC: one idea, stated as a claim</h1></header>
+  <figure class="ct-board" data-ct="board">
+    <svg viewBox="0 0 960 540" role="img" aria-labelledby="ct-desc">
+      <desc id="ct-desc">ONE SENTENCE describing what the finished board shows.</desc>
+      <defs><filter id="ct-wobble" filterUnits="userSpaceOnUse" x="0" y="0" width="960" height="540">
+        <feTurbulence type="fractalNoise" baseFrequency="0.012" numOctaves="1" seed="11" result="n"/>
+        <feDisplacementMap in="SourceGraphic" in2="n" scale="2" xChannelSelector="R" yChannelSelector="G"/>
+      </filter></defs>
+      <g id="scene"></g>
+    </svg>
+    <div class="ct-status">
+      <div class="ct-slot ct-caption" data-ct-slot="caption" aria-live="polite"></div>
+      <div class="ct-slot ct-count" data-ct-slot="counter"></div>
+    </div>
+  </figure>
+  <nav class="ct-transport" aria-label="Playback">
+    <button type="button" data-ct="play" aria-pressed="false">Play</button>
+    <button type="button" data-ct="replay">Replay</button>
+    <input type="range" data-ct="scrub" min="0" max="1" step="0.01" value="0" aria-label="Timeline (seconds)">
+    <output class="ct-clock" data-ct="clock">0.0 s</output>
+  </nav>
+  <p class="ct-takeaway">TAKEAWAY: the one sentence the reader should keep.</p>
+  <p class="ct-note">Space plays or pauses, R replays, arrow keys step half a second.</p>
+</main>
+<script>
+"use strict";
+// 1. Beat schedule in seconds: [start, end, caption]. About six beats, captions of at most two lines.
+const BEATS = [
+  [0.0, 2.0, "Beat 1: draw the stage the idea happens on."],
+  [2.0, 5.0, "Beat 2: five requests arrive and wait in the queue."],
+  [5.0, 7.0, "Beat 3: the takeaway, said with the values on the board."],
+];
+const END = BEATS[BEATS.length - 1][1];
+
+// 2. Pure helpers. render(t) may use only these, the built scene and constants.
+const clamp = (x, lo = 0, hi = 1) => Math.min(hi, Math.max(lo, x));
+const ease = (p) => (p < 0.5 ? 4 * p * p * p : 1 - Math.pow(-2 * p + 2, 3) / 2);
+const span = (t, a, b) => ease(clamp((t - a) / (b - a)));
+const lerp = (a, b, p) => a + (b - a) * p;
+function mulberry32(seed) {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6D2B79F5) >>> 0;
+    let x = Math.imul(a ^ (a >>> 15), a | 1);
+    x ^= x + Math.imul(x ^ (x >>> 7), x | 61);
+    return ((x ^ (x >>> 14)) >>> 0) / 4294967296;
+  };
+}
+const NS = "http://www.w3.org/2000/svg";
+function svg(tag, attrs, parent) {
+  const node = document.createElementNS(NS, tag);
+  for (const key in attrs) node.setAttribute(key, attrs[key]);
+  parent.appendChild(node);
+  return node;
+}
+const sceneRoot = document.getElementById("scene");
+const counterSlot = document.querySelector('[data-ct-slot="counter"]');
+
+// 3. Build every element once, up front (REPLACE this demo scene with your board).
+const sketch = svg("g", { class: "ct-sketch" }, sceneRoot);
+const queue = svg("path", { d: "M300 200 H660 V330 H300 Z", fill: "none", class: "s-ink",
+  "stroke-width": 3, pathLength: 1, "stroke-dasharray": "1 1" }, sketch);
+const label = svg("text", { x: 480, y: 180, "text-anchor": "middle", "font-size": 24, class: "f-dim" }, sceneRoot);
+label.textContent = "queue (capacity 5)";
+const tokens = Array.from({ length: 5 }, (_, i) => {
+  const rand = mulberry32(i + 1);
+  const node = svg("circle", { r: 22, class: "f-hi" }, sceneRoot);
+  return { node, delay: 2.2 + i * 0.5 + rand() * 0.2, x: 600 - i * 70, y: 265 };
+});
+
+// 4. render(t): a pure function of t. Set attributes only; never create nodes or read the clock.
+function render(t) {
+  queue.setAttribute("stroke-dashoffset", 1 - span(t, 0.2, 1.6));
+  label.setAttribute("opacity", span(t, 1.2, 1.8));
+  let queued = 0;
+  for (const k of tokens) {
+    const p = span(t, k.delay, k.delay + 0.8);
+    k.node.setAttribute("cx", lerp(-40, k.x, p));
+    k.node.setAttribute("cy", k.y);
+    if (p >= 1) queued += 1;
+  }
+  counterSlot.textContent = `queued ${queued} of 5`;
+}
+
+// 5. Transport and board contract (keep): window.chalkTalk is what board_tool.py drives.
+const $ = (selector) => document.querySelector(selector);
+const playButton = $('[data-ct="play"]'), scrub = $('[data-ct="scrub"]'), clock = $('[data-ct="clock"]');
+const captionSlot = $('[data-ct-slot="caption"]');
+let t = 0, playing = false, last = 0, frame = 0, printState = null;
+scrub.max = END;
+function show(x) {
+  t = clamp(Number(x) || 0, 0, END);
+  render(t);
+  captionSlot.textContent = (BEATS.find((beat) => t < beat[1]) || BEATS[BEATS.length - 1])[2];
+  scrub.value = t;
+  clock.textContent = `${t.toFixed(1)} s`;
+}
+function tick(now) {
+  if (!playing) return;
+  show(t + Math.max(0, now - last) / 1000);
+  last = now;
+  if (t >= END) setPlaying(false); else frame = requestAnimationFrame(tick);
+}
+function setPlaying(on) {
+  if (on && t >= END) show(0);
+  playing = on;
+  cancelAnimationFrame(frame);
+  playButton.textContent = on ? "Pause" : "Play";
+  playButton.setAttribute("aria-pressed", String(on));
+  if (on) { last = performance.now(); frame = requestAnimationFrame(tick); }
+}
+function replay() { setPlaying(false); show(0); setPlaying(true); }
+playButton.addEventListener("click", () => setPlaying(!playing));
+$('[data-ct="replay"]').addEventListener("click", replay);
+scrub.addEventListener("input", () => { setPlaying(false); show(scrub.value); });
+document.addEventListener("keydown", (event) => {
+  if (event.altKey || event.ctrlKey || event.metaKey) return;
+  const onButton = event.target instanceof HTMLButtonElement;
+  if (event.key === " " && !onButton) { event.preventDefault(); setPlaying(!playing); }
+  else if (event.key === "r" || event.key === "R") replay();
+  else if ((event.key === "ArrowLeft" || event.key === "ArrowRight") && event.target !== scrub) {
+    event.preventDefault(); setPlaying(false); show(t + (event.key === "ArrowRight" ? 0.5 : -0.5));
+  }
+});
+addEventListener("beforeprint", () => { printState = { t, playing }; setPlaying(false); show(END); });
+addEventListener("afterprint", () => {
+  if (printState) { show(printState.t); setPlaying(printState.playing); printState = null; }
+});
+if (window.parent !== window && "ResizeObserver" in window) {
+  new ResizeObserver(() => parent.postMessage({ type: "chalk-talk:height",
+    height: Math.ceil(document.documentElement.scrollHeight) }, "*")).observe(document.body);
+}
+window.chalkTalk = Object.freeze({
+  duration: END,
+  beats: BEATS.map(([start, end, caption]) => ({ start, end, caption })),
+  seek(x) { setPlaying(false); show(x); return t; },
+  play() { setPlaying(true); },
+  pause() { setPlaying(false); },
+  replay,
+  state() { return { t, playing, duration: END }; },
+});
+if (matchMedia("(prefers-reduced-motion: reduce)").matches) show(END); else replay();
+</script>
+</body>
+</html>
