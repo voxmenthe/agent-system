@@ -130,6 +130,87 @@ class ValidationTests(unittest.TestCase):
         with self.assertRaisesRegex(ValidationError, "missing.md"):
             self.system().validate()
 
+    def test_implicit_skill_must_say_when_not_to_use_it(self) -> None:
+        skill_md = self.root / "skills" / "alpha" / "SKILL.md"
+        openai_yaml = self.root / "skills" / "alpha" / "agents" / "openai.yaml"
+        skill_md.write_text(
+            "---\nname: alpha\n"
+            "description: Use when testing. Use after a fixture is ready.\n---\n"
+        )
+        with self.assertRaisesRegex(ValidationError, "when not to use"):
+            self.system().validate()
+
+        skill_md.write_text(
+            "---\nname: alpha\n"
+            "description: Use when testing. Skip it for unrelated work.\n---\n"
+        )
+        self.assertTrue(self.system().validate().ok)
+
+        skill_md.write_text(
+            "---\nname: alpha\n"
+            "description: Use when testing. Use after a fixture is ready.\n"
+            "disable-model-invocation: true\n---\n"
+        )
+        openai_yaml.write_text(
+            openai_yaml.read_text() + "policy:\n  allow_implicit_invocation: false\n"
+        )
+        self.assertTrue(self.system().validate().ok)
+
+    def test_reference_document_links_are_checked_outside_code_examples(self) -> None:
+        references = self.root / "skills" / "alpha" / "references"
+        references.mkdir()
+        (references / "present.md").write_text("# Present\n")
+        guide = references / "nested" / "guide.md"
+        guide.parent.mkdir()
+
+        guide.write_text("Read [the missing note](missing.md).\n")
+        with self.assertRaisesRegex(ValidationError, "missing.md"):
+            self.system().validate()
+
+        guide.write_text("Read [the skill root](../../../beta/SKILL.md).\n")
+        with self.assertRaisesRegex(ValidationError, "escapes skill"):
+            self.system().validate()
+
+        guide.write_text(
+            "Read [the present note](../present.md).\n\n"
+            "```markdown\n[example](not-a-file.md)\n```\n\n"
+            "~~~~\n```\n[still fenced](gone.md)\n```\n~~~~\n\n"
+            "Inline example: `handlers[k](event)` and `[x](y.md)`.\n"
+        )
+        self.assertTrue(self.system().validate().ok)
+
+        guide.write_text("Read [`missing.md`](missing.md).\n")
+        with self.assertRaisesRegex(ValidationError, "missing.md"):
+            self.system().validate()
+
+    def test_installed_skill_paths_require_a_declared_dependency(self) -> None:
+        skill_md = self.root / "skills" / "alpha" / "SKILL.md"
+        references = self.root / "skills" / "alpha" / "references"
+        references.mkdir()
+        base = skill_md.read_text()
+
+        (references / "run.md").write_text(
+            "```bash\npython3 ~/.agents/skills/beta/scripts/check.py\n```\n"
+        )
+        with self.assertRaisesRegex(ValidationError, "does not declare beta"):
+            self.system().validate()
+
+        (references / "run.md").write_text("Run `$HOME/.agents/skills/gamma/x`.\n")
+        with self.assertRaisesRegex(ValidationError, "unknown installed skill gamma"):
+            self.system().validate()
+
+        (references / "run.md").write_text(
+            "Run `${HOME}/.agents/skills/beta/scripts/check.py` and "
+            "`~/.agents/skills/alpha/scripts/own.py`.\n"
+        )
+        registry = json.loads((self.root / "registry.json").read_text())
+        registry["skills"]["alpha"]["dependencies"] = ["beta"]
+        write_json(self.root / "registry.json", registry)
+        self.assertTrue(self.system().validate().ok)
+
+        skill_md.write_text(base + "\nInstalled skills live under `~/.agents/skills/<name>`.\n")
+        self.assertTrue(self.system().validate().ok)
+
     def test_unknown_dependency_cycle_and_retired_dependency_fail(self) -> None:
         registry = json.loads((self.root / "registry.json").read_text())
         registry["skills"]["alpha"]["dependencies"] = ["missing"]

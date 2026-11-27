@@ -26,6 +26,11 @@ OWNERSHIPS = {"custom", "legacy-unmanaged", "external"}
 SKILL_NAME = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 CONTENT_HASH = re.compile(r"^sha256:[0-9a-f]{64}$")
 MARKDOWN_LINK = re.compile(r"\[[^\]]+\]\(([^)]+)\)")
+INLINE_CODE_SPAN = re.compile(r"(`+)(.+?)\1")
+FENCE_OPENER = re.compile(r"^ {0,3}(`{3,}|~{3,})")
+INSTALLED_SKILL_REFERENCE = re.compile(
+    r"(?:~|\$HOME|\$\{HOME\})/\.agents/skills/([a-z0-9-]+)(?:/|\b)"
+)
 FORBIDDEN_ASSUMPTIONS = (
     re.compile(r"(?i)(?:^|[\s`])/(?:setup|wayfinder|ask-matt)(?:\s|`|$)"),
     re.compile(r"(?i)\b(?:progress|task)\s+tracker\b"),
@@ -346,6 +351,13 @@ def _parse_frontmatter(path: Path) -> dict[str, str]:
         raise ValidationError(
             f"description in {path} must contain concrete positive and negative trigger language"
         )
+    if result.get("disable-model-invocation") != "true" and not any(
+        marker in lowered for marker in ("do not use", "skip ")
+    ):
+        raise ValidationError(
+            f"description in {path} allows implicit invocation, so it must say "
+            "when not to use the skill (\"do not use\" or \"skip \")"
+        )
     return result
 
 
@@ -415,19 +427,77 @@ def _parse_quoted_yaml(path: Path, name: str) -> dict[str, dict[str, Any]]:
     return sections
 
 
-def _validate_local_links(skill_root: Path, skill_md: Path) -> None:
-    content = skill_md.read_text()
-    for raw in MARKDOWN_LINK.findall(content):
-        target = raw.split("#", 1)[0].strip()
-        if not target or target.startswith(("http://", "https://", "mailto:", "#")):
-            continue
-        candidate = (skill_md.parent / target).resolve()
-        try:
-            candidate.relative_to(skill_root.resolve())
-        except ValueError as exc:
-            raise ValidationError(f"local resource reference escapes skill: {raw}") from exc
-        if not candidate.exists():
-            raise ValidationError(f"broken local resource reference {raw} in {skill_md}")
+def _guidance_markdown(skill_root: Path) -> list[Path]:
+    """SKILL.md plus every reference document an agent may be pointed at."""
+    references = skill_root / "references"
+    nested = sorted(references.rglob("*.md")) if references.is_dir() else []
+    return [skill_root / "SKILL.md", *nested]
+
+
+def _strip_code_examples(content: str) -> str:
+    # Fenced blocks and code spans that contain link syntax are examples, not
+    # links; a code span used as a link label (`x.md`) stays and is checked.
+    kept: list[str] = []
+    fence: str | None = None
+    for line in content.splitlines():
+        opener = FENCE_OPENER.match(line)
+        if fence is None:
+            if opener:
+                fence = opener.group(1)
+                continue
+            kept.append(
+                INLINE_CODE_SPAN.sub(
+                    lambda span: "" if "](" in span.group(2) else span.group(0),
+                    line,
+                )
+            )
+        elif (
+            opener
+            and opener.group(1)[0] == fence[0]
+            and len(opener.group(1)) >= len(fence)
+            and not line[opener.end():].strip()
+        ):
+            fence = None
+    return "\n".join(kept)
+
+
+def _validate_local_links(skill_root: Path) -> None:
+    root = skill_root.resolve()
+    for document in _guidance_markdown(skill_root):
+        for raw in MARKDOWN_LINK.findall(_strip_code_examples(document.read_text())):
+            target = raw.split("#", 1)[0].strip()
+            if not target or target.startswith(("http://", "https://", "mailto:", "#")):
+                continue
+            candidate = (document.parent / target).resolve()
+            try:
+                candidate.relative_to(root)
+            except ValueError as exc:
+                raise ValidationError(
+                    f"local resource reference escapes skill: {raw} in {document}"
+                ) from exc
+            if not candidate.exists():
+                raise ValidationError(f"broken local resource reference {raw} in {document}")
+
+
+def _validate_installed_skill_references(
+    skill_root: Path,
+    name: str,
+    skills: dict[str, dict[str, Any]],
+) -> None:
+    declared = set(skills[name]["dependencies"])
+    for document in _guidance_markdown(skill_root):
+        for target in INSTALLED_SKILL_REFERENCE.findall(document.read_text()):
+            if target == name:
+                continue
+            if target not in skills:
+                raise ValidationError(
+                    f"{document} references unknown installed skill {target}"
+                )
+            if target not in declared:
+                raise ValidationError(
+                    f"{document} references ~/.agents/skills/{target} but "
+                    f"registry.skills.{name}.dependencies does not declare {target}"
+                )
 
 
 def validate_skill_tree(skill_root: Path, expected_name: str) -> str:
@@ -463,7 +533,7 @@ def validate_skill_tree(skill_root: Path, expected_name: str) -> str:
             "SKILL.md disable-model-invocation must be the inverse of "
             "agents/openai.yaml policy.allow_implicit_invocation"
         )
-    _validate_local_links(skill_root, skill_md)
+    _validate_local_links(skill_root)
     content = skill_md.read_text()
     for pattern in FORBIDDEN_ASSUMPTIONS:
         if pattern.search(content):
@@ -652,9 +722,9 @@ def validate_canonical(root: Path, home: Path) -> tuple[Registry, AuditReport]:
         ownership = record["ownership"]
         if ownership == "custom":
             custom.append(name)
-            source_hashes[name] = validate_skill_tree(
-                _resolve_source(root, record["source"]), name
-            )
+            source = _resolve_source(root, record["source"])
+            source_hashes[name] = validate_skill_tree(source, name)
+            _validate_installed_skill_references(source, name, registry.skills)
         elif ownership == "legacy-unmanaged":
             legacy.append(name)
         else:
