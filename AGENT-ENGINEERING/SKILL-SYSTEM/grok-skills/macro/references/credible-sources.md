@@ -292,7 +292,9 @@ research; prefer the equity list for Mag 7 **market** takes.
 | RystadEnergy | Rystad when energy-macro |
 | GavMcCracken | Oil and Commodities |
 | JavierBlas | Bloomberg energy and commodities columnist. High-frequency physical-market reporting plus interpretation across oil, metals, logistics, and industrial inputs; separate reported facts from his causal framing. |
+| SStapczynski | Stephen Stapczynski. Physical LNG and gas reporting: cargoes, export outages and restarts, and how gas prices affect power dispatch. Attribute reported figures to their source; a quoted account is not independent confirmation. |
 | Ole_S_Hansen | Saxo commodity strategist. Positioning, exchange inventories, metals, agriculture, and cross-commodity regime analysis; keep quantified free-text posts and identify chart or COT inputs. |
+| JLinvilleFert | Josh Linville. Physical fertilizer markets: regional nutrient prices, phosphate production costs, and fertilizer affordability against crop prices. Keep the product, market and comparison dates; skip video teasers and verify chart-only figures before citing them. |
 | Rory_Johnston | Commodity Context oil-market researcher. Physical-flow, inventory, SPR, pipeline, and policy analysis; free posts may point to paid work, so retain the on-X claim and its stated method. |
 | aeberman12 | Art Berman. Energy systems and upstream production analysis; useful stock-versus-flow mechanisms and production constraints, with chart estimates independently checked when load-bearing. |
 | LVision_Trading | Physical oil-flow and Hormuz vessel-forensics specialist. Uses AIS records, satellite imagery, named vessels, and explicit estimates; preserve methodology labels such as "guesstimate" and do not treat tracker output as official truth. |
