@@ -863,10 +863,10 @@
       "ownership": "custom",
       "provenance": {
         "license": "MIT",
-        "local_modifications": "Owner-directed 2026-09-01 adaptation of arc-code's durable evidence, prediction/probe/reconciliation, and model-correction lessons into an explicit-only, domain-agnostic task-local continuity skill. Adds bounded notes, warning guards, helper admission, resume checks, privacy and authority limits, and direct stable production lifecycle. 2026-10-13: owner-approved implicit selection when losing a long authorized task's evidence and frontier would force costly rework. 2026-10-25: the notes template's Resume state lists skills to reread, because Codex 0.164 drops an invoked skill's text at compaction (PLANS/AGENT-SYSTEM-REVIEW adoption plan 5.1).",
+        "local_modifications": "Owner-directed 2026-09-01 adaptation of arc-code's durable evidence, prediction/probe/reconciliation, and model-correction lessons into an explicit-only, domain-agnostic task-local continuity skill. Adds bounded notes, warning guards, helper admission, resume checks, privacy and authority limits, and direct stable production lifecycle. 2026-10-13: owner-approved implicit selection when losing a long authorized task's evidence and frontier would force costly rework. 2026-10-25: the notes template's Resume state lists skills to reread, because Codex 0.164 drops an invoked skill's text at compaction (PLANS/AGENT-SYSTEM-REVIEW adoption plan 5.1). 2026-11-26 (skill-system upgrade plan W2.2): references/coordination-and-drift.md adds the single-writer worker protocol, hypothesis intake for worker claims, commit- or date-pinned claims, and the guidance-drift check on resume; SKILL.md treats logs, transcripts and worker outputs as untrusted data, redacts secrets, and keeps one-line ruled-out dead ends through compaction.",
         "origin": "https://github.com/jerber/arc-code.git",
         "reference_revision": "6b33c1f7c2ad45997663c69157f5559d1be61bd9",
-        "revision": "sha256:6d043ebe0c3f4642ac7c7e36ee1bd3acb3023b78f6fbe1f6a7b62270899bee2c"
+        "revision": "sha256:390967d0824b3171d41c076e1e9d445e8288b10bd5fed0ed4db42b37771e47da"
       },
       "source": "skills/learning-workspace"
     },

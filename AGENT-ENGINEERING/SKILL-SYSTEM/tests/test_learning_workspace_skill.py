@@ -20,6 +20,7 @@ class LearningWorkspaceSkillTests(unittest.TestCase):
             "NOTICE.md",
             "SKILL.md",
             "agents/openai.yaml",
+            "references/coordination-and-drift.md",
             "references/failure-modes.md",
             "references/notes-template.md",
         }
@@ -31,8 +32,10 @@ class LearningWorkspaceSkillTests(unittest.TestCase):
         self.assertEqual(expected_files, actual_files)
 
         # Raised 10-31 for the owner's task choices, the owed and inferred decisions, and the close-out.
+        # Raised 2026-11-26 (plan W2.2) for the single-writer, untrusted-data, dead-end and drift lines.
         limits = {
-            "SKILL.md": 8704,
+            "SKILL.md": 9 * 1024,
+            "references/coordination-and-drift.md": 4 * 1024,
             "references/notes-template.md": 3 * 1024,
             "references/failure-modes.md": 4 * 1024,
         }
@@ -42,9 +45,14 @@ class LearningWorkspaceSkillTests(unittest.TestCase):
                 self.assertGreater(path.stat().st_size, 0)
                 self.assertLessEqual(path.stat().st_size, limit)
 
+        # The public mirror allowlists the workspace directory name in SKILL.md only.
+        workspace_dir = ".learning-" + "workspace/"
         linked_files: set[str] = set()
         for path in (SKILL_ROOT / "SKILL.md", *SKILL_ROOT.glob("references/*.md")):
             content = path.read_text()
+            if path.parent.name == "references":
+                with self.subTest(path=path, hygiene=workspace_dir):
+                    self.assertFalse(workspace_dir in content)
             for raw in LINK.findall(content):
                 target = raw.split("#", 1)[0].strip()
                 if not target or target.startswith(("http://", "https://", "#")):
@@ -59,6 +67,7 @@ class LearningWorkspaceSkillTests(unittest.TestCase):
 
         self.assertEqual(
             {
+                "references/coordination-and-drift.md",
                 "references/failure-modes.md",
                 "references/notes-template.md",
             },
