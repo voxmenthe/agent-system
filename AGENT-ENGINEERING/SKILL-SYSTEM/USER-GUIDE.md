@@ -263,6 +263,7 @@ Explicit selection is useful when the desired mode matters:
 - “Use `$explain-research` in tutorial track to teach me this inspected paper corpus with interspersed rotating quizzes.”
 - “Use `map-change`; inspect only and show me the real change surface.”
 - “Use `debugging`; diagnose this without implementing a fix.”
+- “Use `$bug-hunt` on the config parser: find bugs nobody has reported yet, with a quoted property contract and regression tests for whatever you confirm.”
 - “Use `verify-change` to independently check the implementation.”
 - “Commit these exact files and push the branch.”
 
@@ -511,6 +512,7 @@ assessment may move them on demand or retire them.
 | [`catchup`](skills/catchup/SKILL.md) | On return to a long session: what changed since your last message, what needs your decision, and what is still running, read from live sources. | Explicit-only and read-only. It reports and asks; it never acts, relaunches, or decides before you reply. |
 | [`skiller`](skills/skiller/SKILL.md) | Which installed skills a task or plan should use, and at which step, chosen from a live catalog of every skill's brief description. | Explicit-only and read-only. It recommends; it never invokes a skill. Useful during `$intent`, `$grilling`, `$batch-grill`, or plan writing. |
 | [`create-formal-verification-skill`](skills/create-formal-verification-skill/SKILL.md) | A TLA+ model of the code where a bug costs most and tests reach least, every property shown failing on a broken variant, and a project-local verify skill with a one-command check that reports when the covered code changes. | Explicit-only. Findings stay findings: it reports and replays bugs and offers fixes but does not change product code unless asked. |
+| [`bug-hunt`](skills/bug-hunt/SKILL.md) | Proactive property-based hunt for unreported bugs in real code: a property contract quoted from the docs, independent oracles, generator self-checks and a seeded-mutant gate before any clean result, coverage-steered evolution, and four-way triage into standalone reproducers and native regression tests. | Explicit-only. Not for diagnosing a known failure (`debugging`), user-path verification recipes (`create-verification-skill`), or TLA+ model checking (`$create-formal-verification-skill`). |
 | [`orchestrate`](skills/orchestrate/SKILL.md) | Coordinate independent work through the host's native agent tools. | Explicit-only. One writer per file; the parent integrates and verifies. Does not launch external CLI workers. |
 | [`dialectic`](skills/dialectic/SKILL.md) | Examine a real tension through two independent committed arguments and parent-led evidence checking and synthesis. | Explicit-only. No forced novelty, fixed multi-round budget, or manufactured balance between unequal evidence. |
 | [`agent-browser`](skills/agent-browser/SKILL.md) | Browser interaction through the installed agent-browser CLI. | Agent-invocable when a browser is needed. Use task-owned sessions and version-matched help; external effects remain bounded by the request. |
@@ -575,6 +577,7 @@ assessment may move them on demand or retire them.
 | What changed in a long session since your last message, and what needs you | `$catchup` |
 | Which skills a task or plan should use, and at which step | `$skiller` |
 | A model-checked proof of a race, crash window, retry, or state machine, kept rechecked on later changes | `$create-formal-verification-skill` |
+| Unreported bugs in a parser, serializer, engine, or adapter, found with generated inputs and independent oracles | `$bug-hunt` |
 | A verified static-site publish or update on HereNow | `$herenow-deploy` |
 
 When no row fits, proceed with the model's general capability rather than

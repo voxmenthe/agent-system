@@ -147,6 +147,23 @@
       },
       "source": "skills/bro"
     },
+    "bug-hunt": {
+      "dependencies": [],
+      "effect_ceiling": "local-write",
+      "evaluation_profile": "explicit-only-inductive-bug-hunting",
+      "install_targets": [
+        "~/.agents/skills/bug-hunt"
+      ],
+      "lifecycle": "experimental",
+      "ownership": "custom",
+      "provenance": {
+        "license": "owner-authored",
+        "origin": "owner-authored",
+        "revision": "2026-11-26-initial",
+        "local_modifications": "Original owner-authored explicit-only skill for proactive property-based bug hunting: a quoted property contract, a six-rung independent-oracle ladder, generator self-checks and a seeded-mutant gate before any clean result, coverage-steered generator evolution, and four-way triage. Native engines by default (Hypothesis, fast-check, proptest, Go fuzzing, cargo-fuzz); Ephyra opt-in, checked against ephyra@3983b2e. No vendored code."
+      },
+      "source": "skills/bug-hunt"
+    },
     "chalk-talk": {
       "dependencies": [],
       "effect_ceiling": "local-write",
