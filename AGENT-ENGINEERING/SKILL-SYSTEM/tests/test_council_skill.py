@@ -78,6 +78,41 @@ class CouncilSkillTests(unittest.TestCase):
         self.assertIn('--task-file "$RUN/judge/packet.md"', self.procedure)
         self.assertIn("Panel `cax`, `cdm`, `ccx`, `dswe`, `ommp`", self.skill)
 
+    def test_stop_rules_and_must_not_survive_tail_truncation(self) -> None:
+        raw = (SKILL_ROOT / "SKILL.md").read_bytes()
+        self.assertLess(len(raw), 7800)
+        headings = re.findall(rb"^## (.+)$", raw, re.M)
+        self.assertEqual([b"Authority", b"Stop rules", b"Must not"], headings[:3])
+        self.assertLess(raw.index(b"\n## " + headings[3]), 4096)
+        must_not = re.sub(r"\s+", " ", raw[raw.index(b"## Must not"):raw.index(b"\n## " + headings[3])].decode())
+        self.assertIn("before the sealed candidate is written and hashed", must_not)
+        self.assertIn("while any panelist or judge may still be reading them", must_not)
+
+    def test_synthesis_chooses_one_of_three_outcomes(self) -> None:
+        stage = re.sub(r"\s+", " ", self.skill[self.skill.index("4. **Synthesize.**"):self.skill.index("5. **Check")])
+        for outcome in ("**Adopt**", "**Hybrid**", "**Revise first**"):
+            self.assertIn(outcome, stage)
+        self.assertIn("Do not average them", stage)
+        self.assertIn("correctness and intent fit, grounding in real files and tests", stage)
+        self.assertRegex(self.procedure, r"\| Revise first \| .* No merged deliverable")
+        self.assertIn("Outcome: <Adopt | Hybrid | Revise first>", self.procedure)
+        self.assertIn("reduced judge independence", self.skill)
+
+    def test_judge_and_panel_rank_verified_substance_within_the_task_bar(self) -> None:
+        judge = re.sub(r"\s+", " ", (SKILL_ROOT / "references/judge.md").read_text())
+        self.assertIn("never length, polish, structure or confident tone", judge)
+        self.assertIn("ranks BELOW a terse candidate", judge)
+        self.assertIn("quoting the code, fact or counterexample that decides it", judge)
+        self.assertIn("The task is the whole bar", judge)
+        constraints = next(line for line in self.procedure.splitlines() if "CONSTRAINTS:" in line)
+        self.assertIn("The task in CONTEXT is the whole bar", constraints)
+
+    def test_probe_launcher_pointer_is_manual_and_resolves(self) -> None:
+        self.assertIn('DELEGATE="$HOME/.agents/skills/delegate/scripts"', self.procedure)
+        self.assertIn('"$DELEGATE/probe-launcher" <name>', self.procedure)
+        self.assertIn("not a gate", re.sub(r"\s+", " ", self.procedure))
+        self.assertTrue((ROOT / "skills/delegate/scripts/probe-launcher").is_file())
+
     def test_every_linked_reference_exists(self) -> None:
         for target in re.findall(r"\]\(([^)#]+)", self.skill):
             self.assertTrue((SKILL_ROOT / target).is_file(), target)

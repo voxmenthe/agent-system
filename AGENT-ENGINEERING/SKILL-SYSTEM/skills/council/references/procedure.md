@@ -19,6 +19,12 @@ RUN=<run root>/<YYYYMMDD-HHMM>-<slug>          # see "Run root" below
    in the bill; `.council/` is not gitignored).
 4. Otherwise `~/.local/state/council/runs/`.
 
+A single run needs no learning workspace: its run directory is the
+transcript and resume record. For multi-round campaigns or council rounds
+inside a longer investigation, use option 2. Keep pointers and conclusions
+in the workspace notes, never candidate text, and record candidate claims as
+hypotheses that only your grounding checks promote.
+
 ## 0. Name check, bill and frame
 
 Check every launcher before any call; print nothing for a good name:
@@ -32,7 +38,21 @@ for n in <panel launchers> <judge launchers>; do
 done
 ```
 
+On a failure, show the likely fix (for example, `ccxb` is undefined and
+`ccbx` was probably meant) and launch only on the user's OK.
+
+The name check proves a launcher exists, not that it works. For a launcher
+that is suspect or was just edited, run `"$DELEGATE/probe-launcher" <name>`
+by hand: one read-only external call that reports launch, failure class,
+final message and routed model. Say so in the bill. It is a diagnostic,
+not a gate: never run it on every launcher or before every wave.
+
 Bill inputs: `bash -c 'source ~/.bash_agents >/dev/null 2>&1; usage'`.
+
+Code or PR council: fix known defects and run the cheap local checks before
+anything below, so the preflight records the state the panel reviews. When
+your task does not authorize edits, list the known defects in `TASK.md` so
+panelists look past them. Skip both for code about to be replaced.
 
 Create the run directory and freeze the task and the preflight state:
 
@@ -82,7 +102,7 @@ SEALED=${letters[RANDOM % n]}                  # record in RUN.md before launch
   printf 'OBJECTIVE: Answer the task in CONTEXT completely and independently. Put the complete answer under FINDINGS.\n'
   printf 'SCOPE: Read-only. Read every source document named in CONTEXT in full, and anything else you need; edit nothing.\n'
   printf 'CONTEXT:\n'; awk '{print "  " $0}' "$RUN/TASK.md"
-  printf 'CONSTRAINTS: Work alone; other models answer the same task. Do not name your model, vendor, tools, or any task id. Do not edit files, commit, or delegate.\n'
+  printf 'CONSTRAINTS: Work alone; other models answer the same task. Do not name your model, vendor, tools, or any task id. Do not edit files, commit, or delegate. The task in CONTEXT is the whole bar: add no review round, sign-off gate or scope above it, and report a problem the sources already had in one line instead of blocking on it.\n'
   printf 'VERIFY: Ground claims about code or documents in what you actually read; list it under EVIDENCE.\n'
   i=0
   for L in "${letters[@]}"; do
@@ -136,7 +156,13 @@ printf -- '- %s sealed parent/%s.md sha256 %s\n' "$(date -u +%FT%TZ)" "$SEALED" 
   "$(shasum -a 256 "$RUN/parent/$SEALED.md" | cut -d' ' -f1)" >>"$RUN/RUN.md"
 ```
 
-Only now may you check status or read anything under `panel-*/`.
+Only now may you check status or read anything under `panel-*/`. From then
+on, while slower panelists or judges run, you may read finished `.out` files
+and check their load-bearing claims against the sources. Keep it read-only:
+no edits, and no command that writes into the workspace (formatters, builds,
+tests that leave caches) until every panelist and judge has finished. Note
+checks in `$RUN/verify.md`, never under `parent/`: the packet script reads
+every `parent/*.md` as a candidate.
 
 ## Status (also the first command on resume)
 
@@ -171,7 +197,7 @@ external candidates, and writes `judge/packet.md`. Then run every judge in
 parallel, in the background, from the workspace:
 
 ```bash
-judges=(caxb)                                  # the default, or every named judge
+judges=(camb)            # the default (ccbm for a Codex/OpenAI parent), or every named judge
 for j in "${judges[@]}"; do
   ( cd "$WS" && "$DELEGATE/run-worker.sh" "$j" --task-file "$RUN/judge/packet.md" \
       >"$RUN/judge/$j.out" 2>"$RUN/judge/$j.stderr"; echo $? >"$RUN/judge/$j.status" ) &
@@ -182,15 +208,51 @@ for j in "${judges[@]}"; do
 done
 ```
 
+A judge that fails or omits the selection lines is a failed judge; continue
+on the others. If all fail, retry once with the other default judge
+(`camb`/`ccbm`), then fall back to the [fast lane](#fast-lane) and mark the
+run degraded in `RUN.md` and the report. A retry that lands on your own
+vendor (a Claude parent retrying with `ccbm`) records
+`reduced judge independence`.
+
 ## 4. Synthesize
 
-No commands. Write the deliverable, then close the ledger by appending the
-audit after its last line:
+No commands. Choose the outcome from what the candidates and your checks
+show, not from how many judges agreed:
+
+| Outcome | When | What you write |
+| --- | --- | --- |
+| Adopt | Strong candidates converge on one shape and your checks hold it up. | The base with its verified fixes. Note the convergence; graft nothing just to credit a seat. |
+| Hybrid | One base is best; other candidates hold a few load-bearing ideas it lacks. | The base, edited under one coherent model, with at most one or two grafts per other candidate, each folded in by hand rather than pasted. |
+| Revise first | Candidates answered different questions, or rest on incompatible premises the sources cannot settle. | No merged deliverable. The audit and the report name the open decision as one question the user can answer, which candidates took which reading, and a revised `TASK.md` with the bill for a new round. |
+
+Agreement is a correlated prior, so Adopt still needs your checks. If the
+invocation already settled the open decision and `TASK.md` dropped it, say
+so: the framing slip is yours, and the revised `TASK.md` restores it.
+
+Tie-break, for two viable bases still close after your grounding checks;
+stop at the first step that separates them:
+
+1. Correctness and fit to the user's intent.
+2. Grounding in real files, tests and behavior you checked.
+3. The simpler, reversible first cut that does not block the intended
+   future.
+4. The better validation and rollback story.
+5. Lower execution cost, once quality is acceptable.
+
+Rank the answer apart from its executor: a plan can win while a different
+model is the better choice to build it. Say so separately when it matters.
+
+Write the deliverable (none for Revise first), then close the ledger by
+appending the audit after its last line:
 
 ```markdown
 ## Audit
 
+Outcome: <Adopt | Hybrid | Revise first>: <why, one line>
+Open decision: <the question; letter: reading, ...> (Revise first only)
 Base: <letter> (<launcher>, <lane>); judges: <judge: RANKING / BASE each>
+Judge independence: <full, or reduced: judges and your vendor>
 Adopted: <letter (launcher): idea>; ...
 Extended: <letter (launcher): idea, and how>; ...
 Rejected: <letter (launcher): claim, and the evidence against it>; ...
@@ -207,6 +269,23 @@ diff "$RUN/preflight.txt" <(git -C "$WS" status --porcelain 2>&1)
 
 Expected differences: the deliverable, and the run root when it lives in the
 repository. Anything else is a worker edit to report.
+
+Report: the deliverable path (or, for Revise first, the open decision and
+the proposed round); the roster actually used (letter, launcher, lane);
+failures and exclusions; judge rankings and your overrides; the outcome;
+judge independence; what remains unverified; and the run directory. Give
+each panelist and judge one outcome: `folded`, `not-run`, `failed` or
+`no-usable-output`, as defined in `delegate`'s Integrate and verify.
+`folded` means its output entered the judging or synthesis, not that any of
+it was adopted; the audit says what was.
+
+## Fast lane
+
+`judge: parent`, only on request: skip the seal and the external judge.
+Write `judge/analysis.md` by the [judge](judge.md) prompt (its ground
+rules, sections and three selection lines) before touching the deliverable;
+then synthesize as in stage 4. Record `Judge independence: none (parent judged)`
+in the audit and say so in the report.
 
 ## Resume
 
