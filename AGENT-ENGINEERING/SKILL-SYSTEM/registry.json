@@ -2027,6 +2027,24 @@
         "local_modifications": "Refined from two proposals (PLANS/SKILLS/2026-11-21-colab-jobs-skill/) into PLANS/SKILLS/2026-11-22-colab-jobs-skill-plan.md after checking every claim against the installed google-colab-cli 0.8.0 source and a live CPU runtime. One standard-library helper (scripts/colab_job.py) over the official colab CLI with nine commands (doctor, up, push, install, run, wait, logs, pull, down); jobs run detached on the VM under a small runner (scripts/vm_ops.py) that records the exit code, so exec's always-zero status, idle timeouts and agent tool timeouts cannot hide an outcome; a local lease stops forgotten sessions; CLI output is redacted because a failed upload prints the runtime token. Explicit-only because it spends compute units on the owner's account."
       },
       "source": "skills/colab-jobs"
+    },
+    "move-37": {
+      "dependencies": [],
+      "effect_ceiling": "read-only",
+      "evaluation_profile": "explicit-only-move-37-reframing",
+      "install_targets": [
+        "~/.agents/skills/move-37"
+      ],
+      "lifecycle": "experimental",
+      "ownership": "custom",
+      "provenance": {
+        "license": "MIT",
+        "origin": "https://github.com/DannyMac180/skills.git",
+        "reference_revision": "6e6ffc686d7e9d5a181fba61ef7c13af294627ca",
+        "revision": "2026-11-27-initial",
+        "local_modifications": "Vendored with minimal adaptation: canonical quoted frontmatter, explicit-only invocation metadata, $move-37 input wording beside the source /move-37 form, LICENSE and NOTICE. The three-move reframe-and-stop contract otherwise follows the source."
+      },
+      "source": "skills/move-37"
     }
   }
 }

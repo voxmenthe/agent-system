@@ -1,0 +1,7 @@
+interface:
+  display_name: "Move 37"
+  short_description: "Reframe a problem into three distinct moves"
+  default_prompt: "Use $move-37 to reframe this proposed solution into a direct move, an upstream elimination move, and a grounded non-obvious Move 37 before implementation."
+
+policy:
+  allow_implicit_invocation: false
