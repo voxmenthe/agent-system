@@ -10,7 +10,8 @@ grok	grok3	grok3 grok3xh
 codex	-	clm clmb clme clmbe ctx ctxb ctm ctmb cdx cdxb cdxe cdxbe cdm cdmb cdme cdmbe cam camb cax caxb camm cammb cah cahb cdmM cdxX camM caxX
 codex	codex2	clm2 clmb2 clme2 clmbe2 ctx2 ctxb2 ctm2 ctmb2 cdx2 cdxb2 cdxe2 cdxbe2 cdm2 cdmb2 cdme2 cdmbe2 cam2 camb2 cax2 caxb2 camm2 cammb2 cah2 cahb2 cdmM2 cdxX2 camM2 caxX2
 codex	key	cdxk cdxk:ctx cdxk:ctxb cdxk:ctm cdxk:ctmb cdxk:cdu cdxk:cdub cdxk:cduf cdxk:cdm cdxk:cdmM cdxk:cdmb cdxk:cdmf cdxk:cdx cdxk:cdxX cdxk:cdx-fresh cdxk:cdxb cdxk:cdxf cdxk:cdh cdxk:cdhb cdxk:cdhf cdxk:cdmm cdxk:cdmmb cdxk:cdxmf cdxk:cdxl cdxk:clu cdxk:club cdxk:clm cdxk:clmb cdxk:clx cdxk:clxb cdxk:cau cdxk:caub cdxk:cam cdxk:camM cdxk:camb cdxk:cax cdxk:caxX cdxk:caxb cdxk:cah cdxk:cahb cdxk:camm cdxk:cammb cdxk:cdal cdxk:cdalb cdxk:cdxe cdxk:cdxe-fresh cdxk:cdme cdxk:clme cdxk:cdube cdxk:cdmbe cdxk:clmbe cdxk:cdxbe cdxk:cdhbe cdxk:cdmmbe cdxk:cdlbe
-opencode	-	ocs ommp ocargh ochy ocq4h ocq4x ochy4flash oclongcat ociceman pihy4flash pilongcat piiceman
+opencode	go	ocs ommp ocargh ochy ocq4h ocq4x
+opencode	free	ochy4flash oclongcat ociceman pihy4flash pilongcat piiceman
 opencode	zen	ocmm26
 cmd	-	cmg cmds cmm26p cmqh cmqx cms cmhy cmdglyph cmdflint
 claude	-	csm csu csx cshh csmm csbm csbu csbx csbh csbmm chm chu chx chh chmm chbm chbu chbx chbh chbmm ccx ccbx ccm ccbm ccmm ccfh ccbfh ccfx ccbfx ccmM ccxX

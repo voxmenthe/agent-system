@@ -5,7 +5,9 @@
 
 prints "rate-limited: REASON" (a rate limit or quota), "quarantined: REASON" (an expired key, a missing
 credential, a signed-out CLI, a free window or plan that ended, a model the provider no longer routes, or another
-non-retryable refusal) or "unclassified", from the last 8 KiB of each FILE, where a CLI's final error lands. A rate
+non-retryable refusal), "content-filtered: task text; bars no launcher", or "unclassified", from the last 8 KiB of
+each FILE, where a CLI's final error lands. Command Code's native terminal error can recover its reset event
+from immediately before a large run_end record. A rate
 limit counts only on a line the CLI writes as its own error record: a worker's transcript that quotes one is not a
 refusal. An unclassified failure may be the task's own.
 A plan quota that leaves no allowance on the whole account reads "rate-limited: account quota exhausted on
@@ -20,9 +22,13 @@ This is the one table: run-worker.sh prints its answer as a failed run's last st
 from __future__ import annotations
 
 import argparse
+import json
 import re
 import sys
+from datetime import datetime
+from functools import cache
 from pathlib import Path
+from typing import BinaryIO
 
 TAIL_BYTES = 8192
 # Marks a tail's first line when the cut fell inside it: no ^-anchored record can match there.
@@ -40,6 +46,8 @@ RATE_LIMIT_RE = re.compile(r'"type"\s*:\s*"provider\.quota"|"status(?:Code)?"\s*
                            r"|^delegate worker: Antigravity quota exhausted on every signed-in account",
                            re.IGNORECASE | re.MULTILINE)
 LIMIT_NAME_RE = re.compile(r'limitName\\*"\s*:\s*\\*"([^"\\]+)')
+RESET_AT_RE = re.compile(r'\bresets at (\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?(?:Z|[+-]\d\d:\d\d))', re.I)
+RETRY_AFTER_RE = re.compile(r'(?:"retryAfterMs"\s*:\s*|\bretryAfterMs:\s*)(\d{1,12})(?!\d)')
 FINAL_TEXT_RE = re.compile(r'("finalText"\s*:\s*)"(?:[^"\\]|\\.)*"')
 # The lines a CLI writes as its own error record: plain-text errors (Codex, Devin), JSON error objects (OpenCode,
 # providers), Command Code's run_error event and error result, Claude's error result, an HTTP status line, and
@@ -49,16 +57,23 @@ FINAL_TEXT_RE = re.compile(r'("finalText"\s*:\s*)"(?:[^"\\]|\\.)*"')
 ERROR_RECORD_RE = re.compile(r'^(?:(?:ERROR|Error|error)\b|\{"error"|\{"type":"error"'
                              r'|\{"type":"event","event":\{"type":"run_error"|\{"type":"result","subtype":"error|\{"type":"result"[^\n]*"is_error":true'
                              r'|HTTP/[\d.]+ 429\b|429 Too Many Requests|delegate worker: )')
-# Exhaustion of a plan's whole allowance, by the harness whose plan it is: only the three recorded messages
-# above, in their plan-wide form (Codex's ends "usage limit." where a one-model limit would go on), so a bare
+# Exhaustion of a plan's whole allowance, by the harness whose plan it is, so a bare
 # 429 or one model's limit still bars only its launcher. Each must open a line as the CLI's own error record
 # does; a worker's transcript quoting one is no refusal at all, since RATE_LIMIT_RE reads only error records.
+OPENCODE_ERROR = r'^\{"type":"error"[^\n]*"error":\{"type":'
+OPENCODE_QUOTA = re.compile(OPENCODE_ERROR + r'"provider\.(?:quota","message":"Go usage limit exceeded|go-limit")')
+CONTENT_FILTER = re.compile(OPENCODE_ERROR + r'"provider\.(?:content-filter"|[^"\n]+","message":"[^"\n]*\[DataInspectionFailed\])')
+CMD_RUN_ERROR = (r'^\{"type":"event","event":\{"type":"run_error","error":\{"name":"TransportError",'
+                 r'"message":"POST /alpha/generate .+ 429 error: You.ve reached your weekly usage limit for your plan\.')
+CMD_RUN_END = b'{"type":"event","event":{"type":"run_end"'
+CMD_RESULT_QUOTA = (r'^\{"type":"result","subtype":"error"[^\n]*,"error":"Error: '
+                    r"You.ve reached your weekly usage limit\. Resets in ")
 ACCOUNT_QUOTAS = (
-    (re.compile(r"^ERROR: You.ve hit your usage limit\.", re.MULTILINE), "codex"),
-    (re.compile(r"^Error: Agent error: Your weekly usage quota has been exhausted", re.MULTILINE), "devin"),
-    # 10-31: OpenCode's records now carry a timestamp and session ID before the error object.
-    (re.compile(r'^\{"type":"error"[^\n]*"error":\{"type":"provider\.quota","message":"Go usage limit exceeded"',
-                re.MULTILINE), "opencode"),
+    (re.compile(r"^ERROR: You.ve hit your usage limit\."), "codex", None),
+    (re.compile(r"^Error: Agent error: Your weekly usage quota has been exhausted"), "devin", None),
+    (OPENCODE_QUOTA, "opencode", "go"),
+    (re.compile(CMD_RUN_ERROR + r"|^Error: You.ve reached your weekly usage limit\. Resets in |" + CMD_RESULT_QUOTA),
+     "cmd", None),
 )
 # (pattern, reason, harness): None for a record any harness, or run-worker.sh, may write.
 QUARANTINES = (
@@ -94,16 +109,70 @@ QUARANTINES = (
 )
 
 
-def harness(launcher: str) -> str | None:
-    """The launcher's harness in launcher-routes.tsv, or None for a launcher it does not list."""
-    if launcher.startswith("cmd:"):
-        return "cmd"
-    # Read here, not at import: the market pool runs this file's source without a __file__.
+@cache
+def launcher_routes() -> dict[str, tuple[str, str]]:
+    """Launcher -> (harness, account), one allowance per row of the sibling table."""
     routes = Path(__file__).resolve().parent / "launcher-routes.tsv"
-    for line in routes.read_text().splitlines()[1:]:
-        name, _, launchers = line.split("\t")
-        if launcher in launchers.split():
-            return name
+    header, *rows = routes.read_text().splitlines()
+    if header != "harness\taccount\tlaunchers":
+        raise ValueError(f"{routes} lacks its header")
+    by_name = {}
+    for line in rows:
+        name, account, launchers = line.split("\t")
+        for launcher in launchers.split():
+            if launcher in by_name:
+                raise ValueError(f"{routes} lists {launcher} twice")
+            by_name[launcher] = (name, account)
+    return by_name
+
+
+def launcher_route(launcher: str) -> tuple[str, str] | None:
+    if launcher.startswith("cmd:"):
+        return "cmd", "-"
+    return launcher_routes().get(launcher)
+
+
+def reset_clock(record: str) -> datetime | int | None:
+    """Provider reset as an absolute timestamp or a millisecond delay, including the persisted reason form."""
+    if match := RESET_AT_RE.search(record):
+        try:
+            return datetime.fromisoformat(match[1])
+        except ValueError:
+            pass
+    if match := RETRY_AFTER_RE.search(record):
+        return int(match[1])
+    return None
+
+
+def _quota_suffix(record: str) -> str:
+    suffix = ""
+    if limit := LIMIT_NAME_RE.search(record):
+        suffix = f' (limit "{limit[1]}")'
+    reset = reset_clock(record)
+    if isinstance(reset, datetime):
+        suffix += f" (resets at {RESET_AT_RE.search(record)[1]})"
+    elif reset is not None:
+        suffix += f" (retryAfterMs: {reset})"
+    return suffix
+
+
+def terminal_error(text: str) -> str | None:
+    """Latest native error record, not the adapter's own teardown or classification footer."""
+    for line in reversed(_records(text).split("\n")):
+        if ERROR_RECORD_RE.match(line) and not line.startswith("delegate worker: "):
+            if line.startswith("{"):
+                try:
+                    record = json.loads(line)
+                except json.JSONDecodeError:
+                    return line.strip()
+                event = record.get("event")
+                error = (event if isinstance(event, dict) else record).get("error")
+                if isinstance(error, str):
+                    return error.split("\n", 1)[0]
+                if isinstance(error, dict) and isinstance(error.get("message"), str):
+                    label = error.get("type") or error.get("name")
+                    return (f"{label}: " if label else "") + error["message"].split("\n", 1)[0]
+            return line.strip()
     return None
 
 
@@ -125,37 +194,63 @@ def _records(text: str) -> str:
                      for line in lines)
 
 
-def classify(text: str, harness: str | None = None) -> tuple[str, str] | None:
-    """(kind, reason) for a launcher-side refusal, or None for a failure the task may have caused.
+def classify(text: str, route: tuple[str, str] | None = None) -> tuple[str, str] | None:
+    """(kind, reason) for a recognized refusal, including a task-local content filter.
 
-    HARNESS, when known, is the failed launcher's: a record another harness writes then does not count.
+    ROUTE, when known, is the failed launcher's (harness, account). Another harness's plan record is not a refusal.
     """
     text = _records(text)
-    limit = LIMIT_NAME_RE.search(text)
-    suffix = f' (limit "{limit.group(1)}")' if limit else ""
-    for pattern, owner in ACCOUNT_QUOTAS:
-        if harness in (None, owner) and pattern.search(text):
-            return "rate-limited", f"account quota exhausted on {owner}{suffix}"
-    if RATE_LIMIT_RE.search("\n".join(line for line in text.split("\n") if ERROR_RECORD_RE.match(line))):
-        return "rate-limited", "rate limit or quota" + suffix
+    records = [line for line in reversed(text.split("\n")) if ERROR_RECORD_RE.match(line)]
+    for pattern, harness, account in ACCOUNT_QUOTAS:
+        if route is not None and (route[0] != harness or account not in (None, route[1])):
+            continue
+        matching = [line for line in records if pattern.match(line)]
+        if matching:
+            record = next((line for line in matching if reset_clock(line) is not None), matching[0])
+            return "rate-limited", f"account quota exhausted on {harness}{_quota_suffix(record)}"
+    if any(CONTENT_FILTER.match(line) for line in records) and (route is None or route[0] == "opencode"):
+        return "content-filtered", "task text; bars no launcher"
+    for line in records:
+        if RATE_LIMIT_RE.search(line) and not any(pattern.match(line) for pattern, _, _ in ACCOUNT_QUOTAS):
+            return "rate-limited", "rate limit or quota" + _quota_suffix(line)
     for pattern, reason, owner in QUARANTINES:
-        if (owner is None or harness in (None, owner)) and pattern.search(text):
+        if (owner is None or route is None or route[0] == owner) and pattern.search(text):
             return "quarantined", reason
     return None
 
 
-def _tail(path: Path) -> str:
+def _command_reset_before_tail(handle: BinaryIO, offset: int, start: int, tail: bytes) -> str:
+    """Recover the native run_error immediately before run_end if a weekly quota result survived the cut."""
+    result_re = re.compile(CMD_RESULT_QUOTA.encode())
+    result = next((line for line in reversed(tail.split(b"\n")[1:]) if result_re.match(line)), None)
+    if result is None:
+        return ""
+    result_start = start + tail.rfind(result)
+    handle.seek(offset)
+    previous, penultimate = b"", b""
+    while handle.tell() < result_start:
+        penultimate, previous = previous, handle.readline()[:TAIL_BYTES]
+        if not previous:
+            return ""
+    if handle.tell() == result_start and previous.startswith(CMD_RUN_END) and re.match(CMD_RUN_ERROR.encode(), penultimate):
+        return penultimate.decode(errors="replace").rstrip("\r\n") + "\n"
+    return ""
+
+
+def failure_tail(path: Path, offset: int = 0) -> str:
+    recovered = ""
     with path.open("rb") as handle:
-        start = max(0, handle.seek(0, 2) - TAIL_BYTES)
-        handle.seek(max(0, start - 1))
+        start = max(offset, handle.seek(0, 2) - TAIL_BYTES)
+        handle.seek(max(offset, start - 1))
         tail = handle.read()
-    # A tail that starts inside a line would put that line's middle, perhaps quoted text, at a line start: mark
-    # it unless the byte before it ends a line. It stays readable for a record that ends it (Claude's result).
-    if start:
-        before, tail = tail[:1], tail[1:]
-        if before != b"\n":
-            tail = CUT.encode() + tail
-    return tail.decode(errors="replace")
+        # A cut inside a line would make quoted text appear at column zero. The sentinel prevents this while
+        # preserving Claude's result array suffix. A recognized Command Code result can recover its adjacent clock.
+        if start > offset:
+            before, tail = tail[:1], tail[1:]
+            if before != b"\n":
+                recovered = _command_reset_before_tail(handle, offset, start, tail)
+                tail = CUT.encode() + tail
+    return recovered + tail.decode(errors="replace")
 
 
 if __name__ == "__main__":
@@ -163,6 +258,6 @@ if __name__ == "__main__":
     parser.add_argument("--launcher", help="the launcher that failed, as run-worker.sh names it")
     parser.add_argument("files", nargs="+", type=Path)
     arguments = parser.parse_args()
-    found = classify("\n".join(_tail(path) for path in arguments.files),
-                     harness(arguments.launcher) if arguments.launcher else None)
+    found = classify("\n".join(failure_tail(path) for path in arguments.files),
+                     launcher_route(arguments.launcher) if arguments.launcher else None)
     print(f"{found[0]}: {found[1]}" if found else "unclassified")

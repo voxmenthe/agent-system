@@ -64,7 +64,8 @@ def _windows(output: str) -> dict[tuple[str, str], list[str]]:
             continue
         name, percent = window[1], window[2] or window[3]
         account = re.search(r"\((codex2|grok2|grok3|agy2)\)", name)
-        warnings = windows.setdefault((harness, account[1] if account else ""), [])
+        account_name = account[1] if account else "go" if harness == "opencode" else ""
+        warnings = windows.setdefault((harness, account_name), [])
         if float(percent) > 80:
             reset = re.search(r"\b(?:resets|renews)\b[^;·]*", line)
             detail = f"{name} {percent}% used"

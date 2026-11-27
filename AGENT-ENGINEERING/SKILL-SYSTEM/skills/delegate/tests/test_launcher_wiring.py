@@ -150,7 +150,7 @@ class LauncherWiringTests(unittest.TestCase):
         for launcher in OPENCODE_PAID:
             with self.subTest(launcher=launcher):
                 self.assertEqual("opencode-json", modes.get(launcher))
-                self.assertEqual(("opencode", "-"), routes.get(launcher))
+                self.assertEqual(("opencode", "go"), routes.get(launcher))
                 self.assertIn(launcher, wave_allowlist)
 
         for launcher in COMMAND_PAID:

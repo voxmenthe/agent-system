@@ -1,6 +1,7 @@
 """The refusal table on the error lines of real failures; no model calls."""
 from __future__ import annotations
 
+import json
 from pathlib import Path
 import subprocess
 import sys
@@ -25,6 +26,20 @@ tokens used
 GO_QUOTA = ('{"type":"error","error":{"type":"provider.quota","message":"Go usage limit exceeded","status":429,'
             '"response":{"body":"{\\"type\\":\\"error\\",\\"error\\":{\\"type\\":\\"GoUsageLimitError\\"},'
             '\\"metadata\\":{\\"limitName\\":\\"weekly\\"}}"}}}\n')
+# 11-24/25, cmqx/cmds: Command Code's run_error event carries a precise reset alongside a rounded text notice.
+CMD_WEEKLY = ('Error: You\'ve reached your weekly usage limit. Resets in 5d 8h (Mon 12:33 PM).\n'
+              '{"type":"event","event":{"type":"run_error","error":{"name":"TransportError","message":'
+              '"POST /alpha/generate → 429 error: You\'ve reached your weekly usage limit for your plan. '
+              'Your limit resets at 2026-11-30T20:33:44.252Z. Please wait for the window to reset or upgrade your plan to continue."}}}\n')
+# 11-25 evening, calendar-verified.err: Go's new error type and a millisecond delay of nearly four days.
+GO_WEEKLY = ('{"type":"error","timestamp":1795662557933,"sessionID":"ses_test","error":'
+             '{"type":"provider.go-limit","message":"OpenCode Go weekly usage limit reached. Switch to a free model, '
+             'or turn on Extra Usage on the Go page in OpenCode Console to keep going.","status":429,'
+             '"response":{"body":"{\\"metadata\\":{\\"limitName\\":\\"weekly\\"}}"},"retryAfterMs":334247000}}\n')
+# 11-25 premarket, tsla-spcx-facts.err: a request-content refusal, not a launcher fault.
+CONTENT_FILTER = ('{"type":"error","timestamp":1795609797122,"sessionID":"ses_test","error":'
+                  '{"type":"provider.content-filter","message":"Upstream request failed: [DataInspectionFailed] '
+                  'Input text data may contain inappropriate content.","status":400}}\n')
 # 10-28, cmds (challenge-checked-b.err), trimmed: signed out, after 4 s.
 SIGNED_OUT = """delegate worker: cmds failed with status 3
 Reasoning effort set to max for DeepSeek V4.1 Flash (latest).
@@ -75,6 +90,32 @@ class RefusalTests(unittest.TestCase):
                               + [(GO_QUOTA, 'opencode (limit "weekly")')]):
             with self.subTest(harness=harness):
                 self.assertEqual(f"rate-limited: account quota exhausted on {harness}\n", self.classify(text))
+
+    def test_plan_reset_clocks_and_content_filters_from_native_error_records(self) -> None:
+        cases = (
+            (CMD_WEEKLY, "cmqx", "rate-limited: account quota exhausted on cmd (resets at 2026-11-30T20:33:44.252Z)"),
+            (GO_WEEKLY, "ocq4h", 'rate-limited: account quota exhausted on opencode (limit "weekly") (retryAfterMs: 334247000)'),
+            (CONTENT_FILTER, "ocq4x", "content-filtered: task text; bars no launcher"),
+        )
+        for record, launcher, verdict in cases:
+            with self.subTest(launcher=launcher):
+                self.assertEqual(verdict + "\n", self.classify(record, launcher=launcher))
+                for quoted in ("  " + record.replace("\n", "\n  "),
+                               '{"type":"tool_use","part":{"text":' + json.dumps(record) + '}}\n',
+                               '{"type":"result","subtype":"error","finalText":' + json.dumps(record)
+                               + ',"error":"Error: context window exceeded"}\n'):
+                    self.assertEqual("unclassified\n", self.classify(quoted, launcher=launcher))
+        self.assertEqual("unclassified\n", self.classify(GO_WEEKLY, launcher="ochy4flash"))
+
+    def test_command_code_reset_immediately_before_oversize_run_end(self) -> None:
+        # The actual 11-24 error's run_end echoed a 96,951-byte task/next-state event before the final result.
+        run_end = '{"type":"event","event":{"type":"run_end","result":{"text":"' + "x" * 97000 + '"}}}\n'
+        result = ('{"type":"result","subtype":"error","sessionId":"ses_test","finalText":"",'
+                  '"error":"Error: You\'ve reached your weekly usage limit. Resets in 5d 8h (Mon 12:33 PM)."}\n')
+        self.assertEqual("rate-limited: account quota exhausted on cmd (resets at 2026-11-30T20:33:44.252Z)\n",
+                         self.classify(CMD_WEEKLY + run_end + result, launcher="cmqx"))
+        self.assertEqual("rate-limited: account quota exhausted on cmd\n",
+                         self.classify(CMD_WEEKLY + 'unrelated transcript\n' + run_end + result, launcher="cmqx"))
 
     def test_other_rate_limits_stay_with_their_launcher(self) -> None:
         # None names a whole account's allowance: a bare 429, one model's rate limit, a one-model usage limit
@@ -135,8 +176,7 @@ class RefusalTests(unittest.TestCase):
                                  self.classify(claude.replace("PAD", pad), launcher="ccfx"))
         success = '[{"type":"result","subtype":"success","is_error":false,"result":"rate limit exceeded"}]\n'
         self.assertEqual("unclassified\n", self.classify(success, launcher="ccfx"))
-        # Another harness's record, printed by a Codex worker's transcript, is not that worker's refusal; the
-        # market pool, which names no launcher, still reads every record.
+        # Another harness's record, printed by a Codex worker's transcript, is not that worker's refusal.
         reason = "no route to the launcher's model (a launcher definition to update; not repaired here)"
         cat = "exec cat E.stderr\n" + NO_ROUTE
         self.assertEqual("unclassified\n", self.classify(cat, launcher="cax"))
@@ -144,8 +184,7 @@ class RefusalTests(unittest.TestCase):
         self.assertEqual(f"quarantined: {reason}\n", self.classify(cat))
         codex = ("exec cat E.stderr\ndelegate worker: ocargh failed with status 1\n" + GO_QUOTA
                  + "ERROR: context window exceeded\ntokens used\n68,344\n")
-        # Bars the one launcher, not the OpenCode account (error records are not yet tied to their harness).
-        self.assertEqual('rate-limited: rate limit or quota (limit "weekly")\n', self.classify(codex, launcher="cax"))
+        self.assertEqual("unclassified\n", self.classify(codex, launcher="cax"))
         self.assertEqual("unclassified\n", self.classify("exec cat cmds.err\n" + SIGNED_OUT, launcher="cax"))
         self.assertTrue(self.classify(SIGNED_OUT, launcher="cmds").startswith("quarantined: signed out"))
         # Command Code's error result carries the model's own final text, which may quote a quota message.
@@ -188,12 +227,10 @@ class RefusalTests(unittest.TestCase):
     def test_codex_api_key_launchers_keep_their_own_harness(self) -> None:
         self.assertEqual("rate-limited: account quota exhausted on codex\n",
                          self.classify(CODEX_QUOTA, launcher="cdxk:cdx"))
-        self.assertEqual('rate-limited: rate limit or quota (limit "weekly")\n',
-                         self.classify(GO_QUOTA, launcher="cdxk:cdx"))
+        self.assertEqual("unclassified\n", self.classify(GO_QUOTA, launcher="cdxk:cdx"))
         self.assertEqual("quarantined: signed out: Antigravity account 2 (a user action; not repaired here)\n",
                          self.classify("Antigravity account 2 is not signed in\n", launcher="agk:agnh"))
-        self.assertEqual("rate-limited: rate limit or quota\n",
-                         self.classify(CODEX_QUOTA, launcher="agk:agnh"))
+        self.assertEqual("unclassified\n", self.classify(CODEX_QUOTA, launcher="agk:agnh"))
 
     def test_an_unseen_message_is_unclassified(self) -> None:
         self.assertEqual("unclassified\n", self.classify("Error: context window exceeded\n"))
@@ -204,10 +241,11 @@ class RefusalTests(unittest.TestCase):
         self.assertEqual("rate-limited: rate limit or quota\n", self.classify(limited))
 
     def test_the_market_pool_can_load_the_table(self) -> None:
-        # scripts/grok-X-adhoc/delegate_pool.py runs this source with only a __name__, and calls classify(text).
-        table = {"__name__": "refusals"}
+        # scripts/grok-X-adhoc/delegate_pool.py runs this source without writing into the managed skill.
+        table = {"__name__": "refusals", "__file__": str(REFUSALS)}
         exec(compile(REFUSALS.read_text(), str(REFUSALS), "exec"), table)
-        self.assertEqual(("rate-limited", "account quota exhausted on codex"), table["classify"](CODEX_QUOTA))
+        route = table["launcher_route"]("cdx")
+        self.assertEqual(("rate-limited", "account quota exhausted on codex"), table["classify"](CODEX_QUOTA, route))
 
     def test_every_file_is_read(self) -> None:
         self.assertEqual("rate-limited: account quota exhausted on codex\n", self.classify("no answer\n", CODEX_QUOTA))

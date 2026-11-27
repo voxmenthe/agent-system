@@ -235,7 +235,7 @@ class WaveUsageTests(unittest.TestCase):
             ("kimb kimbs", "Kimi", "kimi"),
             ("dglm dopmm doph dopx dopm", "Devin", "devin"),
             ("clm clmbe ctx ctxb ctm ctmb cdmbe cammb cdmM cdxX camM caxX", "Codex", "codex"),
-            ("ocs ommp ocargh ochy ocq4h ocq4x ochy4flash oclongcat ociceman pihy4flash pilongcat piiceman", "OpenCode Go", "opencode"),
+            ("ocs ommp ocargh ochy ocq4h ocq4x", "OpenCode Go", "opencode"),
             ("cmds cmm26p cmqh cmqx cms cmhy cmdglyph cmdflint", "Command Code", "cmd"),
             ("csm csu csx cshh csmm csbm chm chbh ccx ccbfh ccmM ccxX", "Claude", "claude"),
         ]
@@ -248,11 +248,11 @@ class WaveUsageTests(unittest.TestCase):
                                   f"({', '.join(launchers.split())})"], self.warnings())
                 self.assertEqual(["-a", harness], self.arguments.read_text().splitlines())
 
-    def test_a_zen_free_model_is_not_on_the_opencode_go_plan(self) -> None:
-        # ocmm26 runs opencode/mimo-v2.6-flash-free, outside the Go plan whose windows usage reports.
-        self.manifest("ocs", "ocmm26")
+    def test_open_code_free_models_are_not_on_the_metered_go_quota(self) -> None:
+        self.manifest("ocs", "ochy4flash", "pihy4flash", "ocmm26")
         self.output.write_text("── OpenCode Go ───\n  Weekly: [bar] 91% used\n", encoding="utf-8")
         self.assertEqual(["wave-usage: opencode Weekly 91% used (ocs)",
+                          "wave-usage: opencode (free) quota unknown (ochy4flash, pihy4flash)",
                           "wave-usage: opencode (zen) quota unknown (ocmm26)"], self.warnings())
         # cck* runs on ANTHROPIC_API_KEY, outside the Claude OAuth subscription whose windows usage reports.
         self.manifest("ccx", "cckx", "cckbfh")

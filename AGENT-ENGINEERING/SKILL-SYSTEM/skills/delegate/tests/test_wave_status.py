@@ -118,6 +118,7 @@ class WaveStatusTests(unittest.TestCase):
         self.worker("rate", "1", stderr="large diagnostic body\n" * 40000 +
                     "delegate worker: failure class: rate-limited: quota exhausted\n\n  \n")
         self.worker("quarantined", "2", stderr="delegate worker: failure class: quarantined: paused\n")
+        self.worker("filtered", "1", stderr="delegate worker: failure class: content-filtered: task text; bars no launcher\n")
         self.worker("unclassified", "3", stderr="delegate worker: failure class: unclassified\n")
         self.worker("timeout", "timeout", stderr="delegate worker: failure class: rate-limited: stale\n")
         self.worker("old", "4", stderr="old adapter diagnostics\n")
@@ -128,9 +129,10 @@ class WaveStatusTests(unittest.TestCase):
                   for path in self.jobs.iterdir()}
         result = self.run_status()
         rows = {row[1]: row for row in self.rows(result)}
-        self.assertIn("8 failed (1 rate-limited, 1 quarantined, 5 unclassified, 1 timeout)", result.stdout)
+        self.assertIn("9 failed (1 rate-limited, 1 quarantined, 1 content-filtered, 5 unclassified, 1 timeout)", result.stdout)
         self.assertEqual("exit 1; rate-limited: quota exhausted", rows["rate"][3])
         self.assertEqual("exit 2; quarantined: paused", rows["quarantined"][3])
+        self.assertEqual("exit 1; content-filtered: task text; bars no launcher", rows["filtered"][3])
         self.assertEqual("exit 3; unclassified", rows["unclassified"][3])
         self.assertEqual("timeout", rows["timeout"][3])
         for name, status in (("old", "4"), ("not-last", "5"), ("missing-stderr", "6"),

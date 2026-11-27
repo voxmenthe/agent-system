@@ -10,12 +10,12 @@ import re
 import sys
 
 STATES = ("failed", "blocked", "unsettled", "not-started", "returned")
-CLASSES = ("rate-limited", "quarantined", "unclassified", "timeout")
+CLASSES = ("rate-limited", "quarantined", "content-filtered", "unclassified", "timeout")
 LABEL = r"^[ \t]*(?:[-+*][ \t]+)?[*_]*{}[*_]*[ \t]*:[*_]*[ \t]*"
 BLOCKED = re.compile(LABEL.format("STATUS") + r"[*_]*blocked\b", re.I | re.M)
 BLOCKERS = re.compile(LABEL.format("BLOCKERS") + r"\s*(.*)", re.I | re.M)
 FAILURE = re.compile(
-    r"delegate worker: failure class: (rate-limited: .+|quarantined: .+|unclassified)"
+    r"delegate worker: failure class: ((?:rate-limited|quarantined|content-filtered): .+|unclassified)"
 )
 
 

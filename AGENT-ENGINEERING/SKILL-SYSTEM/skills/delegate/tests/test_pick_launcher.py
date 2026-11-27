@@ -190,7 +190,9 @@ class ResolutionParityTests(unittest.TestCase):
         definitions = module.parse_definitions(declared)
         expected = {"-": (module.SUBSCRIPTION, 1), "agy2": (module.SUBSCRIPTION, 2), "codex2": (module.SUBSCRIPTION, 2),
                     "grok2": (module.SUBSCRIPTION, 2), "grok3": (module.SUBSCRIPTION, 3),
-                    "key": (module.METERED, 1), "zen": (module.FREE, 1)}
+                    "key": (module.METERED, 1), "zen": (module.FREE, 1),
+                    # Free Go routes use the same provider transport, not the paid quota allowance.
+                    "go": (module.SUBSCRIPTION, 1), "free": (module.SUBSCRIPTION, 1)}
         rows = (SKILL / "scripts/launcher-routes.tsv").read_text().splitlines()[1:]
         checked = 0
         for harness, account, launchers in (row.split("\t") for row in rows):

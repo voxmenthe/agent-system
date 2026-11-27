@@ -325,7 +325,6 @@ class WaveTests(unittest.TestCase):
         self.assertFalse((jobs / "c.out").exists())
 
     def test_an_exhausted_account_bars_its_launchers_and_nothing_else(self) -> None:
-        exhausted = "delegate worker: failure class: rate-limited: account quota exhausted on codex\n"
         cases = {
             # The primary Codex account is out: its other launchers stop; codex2 and other harnesses go on.
             "primary": ((("cdm", "a"), ("cax", "b"), ("cdm2", "c"), ("agg", "d"), ("cdm", "e")),
@@ -343,6 +342,9 @@ class WaveTests(unittest.TestCase):
                         ["1", "not-started (rate-limited on account codex:key)", "0", "0",
                          "not-started (rate-limited on account codex:key)"],
                         "cdxk:cdx exhausted account codex:key (a)"),
+            "opencode go": ((("ocq4h", "a"), ("ocq4x", "b"), ("ochy4flash", "c"), ("pihy4flash", "d")),
+                            ["1", "not-started (rate-limited on account opencode:go)", "0", "0"],
+                            "ocq4h exhausted account opencode:go (a)"),
             # Another harness's account line is not this account's exhaustion: only the launcher stops.
             "other harness": ((("agg", "a"), ("aggb", "b"), ("agg", "c")),
                               ["1", "0", "not-started (rate-limited on agg)"], "agg was rate-limited (a)"),
@@ -351,7 +353,9 @@ class WaveTests(unittest.TestCase):
             with self.subTest(case):
                 for path in self.control.iterdir():
                     path.unlink()
-                (self.control / "a.class").write_text(exhausted)
+                harness = "opencode (retryAfterMs: 334247000)" if case == "opencode go" else "codex"
+                (self.control / "a.class").write_text(
+                    f"delegate worker: failure class: rate-limited: account quota exhausted on {harness}\n")
                 for _, name in workers:
                     self.release(name, 1 if name == "a" else 0)
                 text = self.manifest_text(()) + "".join(f"@@ launcher={launcher} name={name}\n"
@@ -383,13 +387,14 @@ class WaveTests(unittest.TestCase):
 
     def test_other_failures_do_not_stop_a_launcher(self) -> None:
         for name, line in (("a", "delegate worker: failure class: unclassified\n"),
-                           ("b", "delegate worker: failure class: quarantined: no credential\nlater line\n")):
+                           ("b", "delegate worker: failure class: quarantined: no credential\nlater line\n"),
+                           ("c", "delegate worker: failure class: content-filtered: task text; bars no launcher\n")):
             (self.control / f"{name}.class").write_text(line)
             self.release(name, 1)
-        self.release("c")
-        result, jobs = self.run_wave(self.manifest_text(("a", "b", "c")), "--jobs", "1")
+        self.release("d")
+        result, jobs = self.run_wave(self.manifest_text(("a", "b", "c", "d")), "--jobs", "1")
         self.assertEqual(1, result.returncode, result.stderr)
-        self.assertEqual(["1", "1", "0"], [row["exit"] for row in self.rows(jobs)])
+        self.assertEqual(["1", "1", "1", "0"], [row["exit"] for row in self.rows(jobs)])
         self.assertNotIn("will not start", result.stderr)
 
     def test_default_cap_is_four(self) -> None:
@@ -723,11 +728,9 @@ class WaveTests(unittest.TestCase):
         self.assertNotIn("PRIVATE", (jobs / "a.stderr").read_text())
         self.assertTrue((jobs / "a.stderr").read_text().endswith("\ndelegate worker: failure class: unclassified\n"))
         self.assertEqual("19", self.rows(jobs)[0]["exit"])
-        # The 10-24 Codex quota line: run-worker.sh classifies it, and the wave stops using the launcher.
-        # The diagnostics end without a newline, and the class line still gets a line of its own. On agg,
-        # an Antigravity launcher, Codex's account line is a rate limit like any other (it counts as an account's
-        # only from a Codex launcher), so it bars only agg, never the Antigravity account.
-        wrappers.write_text("agg() { echo 'ERROR: You’ve hit your usage limit. Upgrade to Pro' >&2; "
+        # A bare 429 classifies as launcher-only. Even when native diagnostics end with no newline,
+        # run-worker.sh prints its classification on a separate final line for the wave runner.
+        wrappers.write_text("agg() { echo 'ERROR: HTTP 429' >&2; "
                             "printf 'tokens used\\n68,344' >&2; return 1; }\n")
         result, jobs = self.run_wave(self.manifest_text(("a", "b")), "--jobs", "1")
         self.assertEqual(1, result.returncode)
