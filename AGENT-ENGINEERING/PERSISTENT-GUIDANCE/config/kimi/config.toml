@@ -55,6 +55,6 @@ oauth_host = "https://auth.kimi.ai"
 
 [experimental]
 notify_user = true
-tower = true
+tower = false
 tool-select = true
 
