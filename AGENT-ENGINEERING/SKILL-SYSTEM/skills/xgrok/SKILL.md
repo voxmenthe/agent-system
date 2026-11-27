@@ -203,8 +203,12 @@ python3 "$XGROK_WAVE" \
 
 Brief files may declare their retrieval mode via frontmatter (e.g. `mode: macro`), top comments (`# mode: macro`), or CLI fallback (`--mode harvest`). The same frontmatter, comments or manifest fields can set `effort: medium|high` (the launcher defaults to medium and refuses low, at which workers answered without searching), `model: grok-…` and `system_prompt: lean|default` for that worker; the runner validates them before launch and passes them as `XGROK_EFFORT`, `XGROK_MODEL` and `XGROK_SYSTEM_PROMPT`. `--stagger SECONDS` starts the first brief that much earlier so later workers can reuse its cached prompt prefix. `# priority: N` (an integer, lower first) orders launches; an unprioritized brief counts as 50, ties keep file order; when briefs outnumber `--max-workers` the last ones queue, and the runner warns with their names. The wave runner captures per-worker logs (`{name}.log`), JSON envelopes (`{name}-raw.json`), extracted markdown packets (`{name}-packet.md`), each finished worker's manifest entry (`{name}-result.json`, written as that worker ends), and a consolidated `manifest.json` once the last worker ends.
 
-The per-worker timeout defaults to 900 seconds; override with `--timeout` when
-the brief warrants it. Timeout cleanup stops the launcher's process group,
+The per-worker timeout defaults to 900 seconds. Inside that limit the wave gives
+Grok 600 seconds without output before its headless retry deadline, shortening
+that default for a smaller `--timeout`. A caller-set
+`GROK_HEADLESS_RETRY_DEADLINE_SECS` wins; `headless_retry_deadline_secs` in
+the manifest records the setting. A direct `xgrok` call keeps the CLI default.
+Timeout cleanup stops the launcher's process group,
 including its Grok child. A worker whose session transcript shows no native X
 tool call is recorded as failed (`x_tool_calls: 0` in the manifest), not as a
 thin success: its packet explains why but is not a silence finding. When the
@@ -234,13 +238,15 @@ post (`from:Reuters` from the transport probe, or a `<30m` post for a
 returned empty page is a working transport; an error, unknown outcome, or
 missed canary control refuses the wave with `NOT-LAUNCHED.txt` (recording
 `canary_failed` and printing the fallback order). An attempt whose session
-transcript shows no X call runs again, up to three attempts: a worker can answer
+transcript shows no X call can retry at startup, up to three attempts: a worker can answer
 without searching, while an outage fails every attempt. Its account, launcher,
 query outcome, bound canary, and consumption artifacts are saved in the run's
 `native-probe/` and keyed per account in `native-probe.json` (preserving legacy
 top-level fields from the first probed account); one successful probe is reused
-per account within that run, not between runs, and a failed probe never switches
-accounts. The record's
+per account within that run, not between runs. A late slice with no fresh control
+makes one new probe on the same account and records it separately; if it fails
+or its control is still too old, the wave refuses without launching research.
+A failed probe never switches accounts. The record's
 `outcome_source` names what was matched: "worker-reported, matched to one
 executed keyword search" only when it was, otherwise "unmatched: ..." with the
 reason (no X call executed, no worker answer, other calls), and the outcome
@@ -251,7 +257,8 @@ Pass `--detach` to run a wave in its own session (outliving calling-shell
 timeouts), inspect it with `scripts/xgrok_wave.py status WAVE_DIR`, and recover
 an interrupted wave from native session transcripts without launching new Grok
 calls via `scripts/xgrok_wave.py recover WAVE_DIR` (missing dollar costs are
-recorded as `"unavailable"`, never `$0`).
+recorded as `"unavailable"`, never `$0`). For `mkt wave --detach`, the runner
+records after-quota at exit, not when the coordinator later polls its status.
 
 Put the shared window, verified prints, method rules, and return format in one
 file and pass it with `--common-tail path.md`; the runner appends it to every
@@ -259,8 +266,8 @@ brief, launches the composed copy from `results/composed/`, and records the
 tail's sha256 in the manifest. Between brief and tail the composed copy carries a "Roster roles" block:
 the roster entry (registries and note, `--roster`, default the macro skill's roster.tsv) of each rostered
 handle the brief names, so workers copy a role instead of guessing it. Before launching (and in `--dry-run`) the runner
-refuses `_PST`/`_PDT` string query bounds outright (use `_UTC` or
-`since_time:`/`until_time:` Unix epochs), warns on string upper bounds within
+refuses `_PST`/`_PDT` string query bounds outright (use `since_time:`/`until_time:`
+Unix epochs by default; `_UTC` is an explicit fallback), warns on string upper bounds within
 60 minutes of launch, prints each brief's bound forms, refuses a macro-mode brief without a `Delegated budget:` line and any literal
 query that combines more than four `from:` handles with keyword terms, since
 such queries silently drop their time bounds; `--no-query-lint` disables the

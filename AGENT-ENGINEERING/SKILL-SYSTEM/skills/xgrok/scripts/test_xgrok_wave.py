@@ -502,6 +502,41 @@ class WaveSettingsCliTests(unittest.TestCase):
             finally:
                 self._restore_xgrok_env(saved)
 
+    def test_worker_deadline_var_and_manifest_preserve_the_caller_and_clamp_the_default(self):
+        key = "GROK_HEADLESS_RETRY_DEADLINE_SECS"
+        for timeout, override, expected in (
+            (900, None, "600"),
+            (120.5, None, "60"),
+            (60, None, "1"),
+            (0.5, None, None),
+            (120, "750", "750"),
+            (900, "0", "0"),
+        ):
+            with self.subTest(timeout=timeout, override=override), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                brief = root / "a.md"
+                brief.write_text("Objective: fake worker only.\n")
+                launcher = root / "launcher"
+                launcher.write_text(
+                    f"#!{sys.executable}\n"
+                    f"import json, os\nprint(json.dumps({{'text': 'ok', 'deadline': os.getenv({key!r})}}))\n"
+                )
+                launcher.chmod(0o755)
+                env = os.environ.copy()
+                env.pop(key, None)
+                if override is not None:
+                    env[key] = override
+                output = root / "out"
+                run = subprocess.run(
+                    [sys.executable, str(Path(xgrok_wave.__file__)), str(brief),
+                     "--xgrok-bin", str(launcher), "--output-dir", str(output), "--timeout", str(timeout)],
+                    capture_output=True, text=True, timeout=10, env=env,
+                )
+                self.assertEqual(run.returncode, 0, run.stderr)
+                self.assertEqual(json.loads((output / "a-raw.json").read_text())["deadline"], expected)
+                self.assertEqual(json.loads((output / "manifest.json").read_text())["headless_retry_deadline_secs"],
+                                 expected)
+
     def test_the_composed_brief_carries_each_rostered_handles_role(self):
         # TM (10-20): a worker labeled @tracyalloway "off-list context" although the roster lists the account; ME
         # (10-19): @traderhc's replies say "AI agent, automated reply", so its levels are not anyone's position.
@@ -910,6 +945,28 @@ def _wait_for(path: Path, seconds: float = 20) -> None:
 
 
 class WaveOutcomeCliTests(unittest.TestCase):
+    def test_lane_failure_uses_latest_grok_error_then_last_stderr_line(self):
+        deadline = "The model did not answer within 300s, the headless retry deadline."
+        current = {"type": "error", "message": "Internal error: " + json.dumps({
+            "message": deadline, "error_kind": "retry_deadline",
+        }, indent=2)}
+        direct = {"error_kind": "retry_deadline", "error": deadline}
+        for stdout, last_stderr, cause in (
+            (json.dumps({"type": "error", "message": "old error"}) + "\n" + json.dumps(current) + "\n",
+             "unhelpful stderr", f"retry_deadline: {deadline}"),
+            (json.dumps(direct, indent=2), "unhelpful stderr", f"retry_deadline: {deadline}"),
+            ("non-JSON diagnostic\n", "actual launch failure", "actual launch failure"),
+        ):
+            with self.subTest(stdout=stdout), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                stderr = "xgrok: warning: worker login mismatch\n" + last_stderr + "\n"
+                self._launcher(root, f"sys.stdout.write({stdout!r})\nsys.stderr.write({stderr!r})\nsys.exit(1)\n")
+                result = self._run(root, ["a"])
+                self.assertEqual(result.returncode, 1, result.stderr)
+                worker = json.loads((root / "out" / "a-result.json").read_text())
+                self.assertEqual(worker["error"], f"Non-zero exit code 1: {cause}")
+                self.assertIn(cause, result.stderr)
+
     def test_probe_dispatches_only_on_a_recorded_return_including_empty(self):
         for outcome in ("returned", "error", "unknown"):
             with self.subTest(outcome=outcome), tempfile.TemporaryDirectory() as tmp:
@@ -1524,7 +1581,12 @@ class PerAccountProbeAndCanaryTests(unittest.TestCase):
             "if name == 'transport':\n"
             "    ans = cfg['transport'][acct]\n"
             "    sid = f'sess-transport-{acct.lstrip(\".\")}'\n"
-            "    record_tx(sid, 'from:Reuters')\n"
+            "    if not ans.get('skip_call'):\n"
+            "        record_tx(sid, 'from:Reuters')\n"
+            "    else:\n"
+            "        transcript = grok_home / 'sessions' / 'w' / sid / 'updates.jsonl'\n"
+            "        transcript.parent.mkdir(parents=True, exist_ok=True)\n"
+            "        transcript.write_text('')\n"
             "    print(json.dumps({'text': json.dumps(ans), 'sessionId': sid, 'total_cost_usd': 0.02}))\n"
             "elif name == 'bound-canary':\n"
             "    m = re.search(r'exact query: \"([^\"]+)\"', brief_text)\n"
@@ -1665,13 +1727,13 @@ class PerAccountProbeAndCanaryTests(unittest.TestCase):
             base = [sys.executable, str(Path(xgrok_wave.__file__)), str(brief), "--xgrok-bin", str(launcher),
                     "--grok-home", str(root / ".grok"), "--transport-probe", "--late-slice"]
 
-            # Without a <30m control, late-slice canary refuses with canary_failed=True before any lane runs.
+            # Quiet market: both the initial and refresh probes only find an old post.
             r1 = subprocess.run([*base, "--output-dir", str(root / "w1")], capture_output=True, text=True, timeout=20)
             self.assertEqual(r1.returncode, 3, r1.stderr)
             doc = json.loads((root / "native-probe.json").read_text())
             self.assertTrue(doc["canary_failed"])
             self.assertIn("<30m", doc["bound_canary"]["error"])
-            self.assertEqual((root / "launch.log").read_text().splitlines(), [".grok:transport"])
+            self.assertEqual((root / "launch.log").read_text().splitlines(), [".grok:transport", ".grok:transport"])
 
             # Add a <30m hydrated post: late-slice canary uses it, passes, and launches the lane.
             fresh_pid = _snowflake_for(datetime.now(timezone.utc) - timedelta(minutes=10))
@@ -1686,6 +1748,52 @@ class PerAccountProbeAndCanaryTests(unittest.TestCase):
             self.assertEqual(doc["bound_canary"]["control_post_id"], fresh_pid)
             self.assertEqual(doc["bound_canary"]["control_author"], "FreshAuthor")
             self.assertIn(".grok|utc|late-slice", doc["bound_canaries"])
+            self.assertEqual((root / "launch.log").read_text().splitlines(),
+                             [".grok:transport", ".grok:transport", ".grok:bound-canary", ".grok:late"])
+
+    def test_late_slice_refreshes_stale_cached_control_once_on_the_same_account(self):
+        for result in ("fresh", "still stale", "transport error", "no tool call"):
+            with self.subTest(result=result), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                now = datetime.now(timezone.utc)
+                old_post = _snowflake_for(now - timedelta(hours=3))
+                fresh_post = _snowflake_for(now - timedelta(minutes=10))
+                cached = {"account": ".grok2", "outcome": "returned", "count": 1, "post_id": old_post}
+                probe_path = root / "native-probe.json"
+                probe_path.write_text(json.dumps(cached))
+                answer = {
+                    "outcome": "error" if result == "transport error" else "returned",
+                    "count": 0 if result == "transport error" else 1,
+                    "post_id": fresh_post if result == "fresh" else old_post,
+                    "error": "429/1015" if result == "transport error" else None,
+                    "skip_call": result == "no tool call",
+                }
+                launcher = self._write_fake_transport(root, transport_outcomes={".grok2": answer})
+                brief = root / "late.md"
+                brief.write_text("Query: `from:alpha since:2026-11-22_12:00:00_UTC until:2026-11-22_18:00:00_UTC`\n")
+                out = root / "w1"
+                base = [sys.executable, str(Path(xgrok_wave.__file__)), str(brief), "--xgrok-bin", str(launcher),
+                        "--grok-home", str(root / ".grok2"), "--transport-probe", "--late-slice"]
+                wave = subprocess.run([*base, "--output-dir", str(out)], capture_output=True, text=True, timeout=20)
+                fresh = result == "fresh"
+                self.assertEqual(wave.returncode, 0 if fresh else 3, wave.stderr)
+                transports = [".grok2:transport"]
+                self.assertEqual((root / "launch.log").read_text().splitlines(),
+                                 transports + ([".grok2:bound-canary", ".grok2:late"] if fresh else []))
+                doc = json.loads(probe_path.read_text())
+                self.assertEqual(doc["accounts"][".grok2"], cached)
+                refresh, = doc["late_slice_refreshes"]
+                self.assertEqual(refresh["account"], ".grok2")
+                self.assertEqual(refresh["attempts"], 1)
+                self.assertEqual(doc["bound_canary"]["control_post_id"], fresh_post if fresh else None)
+                if not fresh:
+                    self.assertIn("refresh", (out / "NOT-LAUNCHED.txt").read_text())
+                    # The failure must not poison the prior transport result for an unbounded Latest fallback.
+                    brief.write_text("Query: `from:alpha` unbounded Latest.\n")
+                    fallback = subprocess.run([*base, "--output-dir", str(root / "w2")],
+                                              capture_output=True, text=True, timeout=20)
+                    self.assertEqual(fallback.returncode, 0, fallback.stderr)
+                    self.assertEqual((root / "launch.log").read_text().splitlines(), transports + [".grok2:late"])
 
 
 class DetachStatusAndRecoverTests(unittest.TestCase):
@@ -1717,6 +1825,59 @@ class DetachStatusAndRecoverTests(unittest.TestCase):
             self.assertEqual(st.returncode, 0, st.stderr)
             info = json.loads(st.stdout)
             self.assertEqual((info["state"], info["succeeded"], info["failed"]), ("done", 1, 0))
+
+    def test_detached_runner_records_final_quota_before_terminal_state_and_without_status_poll(self):
+        for refused in (False, True):
+            with self.subTest(refused=refused), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                home = root / "grok"
+                launcher = root / "launcher"
+                launcher.write_text(
+                    f"#!{sys.executable}\n"
+                    "import json, os, time\nfrom pathlib import Path\n"
+                    "root = Path(__file__).parent\n"
+                    "(root / 'worker.json').write_text(json.dumps({'pid': os.getpid(), 'ppid': os.getppid(), 'pgid': os.getpgrp()}))\n"
+                    "until = time.monotonic() + 10\n"
+                    "while not (root / 'release').exists() and time.monotonic() < until:\n"
+                    "    time.sleep(0.02)\n"
+                    + ("raise SystemExit(1)\n" if refused else "print(json.dumps({'text': 'done'}))\n")
+                )
+                launcher.chmod(0o755)
+                recorder = root / "grok_account.py"
+                recorder.write_text(
+                    "import json, sys\nfrom pathlib import Path\n"
+                    "root = Path(__file__).parent\n"
+                    "assert not (root / 'wave1' / 'manifest.json').exists()\n"
+                    "assert not (root / 'wave1' / 'NOT-LAUNCHED.txt').exists()\n"
+                    "assert sys.argv[1] == '--record-at-exit'\n"
+                    "assert sys.argv[3:] == ['--home', str(root / 'grok')]\n"
+                    "quota = Path(sys.argv[2])\n"
+                    "rows = json.loads(quota.read_text()) + [{'label': 'after'}]\n"
+                    "quota.write_text(json.dumps(rows))\n"
+                )
+                quota = root / "wave1-quota.json"
+                quota.write_text('[{"label": "before"}]')
+                brief = root / "a.md"
+                brief.write_text("Objective: detached worker.\n")
+                out = root / "wave1"
+                run = subprocess.run(
+                    [sys.executable, str(Path(xgrok_wave.__file__)), str(brief), "--xgrok-bin", str(launcher),
+                     "--grok-home", str(home), "--output-dir", str(out), "--detach",
+                     "--record-after-quota", str(recorder), str(quota), *(["--transport-probe"] if refused else [])],
+                    capture_output=True, text=True, timeout=5,
+                )
+                self.assertEqual(run.returncode, 0, run.stderr)
+                try:
+                    _wait_for(root / "worker.json", seconds=5)
+                    worker = json.loads((root / "worker.json").read_text())
+                    runner = json.loads((out / "runner.json").read_text())
+                    self.assertEqual((worker["ppid"], worker["pgid"]), (runner["pid"], worker["pid"]))
+                    self.assertEqual([row["label"] for row in json.loads(quota.read_text())], ["before"])
+                finally:
+                    (root / "release").touch()
+                terminal_path = "NOT-LAUNCHED.txt" if refused else "manifest.json"
+                _wait_for(out / terminal_path, seconds=10)
+                self.assertEqual([row["label"] for row in json.loads(quota.read_text())], ["before", "after"])
 
     def test_recover_reconstructs_packets_and_audited_manifest_with_unavailable_cost_and_zero_grok_calls(self):
         with tempfile.TemporaryDirectory() as tmp:

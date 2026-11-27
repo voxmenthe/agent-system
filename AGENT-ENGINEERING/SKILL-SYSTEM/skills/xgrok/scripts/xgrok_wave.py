@@ -34,8 +34,10 @@ from __future__ import annotations
 import argparse
 from collections.abc import Iterator
 from concurrent.futures import CancelledError, FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
+import fcntl
 import hashlib
 import json
 import os
@@ -45,6 +47,7 @@ import shutil
 import signal
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 from typing import Any
@@ -56,6 +59,9 @@ VALID_MODES = {"harvest", "whathappened", "list-summary", "macro", "dlresearch",
 DEFAULT_MODE = "harvest"
 DEFAULT_MAX_WORKERS = 8
 DEFAULT_TIMEOUT_SECONDS = 900.0
+HEADLESS_DEADLINE_ENV = "GROK_HEADLESS_RETRY_DEADLINE_SECS"
+HEADLESS_DEADLINE_FIELD = "headless_retry_deadline_secs"
+DEFAULT_HEADLESS_DEADLINE_SECONDS = 600
 DEFAULT_STAGGER_SECONDS = 0.0
 
 DEFAULT_ABORT_AFTER = 2
@@ -1253,6 +1259,49 @@ def audit_query_clocks(calls: list[dict] | None, window: dict | None, launch: da
     return audited
 
 
+def _headless_retry_deadline(timeout_seconds: float) -> str | None:
+    if HEADLESS_DEADLINE_ENV in os.environ:
+        return os.environ[HEADLESS_DEADLINE_ENV]
+    # The CLI accepts whole seconds and 0 disables the deadline. For a subsecond
+    # (or one-second) worker timeout, the outer timer is the only suitable limit.
+    if timeout_seconds > 1:
+        return str(int(min(DEFAULT_HEADLESS_DEADLINE_SECONDS, max(1, timeout_seconds - 60))))
+    return None
+
+
+def _worker_error_detail(stdout: str, stderr: str) -> str:
+    # Current Grok wraps the provider's error object in its CLI envelope's
+    # message string; some builds expose error_kind/error at the top level.
+    for candidate in (stdout, *reversed(stdout.splitlines())):
+        try:
+            envelope = json.loads(candidate)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(envelope, dict):
+            continue
+        kind = envelope.get("error_kind")
+        error = envelope.get("error")
+        if not (envelope.get("type") == "error" or kind or error):
+            continue
+        message = envelope.get("message") or error
+        details = error if isinstance(error, dict) else None
+        if isinstance(message, str) and message.startswith("Internal error: "):
+            try:
+                inner = json.loads(message.removeprefix("Internal error: "))
+            except json.JSONDecodeError:
+                pass
+            else:
+                if isinstance(inner, dict):
+                    details = inner
+        if details is not None:
+            kind = kind or details.get("error_kind")
+            message = details.get("message") or message
+        detail = ": ".join(str(value).strip() for value in (kind, message) if value)
+        if detail:
+            return detail
+    return ((stderr.strip() or stdout.strip()).splitlines() or [""])[-1].strip()
+
+
 def _execute_worker(
     job: BriefJob,
     xgrok_bin: Path,
@@ -1279,6 +1328,9 @@ def _execute_worker(
         cmd.extend(["--grok-home", grok_home])
     cmd.append(str(brief_to_launch))
     worker_env = os.environ.copy()
+    headless_deadline = _headless_retry_deadline(timeout_seconds)
+    if headless_deadline is not None:
+        worker_env[HEADLESS_DEADLINE_ENV] = headless_deadline
     if job.effort is not None:
         worker_env["XGROK_EFFORT"] = job.effort
     if job.model is not None:
@@ -1405,9 +1457,8 @@ def _execute_worker(
                     "error": err_msg,
                 }
         else:
-            err_snippet = (res.stderr.strip() or res.stdout.strip())[:200]
-            err_msg = f"Non-zero exit code {res.returncode}: {err_snippet}"
-            sys.stderr.write(f"[{job.name}] FAILED (exit {res.returncode}) in {elapsed:.1f}s\n")
+            err_msg = f"Non-zero exit code {res.returncode}: {_worker_error_detail(res.stdout, res.stderr)[:200]}"
+            sys.stderr.write(f"[{job.name}] FAILED ({err_msg}) in {elapsed:.1f}s\n")
             sys.stderr.flush()
             return {
                 "name": job.name,
@@ -1542,7 +1593,7 @@ def run_single_worker(job: BriefJob, xgrok_bin: Path, output_dir: Path, timeout_
 
 
 NATIVE_PROBE_ATTEMPTS = 3  # attempts whose transcript shows no X call, before the probe refuses
-PROBE_CONTAINER_KEYS = frozenset({"accounts", "bound_canaries", "bound_canary", "canary_failed"})
+PROBE_CONTAINER_KEYS = frozenset({"accounts", "bound_canaries", "bound_canary", "canary_failed", "late_slice_refreshes"})
 
 
 def _account_name(grok_home: str | None) -> str:
@@ -1567,10 +1618,15 @@ def _load_probe_doc(path: Path) -> dict[str, Any] | None:
     return doc
 
 
-def _write_probe_doc(path: Path, doc: dict[str, Any]) -> None:
-    staging = path.with_name(f".native-probe-{os.getpid()}.tmp")
-    staging.write_text(json.dumps(doc, indent=2) + "\n", encoding="utf-8")
-    os.replace(staging, path)
+@contextmanager
+def _edit_probe_doc(path: Path) -> Iterator[dict[str, Any]]:
+    # Overlapping detached waves share this ledger. Lock the read-modify-write
+    # only, never the Grok calls; readers always see a whole JSON document.
+    with path.with_suffix(".lock").open("a", encoding="utf-8") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        doc = _load_probe_doc(path) or {"accounts": {}, "bound_canaries": {}}
+        yield doc
+        _write_json_atomic(path, doc)
 
 
 def _extract_json_object(text: str) -> dict[str, Any]:
@@ -1585,11 +1641,17 @@ def _extract_json_object(text: str) -> dict[str, Any]:
     return {}
 
 
-def native_probe(workdir: Path, xgrok_bin: Path, grok_home: str | None) -> tuple[bool, str]:
+def native_probe(
+    workdir: Path,
+    xgrok_bin: Path,
+    grok_home: str | None,
+    *,
+    force_refresh: bool = False,
+) -> tuple[bool, str]:
     path = workdir / "native-probe.json"
     account = _account_name(grok_home)
     existing_doc = _load_probe_doc(path)
-    if existing_doc is not None and account in existing_doc["accounts"]:
+    if not force_refresh and existing_doc is not None and account in existing_doc["accounts"]:
         prior = existing_doc["accounts"][account]
         ok = prior.get("outcome") == "returned"
         return ok, f"recorded native probe: {prior.get('outcome')} on {account} ({path})"
@@ -1602,7 +1664,12 @@ def native_probe(workdir: Path, xgrok_bin: Path, grok_home: str | None) -> tuple
     }
     base_dir = workdir / "native-probe"
     base_dir.mkdir(exist_ok=True)
-    directory = base_dir if not (base_dir / "transport.md").exists() else base_dir / (account.lstrip(".") or "account")
+    account_dir = account.lstrip(".") or "account"
+    if force_refresh:
+        directory = Path(tempfile.mkdtemp(prefix=f"refresh-{account_dir}-", dir=base_dir))
+        record["artifact_dir"] = str(directory.relative_to(workdir))
+    else:
+        directory = base_dir if not (base_dir / "transport.md").exists() else base_dir / account_dir
     directory.mkdir(exist_ok=True)
     brief = directory / "transport.md"
     # It asks for a post ID only the tool can supply; a bare status template was often answered without a search.
@@ -1614,9 +1681,11 @@ def native_probe(workdir: Path, xgrok_bin: Path, grok_home: str | None) -> tuple
             'code/message. unknown: no tool response came back. A post ID can only come from the tool response.')
     brief.write_text(text, encoding="utf-8")
     # High, not the lanes' medium: at medium the probe's one search was skipped in 5 of 22 attempts, at high in 0 of 30.
-    # Only a zero-call attempt (its transcript proves it) runs again: an outage never searches.
+    # A startup probe may retry a verified zero-call attempt. A late-slice
+    # refresh is opportunistic: make just one attempt, even after a skipped call.
     cost = 0.0
-    for attempt in range(1, NATIVE_PROBE_ATTEMPTS + 1):
+    attempt_limit = 1 if force_refresh else NATIVE_PROBE_ATTEMPTS
+    for attempt in range(1, attempt_limit + 1):
         attempt_dir = directory if attempt == 1 else directory / f"retry-{attempt - 1}"
         attempt_dir.mkdir(exist_ok=True)
         result = run_single_worker(BriefJob("transport", brief, "harvest", text, effort="high"), xgrok_bin,
@@ -1659,14 +1728,18 @@ def native_probe(workdir: Path, xgrok_bin: Path, grok_home: str | None) -> tuple
             if record["error"] or calls[0]["outcome"] == "error":
                 record["outcome"] = "error"
 
-    doc = _load_probe_doc(path)
-    if doc is None:
-        doc = {**record, "accounts": {account: record}, "bound_canaries": {}}
-    else:
-        doc["accounts"][account] = record
-    _write_probe_doc(path, doc)
+    with _edit_probe_doc(path) as doc:
+        if force_refresh:
+            # A failed refresh must not poison the startup probe for the
+            # same-account unbounded Latest fallback.
+            doc.setdefault("late_slice_refreshes", []).append(record)
+        else:
+            if "account" not in doc:
+                doc.update(record)
+            doc["accounts"][account] = record
+    reason = record.get("error") or (record["outcome_source"] if record["outcome"] != "returned" else "")
     return record["outcome"] == "returned", (
-        f"native probe {record['outcome']} on {account}: {record.get('error', '')} ({path})"
+        f"native {'refresh' if force_refresh else 'probe'} {record['outcome']} on {account}: {reason} ({path})"
     )
 
 
@@ -1702,6 +1775,11 @@ def _find_canary_control(
     if doc:
         accounts_map = doc.get("accounts") if isinstance(doc.get("accounts"), dict) else {}
         candidates = []
+        if max_age is not None:
+            candidates.extend(
+                rec for rec in reversed(doc.get("late_slice_refreshes", []))
+                if rec.get("account") == account and rec.get("outcome") == "returned"
+            )
         if account in accounts_map:
             candidates.append(accounts_map[account])
         elif doc.get("account") == account:
@@ -1715,7 +1793,7 @@ def _find_canary_control(
             raw_pid = acct.get("post_id")
             pid_str = str(raw_pid).strip() if isinstance(raw_pid, (str, int)) and not isinstance(raw_pid, bool) else ""
             created = snowflake_time(pid_str) if pid_str else None
-            if created is not None and created <= launch and (max_age is None or launch - created <= max_age):
+            if created is not None and created <= launch and (max_age is None or launch - created < max_age):
                 return ("Reuters", pid_str, created)
     hydrated_dir = workdir / "hydrated"
     best: tuple[datetime, str, str] | None = None
@@ -1731,7 +1809,7 @@ def _find_canary_control(
             created = snowflake_time(pid)
             if created is None or created > launch:
                 continue
-            if max_age is not None and launch - created > max_age:
+            if max_age is not None and launch - created >= max_age:
                 continue
             user = item.get("user") if isinstance(item.get("user"), dict) else {}
             author = str(user.get("screen_name") or item.get("author") or item.get("handle") or "").lstrip("@").strip()
@@ -1754,6 +1832,13 @@ def _format_canary_query(author: str, created_at: datetime, launch: datetime, bo
     if bound_form == "date-only":
         return f"from:{author} since:{lo:%Y-%m-%d} until:{(hi + timedelta(days=1)):%Y-%m-%d}"
     return f"from:{author} since:{lo:%Y-%m-%d_%H:%M:%S}_UTC until:{hi:%Y-%m-%d_%H:%M:%S}_UTC"
+
+
+def _record_bound_canary(path: Path, key: str, entry: dict[str, Any]) -> None:
+    with _edit_probe_doc(path) as doc:
+        doc["bound_canaries"][key] = entry
+        doc["bound_canary"] = entry
+        doc["canary_failed"] = entry["canary_failed"]
 
 
 def bound_canary(
@@ -1784,6 +1869,19 @@ def bound_canary(
     path = workdir / "native-probe.json"
     doc = _load_probe_doc(path) or {"accounts": {}, "bound_canaries": {}}
     last_entry: dict[str, Any] | None = None
+    control_reason = "no known-positive in-window control post available for bound canary"
+    control = (
+        _find_canary_control(workdir, doc, account, launch, LATE_SLICE_CONTROL_MAX_AGE) if is_late else None
+    )
+    if is_late and control is None:
+        refreshed, refresh_note = native_probe(workdir, xgrok_bin, grok_home, force_refresh=True)
+        print(refresh_note, file=sys.stderr)
+        if refreshed:
+            launch = now or datetime.now(timezone.utc)
+            control = _find_canary_control(workdir, _load_probe_doc(path), account, launch, LATE_SLICE_CONTROL_MAX_AGE)
+            control_reason = "late-slice bound canary found no <30m known-positive control post after one refresh"
+        else:
+            control_reason = f"late-slice bound canary control refresh failed: {refresh_note}"
 
     for form in forms_to_test:
         key = f"{account}|{form}|{slice_kind}"
@@ -1797,15 +1895,9 @@ def bound_canary(
                 f"fallback order: {CANARY_FALLBACK_ORDER} ({path})"
             ), prior
 
-        control = _find_canary_control(
-            workdir, doc, account, launch, max_age=LATE_SLICE_CONTROL_MAX_AGE if is_late else None
-        )
+        if control is None and not is_late:
+            control = _find_canary_control(workdir, doc, account, launch)
         if control is None:
-            reason = (
-                "late-slice bound canary requires a <30m known-positive control post (transport probe or hydrated/)"
-                if is_late
-                else "no known-positive in-window control post available for bound canary"
-            )
             entry: dict[str, Any] = {
                 "timestamp": datetime.now(timezone.utc).isoformat(),
                 "account": account,
@@ -1822,14 +1914,11 @@ def bound_canary(
                 "attempts": 0,
                 "calls": 0,
                 "cost_usd": 0.0,
-                "error": reason,
+                "error": control_reason,
             }
-            doc["bound_canaries"][key] = entry
-            doc["bound_canary"] = entry
-            doc["canary_failed"] = True
-            _write_probe_doc(path, doc)
+            _record_bound_canary(path, key, entry)
             return False, (
-                f"bound canary failed ({form}, {slice_kind}) on {account}: {reason}; "
+                f"bound canary failed ({form}, {slice_kind}) on {account}: {control_reason}; "
                 f"fallback order: {CANARY_FALLBACK_ORDER} ({path})"
             ), entry
 
@@ -1906,11 +1995,7 @@ def bound_canary(
             "cost_usd": cost,
             "error": err,
         }
-        doc = _load_probe_doc(path) or doc
-        doc["bound_canaries"][key] = entry
-        doc["bound_canary"] = entry
-        doc["canary_failed"] = not matched
-        _write_probe_doc(path, doc)
+        _record_bound_canary(path, key, entry)
         last_entry = entry
         if not matched:
             return False, (
@@ -2303,6 +2388,8 @@ def recover_wave(
         },
         "workers": workers,
     }
+    if HEADLESS_DEADLINE_FIELD in runner:
+        manifest[HEADLESS_DEADLINE_FIELD] = runner[HEADLESS_DEADLINE_FIELD]
     _write_json_atomic(manifest_path, manifest)
     return manifest
 
@@ -2483,6 +2570,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--transport-probe", action="store_true", help="require one recorded native search probe + bound canary per account/bound form")
     parser.add_argument("--late-slice", action="store_true", help="treat this wave as a late slice (bound canary requires a <30m control post)")
     parser.add_argument("--detach", action="store_true", help="launch the wave in its own detached session (outlives shell timeouts)")
+    parser.add_argument("--record-after-quota", nargs=2, type=Path, metavar=("HELPER", "FILE"),
+                        help="for a detached run, use grok_account.py at exit to record the wave account's quota")
     parser.add_argument(
         "--roster",
         type=Path,
@@ -2498,6 +2587,13 @@ def main(argv: list[str] | None = None) -> int:
         return recover_main(raw_argv[1:]) if raw_argv[0] == "recover" else status_main(raw_argv[1:])
 
     args = parse_args(raw_argv)
+    detached_child = os.environ.get("XGROK_WAVE_DETACHED") == "1"
+    if args.record_after_quota and not (args.detach or detached_child):
+        sys.stderr.write("xgrok_wave configuration error: --record-after-quota requires --detach\n")
+        return 2
+    if args.record_after_quota and not args.record_after_quota[0].is_file():
+        sys.stderr.write(f"xgrok_wave configuration error: quota helper not found: {args.record_after_quota[0]}\n")
+        return 2
     grok_home, home_err = _resolve_grok_home(args)
     if home_err:
         # A failed "$(xgrok --pick-account)" or empty GROK2_HOME="" must never silently run on ~/.grok.
@@ -2569,6 +2665,7 @@ def main(argv: list[str] | None = None) -> int:
         output_dir = Path.cwd() / f"xgrok-wave-{timestamp_str}"
 
     bound_lines = format_bound_form_summary(jobs)
+    headless_deadline = _headless_retry_deadline(args.timeout)
 
     if args.dry_run:
         print("--- xgrok_wave Dry Run ---")
@@ -2580,6 +2677,8 @@ def main(argv: list[str] | None = None) -> int:
             print(f"Common tail: {common_tail['path']} (sha256 {common_tail['sha256'][:12]})")
         print(f"Max workers: {args.max_workers}")
         print(f"Timeout: {args.timeout}s")
+        if headless_deadline is not None:
+            print(f"Headless retry deadline setting (seconds): {headless_deadline}")
         print(f"Stagger: {args.stagger}s")
         print(f"Jobs ({len(jobs)} total):")
         for i, job in enumerate(jobs, 1):
@@ -2634,6 +2733,7 @@ def main(argv: list[str] | None = None) -> int:
                     "status": "running",
                     "detached": True,
                     "grok_home": grok_home,
+                    HEADLESS_DEADLINE_FIELD: headless_deadline,
                     "log_path": str(wave_log),
                     "total_briefs": len(jobs),
                     "briefs": brief_records,
@@ -2655,13 +2755,26 @@ def main(argv: list[str] | None = None) -> int:
         "lstart": _process_start(os.getpid()),
         "started_at": datetime.now(timezone.utc).isoformat(),
         "status": "running",
-        "detached": os.environ.get("XGROK_WAVE_DETACHED") == "1",
+        "detached": detached_child,
         "grok_home": grok_home,
+        HEADLESS_DEADLINE_FIELD: headless_deadline,
         "log_path": str(output_dir / "wave.log") if (output_dir / "wave.log").is_file() else None,
         "total_briefs": len(jobs),
         "briefs": brief_records,
     }
     _write_json_atomic(output_dir / "runner.json", runner_record)
+
+    def record_final_quota() -> None:
+        if args.record_after_quota:
+            helper, quota_log = args.record_after_quota
+            account = grok_home or os.environ.get("GROK_HOME") or str(Path.home() / ".grok")
+            try:
+                subprocess.run(
+                    [sys.executable, "-B", str(helper), "--record-at-exit", str(quota_log), "--home", account],
+                    check=True,
+                )
+            except (OSError, subprocess.CalledProcessError) as exc:
+                print(f"xgrok_wave: could not record the after-wave quota in {quota_log}: {exc}", file=sys.stderr)
 
     canary_summary: dict[str, Any] | None = None
     if args.transport_probe:
@@ -2669,6 +2782,7 @@ def main(argv: list[str] | None = None) -> int:
         print(note, file=sys.stderr)
         if not ok:
             refusal = note + "; no research lanes launched. Use the existing browser path; no account switching."
+            record_final_quota()
             (output_dir / "NOT-LAUNCHED.txt").write_text(refusal + "\n", encoding="utf-8")
             _write_json_atomic(output_dir / "runner.json", {**runner_record, "status": "refused", "returncode": 3})
             return 3
@@ -2679,6 +2793,7 @@ def main(argv: list[str] | None = None) -> int:
             print(canary_note, file=sys.stderr)
         if not canary_ok:
             refusal = canary_note + "; no research lanes launched."
+            record_final_quota()
             (output_dir / "NOT-LAUNCHED.txt").write_text(refusal + "\n", encoding="utf-8")
             _write_json_atomic(output_dir / "runner.json", {**runner_record, "status": "refused", "returncode": 3})
             return 3
@@ -2782,6 +2897,7 @@ def main(argv: list[str] | None = None) -> int:
         except KeyboardInterrupt:
             stop_requested.set()
             executor.shutdown(wait=True, cancel_futures=True)
+            record_final_quota()
             _write_json_atomic(output_dir / "runner.json", {**runner_record, "status": "interrupted", "returncode": 130})
             sys.stderr.write("xgrok_wave: interrupted; stopped active workers and cancelled queued briefs.\n")
             return 130
@@ -2806,6 +2922,7 @@ def main(argv: list[str] | None = None) -> int:
         "schema_version": 2,
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "xgrok_bin": str(xgrok_bin),
+        HEADLESS_DEADLINE_FIELD: headless_deadline,
         "output_dir": str(output_dir),
         "common_tail": common_tail,
         "bound_canary": canary_summary,
@@ -2819,6 +2936,7 @@ def main(argv: list[str] | None = None) -> int:
     }
 
     manifest_path = output_dir / "manifest.json"
+    record_final_quota()
     _write_json_atomic(manifest_path, manifest)
     _write_json_atomic(
         output_dir / "runner.json",
