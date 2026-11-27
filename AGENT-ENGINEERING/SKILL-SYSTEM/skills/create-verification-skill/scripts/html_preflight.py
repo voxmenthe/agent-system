@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Preflight a generated HTML report or explainer before anyone looks at it.
 
-    python3 html_preflight.py REPORT.html [MORE.html ...]
+    python3 html_preflight.py [--expect-images N] REPORT.html [MORE.html ...]
 
 Reports, per file:
 
@@ -10,14 +10,19 @@ Reports, per file:
   that opens and closes a different number of times;
 - SVG content painted past its viewBox, for rect, line, circle, ellipse,
   polygon, polyline and text (text by its anchor point only), under no
-  transform or translate() only.
+  transform or translate() only;
+- with --expect-images N, fewer than N images, after a one-line media
+  inventory. Images are every <img> and <canvas> and each outermost <svg>
+  that is not decorative; an <svg> is decorative when it has
+  aria-hidden="true" or the role presentation or none. This counts markup,
+  not what renders: CSS can still hide a counted element.
 
 Everything else inside an SVG (path, use, image, other transforms, CSS that
 moves or clips an element, nested SVGs) is listed as not checked; it is never
 counted as passing. Standard library only; reads files, writes nothing.
 
 Exit status: 0 when no defect was found in what was checked, 1 when a defect
-was found, 2 when a file could not be read.
+was found, 2 when a file could not be read or the arguments are invalid.
 
 Adapted from diagram-design's scripts/self_check.py (MIT, Cathryn Lavery),
 revision d35ae86: its completeness and viewBox checks, without its
@@ -26,6 +31,7 @@ diagram-specific accessibility, asset and motion contracts.
 
 from __future__ import annotations
 
+import argparse
 import re
 import sys
 from collections import Counter
@@ -76,6 +82,7 @@ GEOMETRY_ATTRS = {
     "polyline": ("points",),
     "text": ("x", "y"),
 }
+DECORATIVE_ROLES = {"presentation", "none"}
 UNPAINTED, UNCHECKED = "unpainted", "unchecked"
 Subject = tuple[str, set[str], set[str], set[str]]
 
@@ -109,6 +116,50 @@ class BalanceParser(HTMLParser):
                 self.closes[tag] += 1
             return
         self.closes[tag] += 1
+
+
+class MediaParser(BalanceParser):
+    """Counts <img> and <canvas> through BalanceParser, so markup inside <title> is not counted,
+    and splits each outermost <svg> into a figure or a decorative graphic."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.svg_depth = 0
+        self.figure_svgs = 0
+        self.decorative_svgs = 0
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag == "svg" and not self.rcdata:
+            if self.svg_depth == 0:
+                data = {key: (value or "").strip().casefold() for key, value in attrs}
+                roles = data.get("role", "").split()  # ARIA reads the first role token
+                if data.get("aria-hidden") == "true" or (bool(roles) and roles[0] in DECORATIVE_ROLES):
+                    self.decorative_svgs += 1
+                else:
+                    self.figure_svgs += 1
+            self.svg_depth += 1
+        super().handle_starttag(tag, attrs)
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag == "svg" and not self.rcdata and self.svg_depth:
+            self.svg_depth -= 1
+        super().handle_endtag(tag)
+
+
+def media_findings(source: str, expected: int) -> tuple[list[str], list[str]]:
+    """(defects, inventory note) for a document expected to hold at least `expected` images."""
+    parser = MediaParser()
+    parser.feed(source)
+    parser.close()
+    images, canvases, svgs = parser.opens["img"], parser.opens["canvas"], parser.figure_svgs
+    counted = images + canvases + svgs
+    note = (
+        f"media inventory: {images} <img>, {canvases} <canvas>, {svgs} <svg> "
+        f"({parser.decorative_svgs} decorative <svg> not counted); {counted} image(s), {expected} expected"
+    )
+    if counted < expected:
+        return [f"{counted} image(s) found, fewer than the {expected} expected by --expect-images"], [note]
+    return [], [note]
 
 
 def ends_with_html_close(source: str) -> bool:
@@ -351,21 +402,38 @@ def viewbox_findings(source: str) -> tuple[list[str], list[str]]:
     return defects, notes
 
 
-def preflight(path: Path) -> tuple[list[str], list[str]]:
+def preflight(path: Path, expect_images: int | None = None) -> tuple[list[str], list[str]]:
     source = path.read_bytes().decode("utf-8", errors="replace")
     defects, notes = viewbox_findings(source)
-    return completeness_defects(source) + defects, notes
+    defects = completeness_defects(source) + defects
+    if expect_images is not None:
+        media_defects, media_notes = media_findings(source, expect_images)
+        defects, notes = defects + media_defects, notes + media_notes
+    return defects, notes
+
+
+def image_count(text: str) -> int:
+    try:
+        count = int(text)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"{text!r} is not a whole number") from None
+    if count < 0:
+        raise argparse.ArgumentTypeError(f"{count} is negative")
+    return count
 
 
 def main(argv: list[str]) -> int:
-    if not argv or any(arg in {"-h", "--help"} for arg in argv):
-        print(__doc__)
-        return 0 if argv else 2
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("files", nargs="+", type=Path, metavar="FILE")
+    parser.add_argument(
+        "--expect-images", type=image_count, metavar="N",
+        help="print a media inventory per file, and a defect when it has fewer than N images",
+    )
+    arguments = parser.parse_args(argv)
     status = 0
-    for name in argv:
-        path = Path(name)
+    for path in arguments.files:
         try:
-            defects, notes = preflight(path)
+            defects, notes = preflight(path, arguments.expect_images)
         except OSError as error:
             print(f"{path}: not checked: {error}")
             status = 2

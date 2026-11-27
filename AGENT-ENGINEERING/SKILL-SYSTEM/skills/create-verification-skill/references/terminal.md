@@ -18,6 +18,22 @@ input data and optional pager/editor configuration. Clear inherited selection
 or preview commands when they would change the fixture. Do not copy a personal
 session, use a fixed shared tmux name or kill an existing session to make room.
 
+## Keep the run off the user's real state
+
+Point every home, profile, config or data-directory variable the target reads
+at a run-owned location, and write each use as `${VAR:?}` so an unset or empty
+value aborts the command; many programs treat an empty value as "use the
+default", which is the user's real profile. Variables do not carry between
+separate shells, so set them in each shell that launches the target. If a
+config names the data location, rewrite it and read it back before launch.
+
+For anything that runs git, set `GIT_CONFIG_NOSYSTEM=1`, point
+`GIT_CONFIG_GLOBAL` at a path in the temporary directory that does not exist
+(write no file there) and unset `GIT_CONFIG_COUNT`, so system, user and
+harness-injected settings such as commit signing cannot change fixture
+behavior. Overriding `HOME` alone is not enough: git also reads
+`$XDG_CONFIG_HOME/git/config` and the system file.
+
 ## Operate one observable transition at a time
 
 1. Start the real command and capture its initial screen/prompt.
@@ -49,6 +65,8 @@ Report an unavailable executable, missing controlling terminal or unsupported
 key encoding as a prerequisite/driver gap, not as a passing CLI test. A fake
 picker can validate argument handling but is not real interactive acceptance.
 
-Source ideas: Cursor Team Kit's control-cli and Gloomberb's distinction among
-CLI, component-renderer and full-terminal tests. Their application commands,
-fixed sleeps and shared session names are not portable requirements.
+Source ideas: Cursor Team Kit's control-cli, Gloomberb's distinction among
+CLI, component-renderer and full-terminal tests and its unset-profile guard,
+and no-mistakes' git configuration isolation. Their application commands,
+environment switches, fixed sleeps and shared session names are not portable
+requirements.

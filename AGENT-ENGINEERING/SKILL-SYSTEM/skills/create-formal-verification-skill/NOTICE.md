@@ -14,4 +14,6 @@ the vendored `statechart` skill, with a `view.mjs` beside each model, for
 showing a person a counterexample; the runner still prints each counterexample
 one step per line. It adapts pstack's `/maintain-formal-verification-skill`
 (revision `4dd1d05818d19792e7cd6e818f1667f95f7e1dbe`) as
-`references/maintain.md`, made concrete for the runner.
+`references/maintain.md`, made concrete for the runner. The fairness-weakening
+and `TypeOK` bound mutations follow the mutation set of pstack-claude's
+`PiScheduler` model (revision `4b809ea`).

@@ -39,6 +39,10 @@ inventing a rejection or blindly retrying with a new identity.
   outcomes. Replaying the group does not reproduce the scheduler. Use existing
   controlled-interleaving tests for causal race claims rather than promise
   deterministic scheduling from a seed.
+- Where safety rests on a lock, look for preconditions read before it is
+  taken (a path, link, copy, claim or balance) and confirm each is verified
+  again under the lock. Aim a controlled interleaving at the gap between the
+  check and the lock; a sequential workload never opens it.
 - Bound operations, response waits and total run time. Close the exact owned
   service/state and retain the input, observations and failure point after
   cleanup. A graceful restart does not establish crash or power-loss recovery.
@@ -50,11 +54,15 @@ startup are environment failures. An invariant mismatch is a system candidate
 finding only after checking the oracle and target identity. Never count a
 launcher exception as evidence that a known-bad implementation was detected.
 
-Run a healthy case, one relevant controlled wrong implementation and a fresh
-replay. Check that the wrong case fails at the intended invariant while a
+Run the healthy case first, and require every safety invariant to pass before
+designing or running a controlled wrong implementation, mutation or planted
+fault: against a baseline that already fails, a violation cannot be credited
+to the plant. Then run one relevant wrong case and a fresh replay. Check that
+the wrong case fails at the intended invariant while a
 valid rejection/minimal case still passes. Repair the owning harness or
 product boundary; do not loosen the expectation to accommodate the defect.
 
 Source ideas: Antithesis's locally runnable self-driving workloads, property
-versus reach assertions, and run-level input variation. No hosted campaign,
+versus reach assertions, run-level input variation and green baseline before
+mutation, and pragmatic-agent-skills' lock re-check. No hosted campaign,
 SDK, container publication or universal property framework is implied.

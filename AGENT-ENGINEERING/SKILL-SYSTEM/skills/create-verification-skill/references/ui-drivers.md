@@ -13,6 +13,13 @@ not install tools or certify every platform.
 | Canvas or image-led UI | Current screenshot/image observations and actual input | DOM assertions may omit the important rendered behavior |
 | Mobile/simulator | Project-supported device/simulator harness | Record the exercised platform and prerequisites; do not infer support from desktop |
 
+On a desktop the user is also working on, prefer a launch that does not take
+focus: a headless browser, or a hidden or background window the target
+supports, driven through its automation protocol. A run that raises windows or
+grabs the keyboard interrupts the user and can type into their applications.
+When only a visible foreground window can exercise the claim, state that in
+the recipe and keep that session short.
+
 ## Browser path
 
 1. **Bind the instance.** Launch the intended source/build with owned data and
@@ -52,5 +59,6 @@ State whether evidence comes from a fixture, a real product, or an installed
 host. A browser screenshot does not certify native menus, visual fidelity,
 concurrency, or persistence unless those properties were actually checked.
 
-Source ideas: Cursor's control-ui recipe and existing Playwright/Electron
-interaction patterns. No upstream driver implementation is bundled here.
+Source ideas: Cursor's control-ui recipe, hubble.md's hidden-window desktop
+driving, and existing Playwright/Electron interaction patterns. No upstream
+driver implementation is bundled here.

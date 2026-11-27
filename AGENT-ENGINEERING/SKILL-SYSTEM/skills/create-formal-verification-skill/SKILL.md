@@ -37,7 +37,15 @@ bundled runner supports it. Whether the code itself behaves for every input,
 as with memory safety, overflow, or a data-structure invariant, usually suits
 a verifier that runs on the code. If no verifier runs on this language, say
 so, and test the real code with generated inputs, not a hand model of the
-function. A property that must hold at every size can need a proof. Prefer a
+function. When the question is whether a real implementation (a parser,
+serializer, query engine or adapter) breaks a code-level invariant for some
+input, rather than whether a design's steps can happen in a bad order, use the
+`bug-hunt` skill: it owns the generators, oracles and triage for that hunt, so
+do not restate them here or as a TLA+ model. A tiny pure reducer, about 2,000
+reachable states or fewer, needs no TLC: a breadth-first walk in the code's
+own language that applies every action to every reached state and checks the
+invariant on each covers it. A property that must hold at every size can need
+a proof. Prefer a
 tool the repo's developers can install and run, pin its version, and tell the
 user why you chose it. With a tool other than TLC, write a runner with the
 same contract as `scripts/check` (below).
@@ -134,12 +142,25 @@ also finds Homebrew's keg-only `openjdk`.
 
 ## Show that every property can fail
 
+- Get the main config passing before writing any mutation. Against a model
+  that already fails, a mutant's violation cannot be told from the existing
+  one; a property the real code breaks is a finding with its own config.
 - One mutation per guard: remove a check, reorder a step, or widen a bound,
   and require the targeted property to be the one violated.
 - Model the pre-fix version of any recently fixed bug in the area as a
   mutation. Catching it shows the model would have found it.
 - When two guards protect the same property, remove each alone in a
   sufficiency config, so the notes can say whether each is load-bearing.
+- Weaken each strong-fairness conjunct a liveness property relies on
+  (`SF_vars(A)` to `WF_vars(A)`), one per mutation, and require that property
+  to be the one violated. If the weakened model still passes, the strong
+  assumption is not needed: keep the weaker one and drop the mutation. If it
+  fails, the notes say why the code or its environment guarantees strong
+  fairness for that action.
+- Remove one bound the model enforces on its own state (a cap on a counter,
+  queue or id) and require `TypeOK` to be the one violated, which shows that
+  `TypeOK` constrains the state rather than holding vacuously. Say in `what`
+  that this and the fairness weakenings test the model, not a code bug.
 - Set each main config at the largest tested bound where the real code
   passes within its time budget. A larger bound that breaks a property on the
   real code is a finding; state the passing bound in the notes.

@@ -74,14 +74,23 @@ The recipe must contain:
 
 1. **Launch and doctor:** exact prerequisites/commands; health and readiness;
    evidence associating the executed binary/module/process with the candidate.
-   A SHA typed into a report is not instance identity.
+   A SHA typed into a report is not instance identity. A stateful target is
+   ready when it is usable after starting from an empty data directory,
+   migrations and seed data included; a database health check can pass while
+   its init scripts are still running.
 2. **User path:** entry, actions and expected observations, with stable handles
    and fixtures. Distinguish intended changes from preserved behavior. Record
    navigation gotchas that a cold agent would otherwise have to rediscover.
 3. **Proof:** capture action/result and side effects appropriate to the claim.
    A dry-run name does not prove absence of writes or network effects: inspect
    its implementation and observe those boundaries. Record wrong path/build and
-   unavailable prerequisites as unverified, not passing.
+   unavailable prerequisites as unverified, not passing. Grepping, reading or
+   snapshotting source, config text or prompt prose is not behavioral proof:
+   the matched text can be dead, bypassed or refactored away. Exercise the
+   public interface, or the real consumer of a declarative config. Give each
+   guard of a multi-guard promise its own negative case, and record the quoted
+   failure content of every negative run, not only its exit status
+   ([coverage](references/coverage.md)).
 4. **Cleanup:** remove only resources created by this run, including failed
    attempts. Stop exact owned processes, never processes by name. Keep evidence
    outside disposable state and verify it still exists after teardown.
@@ -97,12 +106,18 @@ After a surprising failure, doctor again; reset or relaunch only owned state
 when health alone cannot establish readiness. Re-drive any corrected harness.
 Retain evidence from failed attempts as well as the successful path.
 
+If the proof ran in a stand-in for the real target (a local container or stack
+in place of a fresh host or remote deployment), list every setup step the
+stand-in provided that the real target will not get. Those steps stay
+unverified until a run on the real target covers them.
+
 Return **reused**, **created**, or **blocked**, with:
 
 - recipe/discovery location and declared verification-owned files;
 - source/runtime identity, covered user paths and commands actually run;
 - evidence still accessible after cleanup and resources released;
-- unbuilt paths, unavailable prerequisites, and remaining gaps;
+- unbuilt paths, unavailable prerequisites, unverified stand-in setup steps,
+  and remaining gaps;
 - the next affected-surface upkeep route, `maintain-verification-skill`.
 
 `created` establishes operating capability only. `verify-change` assesses the

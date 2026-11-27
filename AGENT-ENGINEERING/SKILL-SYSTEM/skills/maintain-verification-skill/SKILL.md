@@ -19,10 +19,22 @@ Select the one implicated by the change; ask only if evidence leaves materially
 different targets unresolved. No target means a setup handoff to
 `create-verification-skill`, not permission to invent one here.
 
+A formal model check is not a driver recipe. If the implicated `verify-*` skill
+runs a model checker (a TLA+ or similar model, a `check` runner, and a
+`manifest.json` that hashes the code it covers against a sync commit), stop
+before driving anything and hand off to the maintain procedure of the
+`create-formal-verification-skill` skill. That skill is explicit-only, so the
+handoff names it for the user or parent to invoke.
+
 Read the existing recipe in full, its owned driver/fixtures, affected source,
-accepted feature contract, focused tests, and relevant changes. Declare exactly
-which verification-owned files may change. Follow their current format rather
-than create a second map. Inspect index links when that index is affected.
+accepted feature contract, focused tests, and relevant changes. Find when the
+recipe last changed (`git log -1 -- <recipe>`, or the commit it records as
+reconciled) and read `git log` since then over the source its paths exercise
+and its owned driver/fixtures: merges and edits that skipped this skill can
+move a selector, flag, route, or output field outside the change at hand.
+Declare exactly which verification-owned files may change. Follow their
+current format rather than create a second map. Inspect index links when that
+index is affected.
 
 - Edit only those declared files. Production code and accepted expectations
   are outside scope. A feature change may intentionally revise behavior only
@@ -53,11 +65,22 @@ binary/module/process with the source candidate, not just a reported SHA.
 Drive the required public path and relevant preserved/negative cases; existing
 tests on another path do not establish this one.
 
+Repair and re-drive at the simplest level that still exercises the changed
+surface: a CLI or API call before a headless component harness, and that
+before a full browser or tmux session. Escalate only when the lower level
+cannot reach the changed behavior. A lower level never replaces one the claim
+needs; an API call does not prove a UI path.
+
 Update the affected claims, actions, and witnesses in the existing recipe,
 keeping materially preserved coverage. Do not replace the baseline with only
 the newest feature or load every capability-building reference for routine
 upkeep. Check that changed selectors, output parsers, and restart instructions
-still reach the real result rather than merely making the harness green.
+still reach the real result rather than merely making the harness green. After
+repairing a selector, fixture, parser, or restart step, re-run the recipe's
+discriminating negative case and quote its failure content (the reported
+diff, rejected value, or error payload) to show the repaired check still fails
+on the broken behavior and has not turned always-green. Red is a colour, not a
+measurement: an exit status alone cannot tell a catch from a crash.
 
 After surprising behavior, doctor again. Reset or relaunch owned state when a
 healthy process can still have a wedged interaction. Correct a proven recipe

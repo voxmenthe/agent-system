@@ -24,6 +24,30 @@ with another output from the same implementation. A UI, API, stock count and
 WAL can agree on the wrong quantity. Agreement between witnesses is useful,
 but cannot replace an independent expectation of what the user requested.
 
+## Exercise behavior, and show each check can fail
+
+Opening, grepping, regex-matching or snapshotting implementation source or
+prompt prose shows that text exists, not that behavior works: the match can be
+dead, commented out, bypassed or refactored away. For a machine-read
+declarative artifact (workflow YAML, policy, ignore rules, generated
+configuration), run its real consumer, or parse it into its normalized meaning
+when no consumer can run here. Reading a file is the proof only when that file
+is itself the owned contract, such as a generated report, persisted state or a
+serialized protocol; name that contract.
+
+When a promise rests on several guards, for example input validation, a
+state-transition check and a persistence constraint, give each guard its own
+negative case: an input that passes every other guard, so only this one can
+reject it. One negative case for the whole promise lets a working guard mask a
+broken sibling.
+
+Red is a colour, not a measurement. A negative run proves the check only when
+its failure content is the disagreement you predicted. Quote that content in
+the evidence (the reported diff, rejected value or error payload, such as
+`expected 3 reserved, got 4`), not only the exit status or the assertion's
+source line; the quote is what tells a catch from a crash that also exits
+nonzero.
+
 ## Keep coverage scoped and honest
 
 Read both the affected baseline and the accepted change. Preserve meaningful
@@ -50,5 +74,6 @@ product regression from a stale driver or mistaken oracle. Change an expected
 result only when the accepted contract changed, never to accommodate a defect.
 
 Source ideas: AutoQA's witnessed behavior map, Compound Engineering's user
-journeys, and Agent-Native's per-area proof paths. Their full catalogues and
-publication workflows are not required by this recipe.
+journeys and per-guard proofs, Agent-Native's per-area proof paths,
+no-mistakes' test-quality rule, and pstack's prove-it-works principle. Their
+full catalogues and publication workflows are not required by this recipe.

@@ -1536,10 +1536,10 @@
       "ownership": "custom",
       "provenance": {
         "license": "MIT",
-        "local_modifications": "Owner-authorized minimal dogfood adaptation: target-native discovery, affected-surface proof, one driver owner, separate product/acceptance ownership and local-only effects. Owner-approved selective implicit invocation with material-gap thresholds; directly owns bounded verification glue and conditional tool-construction, coverage, and UI-driver references. Added conditional terminal, stateful-workload and real-component visual guidance, exercised on owned target-local pilots. Bundles scripts/html_preflight.py, adapted from diagram-design's scripts/self_check.py (MIT, revision d35ae86), which explain-code and explain-research run before rendering.",
+        "local_modifications": "Owner-authorized minimal dogfood adaptation: target-native discovery, affected-surface proof, one driver owner, separate product/acceptance ownership and local-only effects. Owner-approved selective implicit invocation with material-gap thresholds; directly owns bounded verification glue and conditional tool-construction, coverage, and UI-driver references. Added conditional terminal, stateful-workload and real-component visual guidance, exercised on owned target-local pilots. Bundles scripts/html_preflight.py, adapted from diagram-design's scripts/self_check.py (MIT, revision d35ae86), which explain-code and explain-research run before rendering. 2026-11-26 (skill-system upgrade plan W2.6): adds an anti-grep proof rule, empty-data readiness, stand-in setup accounting, per-guard negatives with quoted failure content, a green baseline before planted faults, a lock re-check, hermetic profile and git isolation, focus-preserving UI driving and process-group timeouts; html_preflight.py gains opt-in --expect-images N.",
         "origin": "https://github.com/cursor/plugins.git",
         "reference_revision": "93b00b89ef425a9c1bac0d0b317dfc49c930ac99",
-        "revision": "sha256:d13d1ff175f708b7a367abfcd83ce3fe9b6b140fa1951ea604a78eb76f240dff"
+        "revision": "sha256:37379b6b03a58292385cdba50ba6d915cd2e1133699b0728adcd547322e1b361"
       },
       "source": "skills/create-verification-skill"
     },
@@ -1554,10 +1554,10 @@
       "ownership": "custom",
       "provenance": {
         "license": "MIT",
-        "local_modifications": "Owner-authorized minimal dogfood adaptation: target-native discovery, affected-surface proof, one driver owner, separate product/acceptance ownership and local-only effects. Owner-approved selective implicit invocation for materially affected recipes; directly owns bounded driver/fixture repairs, preserves accepted behavior and affected coverage.",
+        "local_modifications": "Owner-authorized minimal dogfood adaptation: target-native discovery, affected-surface proof, one driver owner, separate product/acceptance ownership and local-only effects. Owner-approved selective implicit invocation for materially affected recipes; directly owns bounded driver/fixture repairs, preserves accepted behavior and affected coverage. 2026-11-26 (skill-system upgrade plan W2.6): hands formal model-check verify skills to create-formal-verification-skill's maintain procedure; reads covered-file drift, escalates proportionally, and re-runs a quoted negative case after repairs.",
         "origin": "https://github.com/cursor/plugins.git",
         "reference_revision": "93b00b89ef425a9c1bac0d0b317dfc49c930ac99",
-        "revision": "sha256:1636d3c18fcb6c9ab789f877cc561f2bfa6e3137496c73f9446ec523166abf59"
+        "revision": "sha256:d2baba84b8fb86c05d5e659623f395c0dcebddf6919e8720ced4b83d7da0b4f3"
       },
       "source": "skills/maintain-verification-skill"
     },
@@ -1896,10 +1896,10 @@
       "ownership": "custom",
       "provenance": {
         "license": "MIT",
-        "local_modifications": "Owner-directed explicit-only adaptation after a two-target trial in this repository (the delegate wave runner and the skill-install transactions, which found four real bugs). Adds scripts/check, a TLC runner with a pinned, sha256-checked tla2tools.jar, drift coverage of the code each model describes and a guard that keeps the verify skill's sync commit equal to the manifest's; a fixed layout for models, views, mutations and findings; a scratch-worktree proof; and references/tla-lessons.md from the trial and the ChartLab verifications. Names the vendored statechart skill, with a view.mjs beside each model, for showing a counterexample; adapts pstack's /maintain-formal-verification-skill (revision 4dd1d05818d19792e7cd6e818f1667f95f7e1dbe) as references/maintain.md.",
+        "local_modifications": "Owner-directed explicit-only adaptation after a two-target trial in this repository (the delegate wave runner and the skill-install transactions, which found four real bugs). Adds scripts/check, a TLC runner with a pinned, sha256-checked tla2tools.jar, drift coverage of the code each model describes and a guard that keeps the verify skill's sync commit equal to the manifest's; a fixed layout for models, views, mutations and findings; a scratch-worktree proof; and references/tla-lessons.md from the trial and the ChartLab verifications. Names the vendored statechart skill, with a view.mjs beside each model, for showing a counterexample; adapts pstack's /maintain-formal-verification-skill (revision 4dd1d05818d19792e7cd6e818f1667f95f7e1dbe) as references/maintain.md. 2026-11-26 (skill-system upgrade plan W2.6): requires a green main-config baseline before mutations; adds SF-to-WF fairness and TypeOK bound mutations (pstack-claude PiScheduler, 4b809ea); names bug-hunt for code-level invariant hunts and a breadth-first walk for tiny reducers.",
         "origin": "https://github.com/cursor/plugins.git",
         "reference_revision": "9580c23696ac8d7abed0c166f2f9918800afb819",
-        "revision": "sha256:2118d4a37400bed2c08b9589092049c742e7d017a43660f043e5ff9d2906dd7b"
+        "revision": "sha256:3756c19d91ea752b9dcc75f33943544e710cae723c3892bd1223844f3fde0232"
       },
       "source": "skills/create-formal-verification-skill"
     },

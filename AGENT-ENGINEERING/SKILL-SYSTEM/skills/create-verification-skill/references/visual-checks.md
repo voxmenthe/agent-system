@@ -19,11 +19,21 @@ case checks media queries and surrounding layout. Use both when both claims
 matter; a narrow container in a wide viewport is not a mobile viewport.
 Label component fixtures separately from real-backend/browser journeys.
 
-For a generated HTML report or explainer, run `scripts/html_preflight.py FILE`
-before rendering: it reports a file that is not whole and simple SVG shapes
-painted past their viewBox. It lists what it could not check (paths,
-transforms, CSS-positioned elements) instead of passing it, and it does not
-replace rendering.
+For a generated HTML report or explainer, run
+`python3 <skill-directory>/scripts/html_preflight.py FILE` before rendering:
+it reports a file that is not whole and simple SVG shapes painted past their
+viewBox. It lists what it could not check (paths, transforms, CSS-positioned
+elements) instead of passing it, and it does not replace rendering.
+
+When the report promises figures, add `--expect-images N` with the number it
+should hold. The preflight then prints a one-line media inventory per file and
+reports a `DEFECT` when a file has fewer than N images, so a chart that failed
+to build or a screenshot that was never embedded cannot hide inside an
+otherwise whole document. It counts every `<img>` and `<canvas>` and each
+outermost `<svg>` that is not decorative; an `<svg>` with `aria-hidden="true"`
+or the role `presentation` or `none` is decorative, like an icon. The count
+shows that the markup is present, not that a figure rendered or shows the
+right content.
 
 ## Make captures comparable and truthful
 

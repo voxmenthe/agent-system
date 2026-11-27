@@ -41,6 +41,16 @@ If an old success report could survive a failed rerun, use a fresh output
 location or write an explicit failed disposition before it can be mistaken
 for this run's result.
 
+Bound every command the helper starts. Start a timed command in its own
+process group (`start_new_session=True` with Python's `subprocess`, `setsid`
+in a shell) and on timeout kill that whole group with `os.killpg`, not only
+its shell: a foreground child such as `sleep 9999` outlives a killed shell.
+Return when the command itself exits, not when its output pipes close; a
+background job it started inherits those pipes and can hold them open
+indefinitely. Drain them for a short bounded grace after the exit, then report
+a still-open pipe as a surviving owned process for cleanup instead of waiting
+on it.
+
 ## Prove the helper itself
 
 Run it on the operation you observed and compare the actual result. Vary one
@@ -65,5 +75,6 @@ Finalize success after required cleanup. A rejected close must not leave a
 passing report or cause state to be deleted beneath a possibly active resource;
 retain the failed disposition and the exact owned state needing recovery.
 
-Source ideas: pstack's build-the-lever method and OpenAI's agent-facing CLI
-patterns. This is an owner-authored adaptation, not a shipped upstream client.
+Source ideas: pstack's build-the-lever method, OpenAI's agent-facing CLI
+patterns, and the verifiers harness's process-group timeouts. This is an
+owner-authored adaptation, not a shipped upstream client.
